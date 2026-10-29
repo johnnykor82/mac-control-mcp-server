@@ -120,7 +120,7 @@ the device already publishes other services.
 ### Step 4 — Install Mac Control and connect standalone ChatBridge
 
 Use the standard `--install` path in Terminal. It reuses compatible ChatBridge or
-downloads `v0.2.0-beta.5`, verifies the pinned SHA256, safely extracts it and runs
+downloads `v0.2.0-beta.6`, verifies the pinned SHA256, safely extracts it and runs
 ChatBridge's own installer. Google Chrome is required; missing uv may be installed
 by ChatBridge only with its normal interactive owner consent. Bootstrap supports
 Python 3.9+; the MCP runtime remains isolated Python 3.13.
