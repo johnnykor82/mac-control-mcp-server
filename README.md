@@ -24,7 +24,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 **ChatBridge is a separate application and repository.** It exposes an authorized ChatGPT web session and browser automation through HTTP. It works without Mac Control.
 
 The standard Mac Control installer reuses a compatible ChatBridge service or
-installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.10` release.
+installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.11` release.
 ChatBridge owns its Chrome profile, LaunchAgent and data; uninstalling Mac Control
 preserves ChatBridge. Use `--without-chatbridge` for standalone filesystem,
 terminal, Git and GUI use; on update this skips setup and preserves existing
@@ -65,8 +65,9 @@ No API key is required by default. If ChatBridge has `CHATBRIDGE_API_KEY`, set a
 matching `MACCONTROL_CHATBRIDGE_API_KEY` in installer and MCP client environments.
 Never paste keys into chat or command arguments.
 
-After a new interactive installation, ChatBridge offers to open its managed
-Chrome profile for manual ChatGPT login once the browser is ready. If you skip
+After an interactive installation, ChatBridge checks the saved ChatGPT session
+once the browser is ready. If it cannot confirm the session, it offers to open
+the managed profile for a manual check. If you skip
 the offer, first run `curl -fsS -X POST http://127.0.0.1:8787/v1/browser/wake`,
 then wait until `curl http://127.0.0.1:8787/v1/system/status` reports
 `browser.mode=managed` and `browser.state=running`, then open the **default profile only**:
