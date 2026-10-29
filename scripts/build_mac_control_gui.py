@@ -27,7 +27,50 @@ SOURCE_CAPTURE = "__MAC_CONTROL_CAPTURES__"
 SOURCE_ACTIVATE = "let success=app.activate(options:[])"
 
 
+def require_build_tools() -> None:
+    """Only inspect developer tools; downloading them requires owner action."""
+    try:
+        subprocess.run(["/usr/bin/xcrun", "--find", "swiftc"], check=True,
+                       capture_output=True, timeout=20)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("GUI/clipboard compilation requires Apple Command Line Tools. "
+                           "Run xcode-select --install in Terminal, confirm Apple's installation "
+                           "dialog, wait for completion, then retry. No tools were installed automatically.") from exc
+
+
+def verify_owned(install_root: Path) -> bool:
+    """Validate app ownership and signature without changing or launching it."""
+    root = install_root.expanduser().resolve()
+    app = Path.home() / "Applications" / APP_NAME
+    record = root / "data/gui-owned.json"
+    if record.parent.is_symlink() or record.is_symlink() or (record.exists() and not record.is_file()):
+        raise RuntimeError("Untrusted GUI ownership record")
+    if record.exists() and (record.stat().st_uid != os.getuid() or record.stat().st_mode & 0o022):
+        raise RuntimeError("GUI ownership record must be owned and writable only by the installer user")
+    expected = {"app": str(app), "bundle": BUNDLE, "installed_by": str(root)}
+    if record.exists() and json.loads(record.read_text()) != expected:
+        raise RuntimeError("GUI ownership record is inconsistent")
+    if app.is_symlink() or app.parent.is_symlink():
+        raise RuntimeError("GUI app path cannot be a symlink")
+    if not app.exists():
+        return False
+    if not record.is_file() or not app.is_dir():
+        raise RuntimeError("Refusing to replace an app without matching owner metadata")
+    if any(path.is_symlink() for path in app.rglob("*")):
+        raise RuntimeError("GUI app contains a symlink")
+    with (app / "Contents/Info.plist").open("rb") as stream:
+        metadata = plistlib.load(stream)
+    if (not isinstance(metadata, dict) or metadata.get("CFBundleIdentifier") != BUNDLE
+            or metadata.get("CFBundleExecutable") != EXEC_NAME
+            or not (app / "Contents/MacOS" / EXEC_NAME).is_file()):
+        raise RuntimeError("Existing GUI app metadata is inconsistent")
+    subprocess.run(["/usr/bin/codesign", "--verify", "--strict", str(app)],
+                   check=True, capture_output=True, timeout=20)
+    return True
+
+
 def build(install_root: Path) -> Path:
+    require_build_tools()
     install_root = install_root.expanduser().resolve()
     data = install_root / "data"
     socket_path = data / "run/maccontrol-gui.sock"
@@ -95,6 +138,7 @@ def build(install_root: Path) -> Path:
 
 
 def install(root: Path, candidate: Path) -> dict:
+    verify_owned(root)
     target = Path.home() / "Applications" / APP_NAME
     backups = root.expanduser().resolve() / "data/backups"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +172,12 @@ def install(root: Path, candidate: Path) -> dict:
         if staging.exists():
             shutil.rmtree(staging)
         raise
+    record = root.expanduser().resolve() / "data/gui-owned.json"
+    pending = record.with_name("gui-owned.pending-" + os.urandom(6).hex())
+    pending.write_text(json.dumps({"app": str(target), "bundle": BUNDLE,
+                                  "installed_by": str(root.expanduser().resolve())}) + "\n")
+    pending.chmod(0o600)
+    pending.replace(record)
     return {"installed": str(target), "bundle_id": BUNDLE,
             "previous_backup": str(prior) if prior else None,
             "permission_grant": "Owner must approve Accessibility and Screen Recording in macOS Settings",
@@ -139,6 +189,8 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--install", action="store_true")
     args = parser.parse_args()
+    if args.install:
+        verify_owned(args.root)
     bundle = build(args.root)
     response = install(args.root, bundle) if args.install else {
         "built": str(bundle), "signed": "ad-hoc", "bundle_id": BUNDLE,

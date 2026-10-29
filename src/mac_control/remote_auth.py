@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from fastmcp.server.auth import OAuthProxy
 from fastmcp.server.auth.providers.github import GitHubTokenVerifier
 
 from .runtime_paths import DATA_ROOT
+from .remote_http import public_origin
 
 
 class AllowedGitHubUsersVerifier(GitHubTokenVerifier):
@@ -62,14 +62,7 @@ def load_config(path: Path | None = None) -> dict:
         raise ValueError("Invalid OAuth client configuration")
     if not isinstance(config["jwt_signing_key"], str) or len(config["jwt_signing_key"]) < 32:
         raise ValueError("JWT signing key must be at least 32 characters")
-    raw_url = config["public_url"]
-    if not isinstance(raw_url, str):
-        raise ValueError("Public URL must be HTTPS")
-    parsed = urlsplit(raw_url)
-    if (parsed.scheme != "https" or not parsed.hostname
-            or parsed.username or parsed.password or parsed.query or parsed.fragment
-            or parsed.path not in ("", "/")):
-        raise ValueError("Public URL must be an HTTPS origin, without path/query/credentials")
+    public_origin(config["public_url"])
     return config
 
 

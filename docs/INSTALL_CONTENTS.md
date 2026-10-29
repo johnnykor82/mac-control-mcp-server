@@ -17,10 +17,13 @@ The portable second Mac is the intended independent acceptance-test host.
 | MCP server instructions and workspace_policy tool | MCP initialization/tool catalogue | Source and test verified |
 | Shell temp/cache defaults inside workspace | terminal environment | Source and test verified |
 | Owner data/configuration and recoverable backups | MCPServer/data | Preserved on uninstall |
-| Installer lifecycle: plan/install/update/rollback/status/uninstall | install_mac_control.py | Test-verified |
+| Installer lifecycle: plan/install/setup/update/rollback/status/uninstall | install_mac_control.py | Test-verified |
 | Read-only public IP and transport capability diagnosis | setup_network.py | Tests; not external connectivity proof |
 | Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Unit-tested, public E2E pending |
 | Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Guarded tests, external validation pending |
+| Default signed native GUI helper | ~/Applications/MacControlMCPServer.app | Install if absent, reuse verified owner-managed app; TCC owner approval required |
+| Interactive connection wizard | guided_setup.py | TCC, network selection, OAuth, service and public checks; ChatGPT manual |
+| Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Configured after OAuth by setup; live remote E2E pending |
 | Smoke test for installed MCP file ops and optional browser | mac_control_smoke.py | Tested |
 
 The installer copies only files listed in `scripts/install_manifest.txt`; local
@@ -34,24 +37,36 @@ public source export and provenance review remain prerequisites.
 
 | Component | Scope / owner action |
 | --- | --- |
-| Native GUI helper (.app) | Optional --with-gui; separately signed and installed under ~/Applications. Owner must approve Accessibility/Screen Recording in macOS Settings |
+| GUI permissions and build tools | Apple Command Line Tools for Swift/clipboard compilation; if absent run xcode-select --install and approve Apple installation manually. Setup starts the helper and requests TCC; owner grants Accessibility/Screen Recording. |
 | ChatBridge HTTP Browser API | **Independent external product**. Default setup reuses a compatible service or installs the checksum-pinned published release using ChatBridge's own installer. --without-chatbridge skips setup; --chatbridge-source selects owner-reviewed sources. ChatBridge is not bundled or removed by Mac Control. |
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
-| Public HTTPS route | Tailscale Funnel to authenticated local port 3201; no public IP required |
+| Public HTTPS route | Direct public domain with trusted TLS and TCP 443 reverse proxy to 127.0.0.1:3201, or Tailscale Funnel without public IP. Owner configures direct DNS/TLS/proxy/router and verifies inbound HTTPS. Never expose port 3201 externally. |
 | Tailscale GUI app, account and MagicDNS/Funnel approval | External; reuse an existing App Store or Standalone install, leave VPN/Exit Node unchanged |
 | Watcher, downstream SSH and other adapters | Owner-specific integration; not assumed to be installed in a clean Mac Control MCP Server environment |
 
-## Not part of current one-command automatic provisioning
+## Interactive setup and owner responsibilities
 
-The Mac Control MCP Server installer currently does **not** ensure persistent launchd
-autostart of the remote server or Tailscale app, issue a public
-release URL, register a GitHub OAuth App behind the owner's back, migrate
-preexisting scattered files, download an unverified ChatBridge release
-without owner selection, or grant macOS TCC permissions. The installation agent guides the owner
-through these actions and verifies them when possible.
+Default `--install` installs/reuses the GUI helper, then runs interactive setup:
+TCC request and status checks, public-IP question, direct HTTPS or Tailscale,
+GitHub OAuth, owner-scoped remote MCP LaunchAgent, local 401/issuer checks,
+explicit Funnel `PUBLISH` when needed, and public discovery/authentication probe.
+The owner manually adds the server in ChatGPT and completes OAuth. Public probes
+do not establish real OAuth or ChatGPT E2E; those release checks remain pending.
 
-Tailscale Funnel is the supported guided remote access mechanism.
-The installer never changes the user's VPN routing or Exit Node selection.
+`--update` reuses the verified app without replacement; `--with-gui` explicitly
+rebuilds it and can require new TCC approval. `--without-gui` skips a new app and
+the wizard TCC step; an already enabled GUI is preserved and its clipboard
+helper is provisioned in the active release. Unknown apps are not overwritten.
+`--setup` resumes pending setup; after `--without-gui`, use `--setup --without-gui`. Noninteractive installation reports
+`pending_owner_interaction`; it does not silently grant permissions or publish.
+
+Setup configures remote MCP autostart for the logged-in owner, not a system
+service before login. It does not install Tailscale automatically, grant TCC,
+create GitHub OAuth Apps on behalf of the owner, complete account logins,
+configure a direct HTTPS proxy or router, or verify inbound reachability from
+an IP echo. Direct access needs a domain and trusted TLS on external TCP 443;
+MCP stays bound to loopback 3201. Check HTTPS from another network.
+Tailscale routes and the user's VPN/Exit Node selection remain unchanged.
 
 ## Default folder layout
 

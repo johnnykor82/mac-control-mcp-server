@@ -82,6 +82,9 @@ existing LaunchAgent, profile, TCC helper, OAuth client or agent configuration.
 
 ### Step 3 — Optional remote access through Tailscale Funnel
 
+This section is network planning only. Complete the local installation in Step 4
+before configuring OAuth, starting the remote service or enabling Funnel.
+
 For a local-stdio installation, skip this step and proceed directly to Step 4.
 
 - **Local MCP stdio:** does not need an inbound network connection.
@@ -162,46 +165,64 @@ checkout and showing the owner its effects:
     python3 scripts/install_mac_control.py --install
     python3 scripts/install_mac_control.py --status
 
-An optional native GUI .app can be installed using --update --with-gui.
-Explain that the owner must grant Accessibility and Screen Recording permissions
-manually in macOS Settings. Test gui_status only after those approvals.
-The installer also supports --rollback and --uninstall; uninstall preserves
-all user data and backups.
+Default installation installs the separate signed GUI helper, or reuses the
+verified helper owned by this installation. Apple Command Line Tools are needed
+for Swift and Unicode clipboard compilation. If unavailable, tell the owner to
+run `xcode-select --install`, manually approve Apple's dialog, wait and retry;
+do not download tools automatically.
+
+After `--install`, an interactive Terminal runs `guided_setup.py`: the helper
+starts and requests TCC, then status is checked. The owner must grant
+Accessibility and Screen Recording in macOS Settings; never claim a grant
+because the dialog opened. A skipped/denied step stays pending. Without an
+interactive Terminal, local installation reports `pending_owner_interaction`.
+Resume with `python3 scripts/install_mac_control.py --setup`.
+
+`--update` preserves the verified GUI app without rebuilding and does not
+restart the wizard. `--with-gui` explicitly rebuilds/replaces only an owned
+helper and may require fresh TCC approval. `--without-gui` skips new GUI
+installation and the wizard TCC request; previously enabled GUI is preserved,
+including clipboard provisioning for the new release. Resume this option with `--setup --without-gui`. `--rollback` and
+`--uninstall` preserve user data and backups.
 
 Mac Control installs under ~/Library/Application Support/MacControl/MCPServer,
 without changing Stable or DEV. It installs pinned Python dependencies and
-never launches its own Chrome. The default install reuses a compatible ChatBridge
-or installs the pinned independent release. ChatBridge runs its own Chrome and
-manages its own updates.
+never launches its own Chrome. The default install reuses a compatible
+ChatBridge or installs its pinned independent release. ChatBridge owns Chrome
+and its own lifecycle. A local MCP client runs
+MCPServer/current/bin/mac-control-stdio-mcp.sh.
 
-Configure a compatible local MCP client to execute the installed
-MCPServer/current/bin/mac-control-stdio-mcp.sh. Test a harmless read operation,
-a disposable-file write and, with the optional dependency enabled,
-a ChatBridge-owned background-browser session; do not
-assume a test on another Mac succeeded because it worked on the developer's.
+The wizard next checks network signals and asks the owner about public inbound
+HTTPS. A direct route needs a domain, trusted TLS and owner-configured TCP 443
+reverse proxy to 127.0.0.1:3201; only external TCP 443 may be forwarded. Do not
+expose 3201 on LAN or the internet. IP echo alone cannot prove public inbound
+access or CGNAT; ask the provider and test HTTPS from another network. The proxy
+must pass MCP, OAuth metadata and callback routes. Without a known public IP,
+the wizard guides Tailscale installation/login/approvals and reuses any existing
+client, leaving VPN, WireGuard and Exit Node routing unchanged.
 
-For remote MCP, walk the owner through their personal OAuth App using
-`--github-oauth-guide --public-url https://...` before requesting credentials.
-The owner registers the app on GitHub and runs
-`--setup-github-oauth --public-url https://...` in a local Terminal.
-Never ask the owner to paste Client Secret in chat. The installer collects
-it through hidden local input, generates a signing key and allows only that
-owner's numeric GitHub ID. After `--github-oauth-check`, start the separate
-loopback remote server, configure HTTPS, use `--github-oauth-probe` and
-run `--github-oauth-login-test` to initiate a genuine browser sign-in
-and validate the authorized system_info call. Alternatively complete
-sign-in through an OAuth-capable MCP client. Refer to
-`docs/GITHUB_OAUTH_SETUP.md`. Do not treat a successful config check as
-proof that GitHub OAuth was completed.
+After the final HTTPS origin is selected, the wizard shows GitHub OAuth App
+registration instructions. The owner creates the App, confirms their numeric
+GitHub ID and enters Client Secret through hidden local input. Never request
+secrets in chat. Existing OAuth configuration is not silently overwritten;
+an origin mismatch stops setup. Refer to docs/GITHUB_OAUTH_SETUP.md.
 
-The separate remote mode has preliminary OAuth tests, but real GitHub login,
-external HTTPS, authorized remote tool calls and automated launchd setup
-remain unverified. Follow docs/REMOTE_ACCESS_GUIDE.md only as an experimental
-path. Do **not** publish or expose the unauthenticated DEV port 3101.
+Setup then installs/starts the owner-scoped
+~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist for login autostart.
+It serves only 127.0.0.1:3201. Local anonymous HTTP 401 and matching issuer are
+required before publication. Funnel needs separate `PUBLISH` confirmation and
+preserves unrelated routes; direct HTTPS proxy configuration remains manual.
+The wizard probes public discovery and authentication and then instructs the
+owner to add the OAuth server URL in ChatGPT manually. A probe does not prove
+real GitHub OAuth or ChatGPT connection. Use `--github-oauth-login-test` for a
+separate real browser consent test, then test ChatGPT itself with `system_info`.
+Live remote OAuth and ChatGPT E2E remain unverified release gates. Never expose
+the unauthenticated DEV port 3101. Test GUI separately after TCC, and perform
+only owner-authorized disposable-file and browser checks on the intended Mac.
 
 The older scripts/install_dev_agent.py and scripts/activate_dev_release.py
 are private DEV staging tools, not public installers. Native background GUI
-requires macOS TCC helper provisioning beyond the local installer.
+requires owner-granted TCC even when setup has requested those permissions.
 Review docs/PUBLIC_RELEASE_GATES.md before public deployment.
 
 ### Step 5 — Report

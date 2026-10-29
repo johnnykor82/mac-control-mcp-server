@@ -14,7 +14,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 ## Capabilities
 
 - **Files, terminal and Git:** manage projects, shell commands, services, processes and approved SSH targets.
-- **Native macOS GUI:** optional separate signed helper using Accessibility and Screen Recording permissions, with background window operations where supported.
+- **Native macOS GUI:** separate signed helper installed by default using Accessibility and Screen Recording permissions, with background window operations where supported.
 - **Browser through ChatBridge:** navigate, click, fill forms, inspect the DOM and take screenshots using ChatBridge HTTP; Mac Control never owns Chrome.
 - **Agent workspace:** store generated projects, tests, downloads, logs and artifacts under one default working directory.
 - **Experimental remote access:** each owner configures a GitHub OAuth App and optionally publishes the authenticated MCP endpoint using Tailscale Funnel.
@@ -88,13 +88,34 @@ During idle, `/ready` returns HTTP 503 with `reason=browser_idle` without waking
 Chrome. If API authentication is enabled, use an authenticated client for wake
 and status checks.
 
-Optional native GUI:
+Default `--install` installs the signed GUI helper under
+`~/Applications/MacControlMCPServer.app`, or reuses the verified helper owned by
+this installation. GUI and Unicode clipboard compilation require Apple Command
+Line Tools. If missing, run `xcode-select --install`, confirm Apple's dialog,
+wait for installation and retry. Mac Control does not download these tools
+automatically.
+
+After local installation, the interactive setup starts the helper to request
+TCC, then checks Accessibility and Screen Recording. Only the owner grants
+these macOS permissions. It continues through public HTTPS selection, GitHub
+OAuth, owner login autostart and public endpoint checks. The owner manually
+adds the plugin in ChatGPT and completes real OAuth login. Noninteractive
+installation reports `pending_owner_interaction`.
+
+Resume setup in Terminal:
 
 ```sh
-python3 scripts/install_mac_control.py --update --with-gui
+python3 scripts/install_mac_control.py --setup
 ```
 
-The owner grants Accessibility and Screen Recording permissions in macOS Settings. The installer supports `--update`, `--rollback` and `--uninstall` while preserving user data. Configure your MCP client to run the installed `bin/mac-control-stdio-mcp.sh` launcher.
+`--update` reuses the verified GUI app without rebuilding, preserving its TCC
+identity; it does not rerun the wizard. Resume with `--setup` as needed.
+`--with-gui` explicitly rebuilds/replaces the verified owner-managed app and
+may require new TCC approval. `--without-gui` skips new GUI installation and
+the wizard's TCC step; an already enabled GUI remains configured and its
+clipboard helper is prepared in the new release. After choosing this option, resume with `--setup --without-gui`. Unknown apps are never
+replaced. `--rollback` and `--uninstall` preserve user data. A local MCP client
+runs the installed `bin/mac-control-stdio-mcp.sh` launcher.
 
 ## Dedicated agent workspace
 
@@ -128,21 +149,29 @@ execution durations only**, not command arguments, file contents, responses
 or credentials. The standalone viewer needs no connection to ChatBridge.
 See [mclog usage](docs/MCLOG.md).
 
-## GitHub OAuth + Tailscale Funnel
+## GitHub OAuth and public HTTPS
 
-Each owner creates a personal GitHub OAuth App. The wizard shows the callback URL, privately collects the Client Secret, generates a signing key and restricts authorized users by numeric GitHub account ID.
+The [ChatGPT setup guide](docs/CHATGPT_SETUP.ru.md) is available in Russian.
 
-```sh
-python3 scripts/install_mac_control.py --network-diagnose
-python3 scripts/install_mac_control.py --network-guide
-python3 scripts/install_mac_control.py --github-oauth-guide --public-url https://YOUR-DEVICE.ts.net
-python3 scripts/install_mac_control.py --setup-github-oauth --public-url https://YOUR-DEVICE.ts.net
-python3 scripts/install_mac_control.py --github-oauth-check
-```
+The `--setup` wizard requests TCC, checks network signals and asks whether the
+owner has a public IP with incoming HTTPS. Direct access requires a domain,
+trusted TLS certificate, external TCP 443 and an owner-configured reverse proxy
+to `127.0.0.1:3201`. Never expose port 3201 externally. IP echo cannot prove
+inbound reachability; verify HTTPS from another network. Without a known public
+IP, the wizard offers Tailscale Funnel and reuses an existing client. The owner
+completes login, macOS networking and tailnet approvals.
 
-The owner explicitly approves Funnel after the authenticated local endpoint passes an anonymous HTTP 401 check. The installer does not modify VPN routes, WireGuard or Exit Node.
+Once the final HTTPS origin is selected, the owner creates a personal GitHub
+OAuth App and enters its Client Secret through hidden local input. The wizard
+installs the owner-scoped `org.maccontrol.mcpserver.remote` LaunchAgent for
+login autostart, starts authenticated MCP, and checks the local 401 and issuer.
+Funnel requires separate `PUBLISH` confirmation and preserves unrelated
+published routes. A public probe follows. VPN, WireGuard and Exit Node routing
+are not changed.
 
-See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCESS_GUIDE.md) and [agent install guide](AGENT_INSTALL.md).
+A passing probe does not verify real OAuth or ChatGPT connectivity. Live
+GitHub OAuth and ChatGPT E2E remain unverified release gates.
+See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCESS_GUIDE.md) and [agent instructions](AGENT_INSTALL.md).
 
 ## Security, status and license
 

@@ -49,10 +49,14 @@ def main() -> None:
     port = opts.port or (3201 if opts.remote else 3101)
     if not 1024 <= port <= 65535 or port in (3000, 9334, 9335):
         parser.error("Port must be unreserved and different from production ports")
+    http_options = {}
     if opts.remote:
         # Credentials are read only at startup, from the owner-only config file.
         from mac_control.remote_auth import build_auth
-        server = make_server(include_mutations=True, auth=build_auth())
+        from mac_control.remote_http import remote_http_options
+        auth = build_auth()
+        server = make_server(include_mutations=True, auth=auth)
+        http_options = remote_http_options(str(auth.base_url))
     else:
         server = make_server()
     server.run(
@@ -62,6 +66,7 @@ def main() -> None:
         path="/mcp",
         show_banner=False,
         host_origin_protection=True,
+        **http_options,
     )
 
 

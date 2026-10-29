@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 import io
 from scripts import setup_network
@@ -48,6 +48,7 @@ class NetworkGuidanceTests(unittest.TestCase):
                                return_value={"public_url": "https://laptop.example.ts.net",
                                              "allowed_github_ids": ["12345"]}), \
              patch.object(setup_network.sys.stdin, "isatty", return_value=True), \
+             patch.object(setup_network, "publication_state", return_value={"status": "empty"}), \
              patch.object(setup_network, "run", side_effect=AssertionError("public exposure")):
             with patch("sys.stdout", new_callable=io.StringIO):
                 with self.assertRaises(RuntimeError):
@@ -65,13 +66,14 @@ class NetworkGuidanceTests(unittest.TestCase):
                               return_value={"public_url": "https://laptop.example.ts.net",
                                             "allowed_github_ids": ["12345"]}), \
              patch.object(setup_network.sys.stdin, "isatty", return_value=True), \
+             patch.object(setup_network, "publication_state", side_effect=[
+                 {"status": "empty"}, {"status": "empty"},
+                 {"status": "existing_matching"}]), \
              patch.object(setup_network, "run", return_value=Success()) as command:
             with patch("sys.stdout", new_callable=io.StringIO):
                 outcome = setup_network.enable_funnel(Path("/example"),
                                                       input_fn=lambda _: "PUBLISH")
-        self.assertEqual(command.call_count, 2)
-        command.assert_any_call(["/opt/homebrew/bin/tailscale", "funnel", "status"])
-        command.assert_any_call(
+        command.assert_called_once_with(
             ["/opt/homebrew/bin/tailscale", "funnel", "--bg", "3201"], timeout=50)
         self.assertFalse(outcome["external_connectivity_verified"])
         self.assertFalse(outcome["github_oauth_login_verified"])
@@ -87,7 +89,10 @@ class NetworkGuidanceTests(unittest.TestCase):
     def test_funnel_existing_configuration_is_not_overwritten(self):
         class Existing:
             returncode = 0
-            stdout = "# Funnel on:\nhttps://existing.ts.net (Funnel on)"
+            stdout = json.dumps({"TCP": {"443": {"HTTPS": True}},
+                                 "Web": {"existing.ts.net:443": {
+                                     "Handlers": {"/": {"Proxy": "http://127.0.0.1:9999"}}}},
+                                 "AllowFunnel": {"existing.ts.net:443": True}})
         with patch.object(setup_network, "tailscale_cli", return_value="/Applications/Tailscale.app/Contents/MacOS/Tailscale"), \
              patch.object(setup_network, "tailscale_state", return_value={
                  "installed": True, "logged_in": True,
@@ -100,8 +105,10 @@ class NetworkGuidanceTests(unittest.TestCase):
             with patch("sys.stdout", new_callable=io.StringIO):
                 with self.assertRaises(RuntimeError):
                     setup_network.enable_funnel(Path("/example"), input_fn=lambda _: "PUBLISH")
-        run.assert_called_once_with(
-            ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "funnel", "status"])
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "funnel", "status", "--json"],
+            ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "serve", "status", "--json"],
+        ])
 
     def test_embedded_cli_has_explicit_cli_mode(self):
         with patch.object(setup_network.subprocess, "run") as runner:
@@ -112,12 +119,14 @@ class NetworkGuidanceTests(unittest.TestCase):
         class Response:
             status = 200
             headers = {}
+            def read(self, limit):
+                return b'{"issuer":"https://laptop.example.ts.net"}'
             def __enter__(self): return self
             def __exit__(self, *args): pass
         with patch.object(setup_network, "check_oauth",
                           return_value={"public_url": "https://laptop.example.ts.net"}), \
-             patch.object(setup_network.urllib.request, "urlopen",
-                          return_value=Response()):
+             patch.object(setup_network.urllib.request, "build_opener",
+                          return_value=Mock(open=Mock(return_value=Response()))):
             with self.assertRaises(RuntimeError):
                 setup_network._oauth_guard(Path("/example"))
 

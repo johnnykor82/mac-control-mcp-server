@@ -91,13 +91,34 @@ Preflight возвращает код 2, если uv ещё отсутствуе
 повторный запуск использует его совместимый работающий API. Лимит настройки —
 30 минут; после таймаута сначала проверьте состояние ChatBridge.
 
-Нативный GUI helper:
+Стандартный `--install` устанавливает подписанный GUI helper в
+`~/Applications/MacControlMCPServer.app` или переиспользует проверенный helper
+этой установки. Для сборки GUI и Unicode clipboard helper нужны Apple Command
+Line Tools. Если они отсутствуют, выполните `xcode-select --install`, вручную
+подтвердите установку Apple, дождитесь завершения и повторите команду.
+Установщик не скачивает эти инструменты автоматически.
+
+После локальной установки интерактивный мастер запросит TCC через helper и
+проверит Accessibility и Screen Recording. Разрешения выдаёт владелец в macOS.
+Затем мастер проведёт через выбор публичного HTTPS, GitHub OAuth, автозапуск
+remote MCP при входе владельца и проверку внешнего endpoint. Подключение plugin
+в ChatGPT и реальный OAuth-вход владелец завершает вручную. При отсутствии
+интерактивного Terminal настройка остаётся `pending_owner_interaction`.
+
+Продолжить отложенную настройку:
 
 ```sh
-python3 scripts/install_mac_control.py --update --with-gui
+python3 scripts/install_mac_control.py --setup
 ```
 
-Разрешения Accessibility и Screen Recording владелец выдаёт в настройках macOS. Доступны `--update`, `--rollback` и `--uninstall` с сохранением пользовательских данных. MCP-клиент запускает установленный `bin/mac-control-stdio-mcp.sh`.
+`--update` по умолчанию сохраняет helper без пересборки, чтобы сохранить его
+идентичность для TCC, и не запускает мастер заново; продолжите через `--setup`.
+`--with-gui` явно пересобирает/заменяет только проверенный owner-managed helper;
+macOS может запросить разрешения повторно. `--without-gui` пропускает новую
+установку GUI и запрос TCC мастером; уже включённый GUI сохраняется, а clipboard
+helper готовится для нового релиза. После этого варианта продолжайте настройку через `--setup --without-gui`. Неизвестный app установщик не заменяет.
+Доступны `--rollback` и `--uninstall` с сохранением пользовательских данных.
+Локальный MCP-клиент запускает установленный `bin/mac-control-stdio-mcp.sh`.
 
 ## Рабочий каталог агентов
 
@@ -131,21 +152,28 @@ python3 scripts/install_mac_control.py --update --with-gui
 файлов, ответы и секреты. ChatBridge для работы `mclog` не нужен.
 Подробности: [инструкция mclog](docs/MCLOG.md).
 
-## GitHub OAuth и Tailscale Funnel
+## GitHub OAuth и публичный HTTPS
 
-Каждый владелец создаёт личное GitHub OAuth App. Мастер выводит callback URL, скрыто принимает Client Secret, генерирует ключ подписи и разрешает вход только нужным GitHub ID.
+Пошаговое подключение нового Mac к ChatGPT: [мастер установки и ручные действия](docs/CHATGPT_SETUP.ru.md).
 
-```sh
-python3 scripts/install_mac_control.py --network-diagnose
-python3 scripts/install_mac_control.py --network-guide
-python3 scripts/install_mac_control.py --github-oauth-guide --public-url https://YOUR-DEVICE.ts.net
-python3 scripts/install_mac_control.py --setup-github-oauth --public-url https://YOUR-DEVICE.ts.net
-python3 scripts/install_mac_control.py --github-oauth-check
-```
+Мастер `--setup` сначала запрашивает TCC, затем проверяет сетевые признаки и
+уточняет у владельца наличие белого IP. Для прямого подключения нужны домен,
+доверенный TLS-сертификат, внешний TCP 443 и вручную настроенный HTTPS proxy к
+`127.0.0.1:3201`; порт 3201 не открывают наружу. IP echo не доказывает входящую
+доступность — проверьте HTTPS из другой сети. Если белого IP нет или ответ
+неизвестен, мастер предлагает Tailscale Funnel, переиспользуя имеющийся клиент.
+Вход, сетевые разрешения macOS и разрешения tailnet подтверждает владелец.
 
-Funnel включается после проверки защищённого локального MCP (анонимный HTTP 401) и подтверждения владельца. Установщик не меняет маршруты VPN, WireGuard и Exit Node.
+После выбора окончательного HTTPS-имени владелец регистрирует личное GitHub
+OAuth App и вводит Client Secret в скрытом локальном запросе. Мастер настраивает
+owner-scoped LaunchAgent `org.maccontrol.mcpserver.remote`, запускает защищённый
+MCP при входе владельца и проверяет локальный 401 и issuer. Для Funnel требуется
+отдельное `PUBLISH`; существующие чужие маршруты не заменяются. Затем проверяется
+публичный endpoint. VPN, WireGuard и Exit Node установщик не перенастраивает.
 
-Подробнее: [GitHub OAuth](docs/GITHUB_OAUTH_SETUP.md), [удалённый доступ](docs/REMOTE_ACCESS_GUIDE.md), [инструкция для агента](AGENT_INSTALL.md).
+Успех probe не подтверждает реальный OAuth или подключение ChatGPT. Живые
+GitHub OAuth и ChatGPT E2E остаются непроверенными этапами релиза.
+Подробнее: [GitHub OAuth](docs/GITHUB_OAUTH_SETUP.md), [сеть](docs/REMOTE_ACCESS_GUIDE.md), [инструкция агенту](AGENT_INSTALL.md).
 
 ## Риски, статус и лицензия
 
