@@ -23,10 +23,11 @@ Mac Control MCP Server — экспериментальный сервер Model
 
 **ChatBridge имеет самостоятельную установку и репозиторий.** Он предоставляет HTTP-доступ к авторизованной браузерной сессии ChatGPT и фоновую автоматизацию браузера. Для его работы Mac Control не нужен.
 
-Mac Control работает без ChatBridge с файлами, терминалом, Git и нативным GUI. Для браузерных операций ChatBridge устанавливается отдельно и подключается по HTTP. При первой установке агент может клонировать отдельно опубликованный релиз
-ChatBridge в `workspace/projects/chatbridge`, после чего установщик Mac Control
-запустит **собственный установщик ChatBridge** из проверенной копии.
-Исходники ChatBridge не входят в Mac Control; удаление Mac Control его не удаляет.
+Стандартный установщик Mac Control переиспользует совместимый ChatBridge или
+устанавливает отдельный релиз `v0.2.0-beta.5` с закреплённой SHA256.
+Профиль Chrome, LaunchAgent и данные принадлежат ChatBridge; удаление Mac Control
+его сохраняет. Для работы без браузера используйте `--without-chatbridge`;
+при обновлении этот флаг пропускает настройку и сохраняет прежнюю конфигурацию.
 
 **Исходники ChatBridge:** [johnnykor82/chatbridge](https://github.com/johnnykor82/chatbridge).
 Используйте проверенный опубликованный релиз ChatBridge.
@@ -39,34 +40,45 @@ MCP-клиента. Не вставляйте ключ в чат или аргу
 
 ## Установка на macOS
 
-Требуются macOS, [uv](https://docs.astral.sh/uv/) для изолированного Python 3.13 и совместимый MCP-клиент. Перед выполнением установщика изучите исходники.
+Требуются macOS, Python 3.9+ для bootstrap, Google Chrome и совместимый MCP-клиент. Установщик создаёт изолированный Python 3.13 через [uv](https://docs.astral.sh/uv/). Перед запуском изучите исходники.
 
 ```sh
 git clone https://github.com/johnnykor82/mac-control-mcp-server.git
 cd mac-control-mcp-server
-python3 scripts/release_preflight.py --json
+python3 scripts/release_preflight.py --json || [ "$?" -eq 2 ]
 python3 scripts/release_audit.py --strict
 python3 scripts/install_mac_control.py --plan
 python3 scripts/install_mac_control.py --install
 python3 scripts/install_mac_control.py --status
 ```
 
-Подключение уже работающего ChatBridge:
+Запускайте `--install` в Terminal. Установщик сначала проверяет API ChatBridge.
+При отсутствии сервиса он скачивает закреплённый релиз, сверяет SHA256 до
+распаковки и исполнения и вызывает собственный установщик ChatBridge.
+Существующие данные, LaunchAgent, занятый порт, HTTP 401 или несовместимый API
+останавливают настройку: сначала восстановите отдельный ChatBridge.
+Нужен Google Chrome. Если `uv` отсутствует, ChatBridge предлагает установить его
+с согласия владельца; bootstrap работает на Python 3.9+ и создаёт отдельный
+Python 3.13. При standalone-установке или переиспользовании сервиса без uv
+сначала установите [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Preflight возвращает код 2, если uv ещё отсутствует; команда выше допускает этот
+результат, чтобы интерактивный bootstrap ChatBridge мог предложить его установку.
+
+`--with-chatbridge` сохранён для совместимости; `--chatbridge-source PATH`
+позволяет использовать отдельно проверенные исходники. После новой установки
+сначала дождитесь, пока `curl http://127.0.0.1:8787/v1/system/status` покажет
+`browser.mode=managed` и `browser.state=running`. Затем вручную войдите в ChatGPT,
+открыв **только профиль по умолчанию**:
 
 ```sh
-python3 scripts/install_mac_control.py --update --with-chatbridge
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
 ```
 
-Установка зависимости из отдельно проверенного репозитория ChatBridge:
-
-```sh
-python3 scripts/install_mac_control.py --update --with-chatbridge \
-  --chatbridge-source "$HOME/Library/Application Support/MacControl/MCPServer/data/workspace/projects/chatbridge"
-```
-
-ChatBridge сохраняет собственные установщик, Chrome-профиль, LaunchAgent и данные.
-Для установки агент должен использовать опубликованный проверенный релиз,
-а не произвольную неподтверждённую ветку.
+Для другого расположения профиля следуйте инструкциям ChatBridge. Установка
+не оставляет окно входа открытым и не проверяет реальный вход в ChatGPT.
+При последующей ошибке Mac Control ChatBridge остаётся отдельно установленным;
+повторный запуск использует его совместимый работающий API. Лимит настройки —
+30 минут; после таймаута сначала проверьте состояние ChatBridge.
 
 Нативный GUI helper:
 

@@ -202,34 +202,24 @@ def uninstall(root: Path) -> dict:
             "data_preserved": str(root / "data"), "stable_modified": False}
 
 
-def install(root: Path, with_chatbridge: bool, with_gui: bool = False,
+def install(root: Path, with_chatbridge: bool = True, with_gui: bool = False,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None) -> dict:
     info = paths(root)
-    uv = find_uv()
-    if not uv:
-        raise RuntimeError("uv missing: the installing agent must provision uv first")
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
     provider_url = chatbridge_url or os.environ.get("MACCONTROL_CHATBRIDGE_URL", "http://127.0.0.1:8787")
     if with_chatbridge:
         try:
-            from scripts.setup_chatbridge_dependency import verify as verify_chatbridge, install as install_chatbridge
+            from scripts.setup_chatbridge_dependency import ensure
         except ModuleNotFoundError:
-            # Also support python3 scripts/install_mac_control.py directly.
-            from setup_chatbridge_dependency import verify as verify_chatbridge, install as install_chatbridge
-        if chatbridge_source is not None:
-            try:
-                verify_chatbridge(provider_url)
-            except urllib.error.HTTPError:
-                # A running service rejected the probe; never overwrite it on auth/API errors.
-                raise
-            except urllib.error.URLError:
-                # Owner-requested setup only when no compatible local endpoint is reachable.
-                install_chatbridge(chatbridge_source, url=provider_url)
-        verify_chatbridge(provider_url)
+            from setup_chatbridge_dependency import ensure
+        ensure(provider_url, chatbridge_source)
     elif chatbridge_source is not None or chatbridge_url is not None:
-        raise RuntimeError("--chatbridge-source and --chatbridge-url require --with-chatbridge")
+        raise RuntimeError("ChatBridge options cannot be used with --without-chatbridge")
+    uv = find_uv()
+    if not uv:
+        raise RuntimeError("uv missing: install uv from https://docs.astral.sh/uv/getting-started/installation/")
     dest = info["release"]
     data = info["data"]
     # Do not modify any Stable or MCP-Dev launchd service.
@@ -260,7 +250,7 @@ def install(root: Path, with_chatbridge: bool, with_gui: bool = False,
         smoke(dest, data)
     if with_chatbridge:
         # ChatBridge is an independent prerequisite and the ONLY browser owner.
-        # Its optional setup uses ChatBridge's own installer; its lifecycle remains independent.
+        # Setup uses ChatBridge's own installer; its lifecycle remains independent.
         flags = data / "feature_flags.json"
         original = json.loads(flags.read_text()) if flags.is_file() else {}
         if not isinstance(original, dict):
@@ -315,7 +305,7 @@ def install(root: Path, with_chatbridge: bool, with_gui: bool = False,
     pointer = info["current"]
     return {"status": "installed", "release": str(dest),
             "current": str(pointer), "data": str(data),
-            "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "not_configured",
+            "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
             "entrypoint": str(pointer / "bin/mac-control-stdio-mcp.sh"),
             "remote_https_oauth": "EXPERIMENTAL_UNVERIFIED"}
 
@@ -354,8 +344,12 @@ def main() -> int:
     parser.add_argument("--github-login", help="GitHub username to authorize (or auto-detect logged-in gh CLI)")
     parser.add_argument("--with-gui", action="store_true",
                         help="Build and install separate Mac Control MCP Server GUI helper (macOS TCC owner approval required)")
-    parser.add_argument("--with-chatbridge", action="store_true",
-                        help="Connect to ChatBridge, optionally install it from --chatbridge-source")
+    browser = parser.add_mutually_exclusive_group()
+    browser.add_argument("--with-chatbridge", dest="with_chatbridge", action="store_true",
+                         help="Use ChatBridge (default); reuse or install pinned release")
+    browser.add_argument("--without-chatbridge", dest="with_chatbridge", action="store_false",
+                         help="Skip ChatBridge setup; preserve any existing browser configuration")
+    parser.set_defaults(with_chatbridge=True)
     parser.add_argument("--chatbridge-source", type=Path,
                         help="Reviewed standalone ChatBridge checkout; enables installing dependency when absent")
     parser.add_argument("--chatbridge-url",
@@ -392,6 +386,7 @@ def main() -> int:
                   "release": str(info["release"]),
                   "entrypoint": str(info["current"] / "bin/mac-control-stdio-mcp.sh"),
                   "installs_packages": True, "network_required": True,
+                  "chatbridge": "reuse_or_install_pinned" if args.with_chatbridge else "skip_setup_preserve_existing",
                   "existing_stable_modified": False,
                   "native_background_gui": "requires separate signed helper and macOS TCC",
                   "remote_https_oauth": "EXPERIMENTAL_UNVERIFIED"}

@@ -61,7 +61,10 @@ if desired:
     sw_vers
     uname -m
     git --version
-    python3 scripts/release_preflight.py --json
+    python3 scripts/release_preflight.py --json || [ "$?" -eq 2 ]
+
+Preflight can return 2 when uv is missing. The standard interactive ChatBridge
+bootstrap below can offer to install uv with the owner's consent.
 
 If network diagnostics are authorized, run:
 
@@ -77,7 +80,9 @@ Check free space, compatible macOS, Apple Silicon/Intel architecture, developer
 tools, Python 3.13, Homebrew/uv and existing installs. Do not overwrite an
 existing LaunchAgent, profile, TCC helper, OAuth client or agent configuration.
 
-### Step 3 — Set up Tailscale Funnel (no public IP required)
+### Step 3 — Optional remote access through Tailscale Funnel
+
+For a local-stdio installation, skip this step and proceed directly to Step 4.
 
 - **Local MCP stdio:** does not need an inbound network connection.
 - **Remote MCP:** use the official Tailscale client and Tailscale Funnel as
@@ -114,23 +119,33 @@ the device already publishes other services.
 
 ### Step 4 — Install Mac Control and connect standalone ChatBridge
 
-ChatBridge is published and installed **separately, first**. It does not
-depend on Mac Control. On a new Mac, first install Mac Control's core MCP
-and create its workspace; to activate browser features, clone a verified
-**tagged release** of ChatBridge from
-https://github.com/johnnykor82/chatbridge under
-`workspace/projects/chatbridge`.
+Use the standard `--install` path in Terminal. It reuses compatible ChatBridge or
+downloads `v0.2.0-beta.5`, verifies the pinned SHA256, safely extracts it and runs
+ChatBridge's own installer. Google Chrome is required; missing uv may be installed
+by ChatBridge only with its normal interactive owner consent. Bootstrap supports
+Python 3.9+; the MCP runtime remains isolated Python 3.13.
 
-Then invoke Mac Control's installer with `--with-chatbridge
---chatbridge-source PATH_TO_REVIEWED_CHATBRIDGE_CHECKOUT`. This runs
-ChatBridge's own standalone installer and verifies its Browser API v1.
-If ChatBridge is already installed, omit `--chatbridge-source` and provide
-`--chatbridge-url` if it uses a custom local HTTP port. Mac Control
-must never silently overwrite an unrelated existing ChatBridge service.
-The default loopback origin is `http://127.0.0.1:8787`. No API key is required
-by default. If ChatBridge uses `CHATBRIDGE_API_KEY`, provide the same value as
-`MACCONTROL_CHATBRIDGE_API_KEY` to the installer and MCP client environment.
-Never print, log or request the key in chat. The installer does not store it.
+Never overwrite an occupied port, HTTP 401, incompatible API, existing LaunchAgent
+or nonempty ChatBridge state. Recover the independent service first, then retry.
+The default origin is `http://127.0.0.1:8787`; use `--chatbridge-url` for another
+local port. `--with-chatbridge` remains accepted; `--chatbridge-source PATH` uses
+separately owner-reviewed sources. `--without-chatbridge` skips setup, preserving
+existing browser configuration on update. No key is needed by default; when used,
+`MACCONTROL_CHATBRIDGE_API_KEY` must match ChatBridge's `CHATBRIDGE_API_KEY`.
+Never print or request credentials in chat.
+
+For a new default profile, first wait until `curl http://127.0.0.1:8787/v1/system/status`
+reports `browser.mode=managed` and `browser.state=running`. Then tell the owner to sign in manually:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
+```
+
+This command is for the default profile only; custom paths require ChatBridge's
+own instructions. Do not claim installation left a login window open or verified
+real ChatGPT login. ChatBridge survives a later Mac Control failure; retry reuses
+its working compatible API. After the 30-minute setup timeout inspect its status
+before retrying.
 
 #### Install and verify the local MCP
 
@@ -151,10 +166,9 @@ all user data and backups.
 
 Mac Control installs under ~/Library/Application Support/MacControl/MCPServer,
 without changing Stable or DEV. It installs pinned Python dependencies and
-never launches its own Chrome. Enable the standalone ChatBridge dependency
-with --update --with-chatbridge, optionally using --chatbridge-source pointing
-to the checked-out tagged ChatBridge release. If already installed, Mac Control
-will reuse it. ChatBridge runs its own Chrome and manages its own updates.
+never launches its own Chrome. The default install reuses a compatible ChatBridge
+or installs the pinned independent release. ChatBridge runs its own Chrome and
+manages its own updates.
 
 Configure a compatible local MCP client to execute the installed
 MCPServer/current/bin/mac-control-stdio-mcp.sh. Test a harmless read operation,

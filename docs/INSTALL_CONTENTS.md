@@ -35,7 +35,7 @@ public source export and provenance review remain prerequisites.
 | Component | Scope / owner action |
 | --- | --- |
 | Native GUI helper (.app) | Optional --with-gui; separately signed and installed under ~/Applications. Owner must approve Accessibility/Screen Recording in macOS Settings |
-| ChatBridge HTTP Browser API | **Independent external product**. --with-chatbridge reuses an existing service; --chatbridge-source points to a reviewed separately published checkout and invokes ChatBridge's own installer when absent. ChatBridge is not bundled or removed by Mac Control. |
+| ChatBridge HTTP Browser API | **Independent external product**. Default setup reuses a compatible service or installs the checksum-pinned published release using ChatBridge's own installer. --without-chatbridge skips setup; --chatbridge-source selects owner-reviewed sources. ChatBridge is not bundled or removed by Mac Control. |
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
 | Public HTTPS route | Tailscale Funnel to authenticated local port 3201; no public IP required |
 | Tailscale GUI app, account and MagicDNS/Funnel approval | External; reuse an existing App Store or Standalone install, leave VPN/Exit Node unchanged |

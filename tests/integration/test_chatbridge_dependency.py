@@ -29,6 +29,7 @@ class ChatBridgeDependencyTests(unittest.TestCase):
             (src / "pyproject.toml").write_text('name = "chatbridge-gateway"\n')
             with patch.object(dependency.subprocess, "run",
                               return_value=SimpleNamespace(returncode=0)) as runner, \
+                 patch.object(dependency, "assert_installable"), \
                  patch.object(dependency, "verify", return_value={"status": "compatible"}):
                 result = dependency.install(src)
         self.assertEqual(result["status"], "compatible")
@@ -56,6 +57,7 @@ class ChatBridgeDependencyTests(unittest.TestCase):
             (src / "pyproject.toml").write_text('name = "chatbridge-gateway"\n')
             with patch.object(dependency.subprocess, "run",
                               return_value=SimpleNamespace(returncode=0)) as runner, \
+                 patch.object(dependency, "assert_installable"), \
                  patch.object(dependency, "verify", return_value={}):
                 dependency.install(src, url="http://localhost:9876")
             args = runner.call_args.args[0]
@@ -70,7 +72,7 @@ class ChatBridgeDependencyTests(unittest.TestCase):
                  patch.object(installer.sys, "platform", "darwin"), \
                  patch.object(dependency, "verify", side_effect=error), \
                  patch.object(dependency, "install") as install_dependency:
-                with self.assertRaises(type(error)):
+                with self.assertRaises(RuntimeError):
                     installer.install(Path("unused"), True, chatbridge_source=Path("source"))
             install_dependency.assert_not_called()
 

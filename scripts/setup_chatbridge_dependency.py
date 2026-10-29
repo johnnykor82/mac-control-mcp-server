@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
-"""Install/verify an independently distributed ChatBridge as an optional dependency.
-
-Never vend ChatBridge source into Mac Control. Run only after the installing
-agent has verified the separate ChatBridge GitHub checkout and its tag.
-"""
+"""Reuse ChatBridge or install its checksum-pinned independent release."""
 from __future__ import annotations
 import argparse
+import errno
+import hashlib
+import gzip
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import socket
 import subprocess
+import tarfile
+import tempfile
+import time
 import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+RELEASE_URL = "https://github.com/johnnykor82/chatbridge/releases/download/v0.2.0-beta.5/chatbridge_gateway-0.2.0b5.tar.gz"
+RELEASE_SHA256 = "5939fac0eedf366b7bb0cf3d6e40bad20d883b3682dc2a7d7378b22127f27a54"
+RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b5"
+MAX_ARCHIVE = 16 * 1024 * 1024
+MAX_EXPANDED = 64 * 1024 * 1024
 DEFAULT_URL = "http://127.0.0.1:8787"
 
 
@@ -61,14 +69,145 @@ def install(source: Path, *, url: str = DEFAULT_URL) -> dict:
         raise RuntimeError("Source is not the expected ChatBridge distribution")
     # Explicit setup runs ChatBridge's own installer; its source remains
     # independent and its own app/state/LaunchAgent are not managed by Mac Control.
-    proc = subprocess.run([sys.executable, str(source / "scripts/installer.py"),
-                           "install", "--host", "127.0.0.1", "--port", str(parsed.port or 80)],
-                          cwd=source, check=False, capture_output=True,
-                          timeout=180, text=True)
+    assert_installable(url)
+    environment = dict(os.environ)
+    client_key = environment.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
+    server_key = environment.get("CHATBRIDGE_API_KEY", "")
+    if server_key and server_key != client_key:
+        raise RuntimeError("Set matching MACCONTROL_CHATBRIDGE_API_KEY and CHATBRIDGE_API_KEY before setup")
+    if client_key:
+        environment["CHATBRIDGE_API_KEY"] = client_key
+    try:
+        # Preserve terminal input/output: ChatBridge owns interactive uv consent/login guidance.
+        proc = subprocess.run([sys.executable, str(source / "scripts/installer.py"),
+                               "install", "--host", "127.0.0.1", "--port", str(parsed.port or 80)],
+                              cwd=source, check=False, timeout=1800, env=environment)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ChatBridge setup timed out; inspect ChatBridge status before retrying") from None
     if proc.returncode:
-        raise RuntimeError("ChatBridge installer failed; inspect its own diagnostic logs")
+        raise RuntimeError("ChatBridge setup failed; see its terminal diagnostics; no automatic overwrite attempted")
+    print("Follow ChatBridge's printed guidance to open its managed profile and sign in.")
+    print("Complete login manually; no real ChatGPT login has been verified by this installer.")
     return verify(url)
 
+
+def assert_installable(url: str) -> None:
+    """Refuse existing service ownership or an occupied port before any setup."""
+    parsed = local_origin(url)
+    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    if plist.exists() or plist.is_symlink():
+        raise RuntimeError("ChatBridge LaunchAgent already exists; inspect or upgrade it independently")
+    state = Path.home() / ".chatbridge"
+    if state.is_symlink() or (state.exists() and (not state.is_dir() or any(state.iterdir()))):
+        raise RuntimeError("Existing ChatBridge state found; recover/start it independently, then rerun Mac Control")
+    try:
+        loaded = subprocess.run(["/bin/launchctl", "print", "gui/" + str(os.getuid()) + "/net.chatbridge.gateway"],
+                                capture_output=True, timeout=5, check=False)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Could not confirm ChatBridge service ownership; setup stopped") from None
+    if loaded.returncode == 0:
+        raise RuntimeError("ChatBridge service is already loaded; recover it independently")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", parsed.port or 80))
+        except OSError:
+            raise RuntimeError("ChatBridge port is unavailable; inspect the existing service") from None
+
+
+def extract_release(archive: Path, destination: Path) -> Path:
+    """Extract only bounded regular files/directories from the pinned source distribution."""
+    total = 0
+    seen = set()
+    # Bound decompression before tarfile processes extended/PAX metadata.
+    unpacked = destination.parent / "bounded-release.tar"
+    expanded = 0
+    with gzip.open(archive, "rb") as compressed, unpacked.open("xb") as output:
+        while True:
+            chunk = compressed.read(65536)
+            if not chunk:
+                break
+            expanded += len(chunk)
+            if expanded > MAX_EXPANDED + 2 * 1024 * 1024:
+                raise RuntimeError("ChatBridge archive decompression exceeds size limit")
+            output.write(chunk)
+    with tarfile.open(unpacked, "r|") as bundle:
+        for number, member in enumerate(bundle, 1):
+            parts = PurePosixPath(member.name).parts
+            if (number > 2048 or not parts or parts[0] != RELEASE_DIRECTORY
+                    or member.name.startswith("/") or ".." in parts
+                    or "\\" in member.name or member.name in seen
+                    or not (member.isdir() or member.isfile())
+                    or member.size < 0 or member.size > 8 * 1024 * 1024):
+                raise RuntimeError("Unsafe ChatBridge release archive")
+            seen.add(member.name)
+            total += member.size
+            if total > MAX_EXPANDED:
+                raise RuntimeError("ChatBridge release archive exceeds size limit")
+            target = destination.joinpath(*parts)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = bundle.extractfile(member)
+                if source is None:
+                    raise RuntimeError("Incomplete ChatBridge archive")
+                with source, target.open("xb") as output:
+                    while True:
+                        chunk = source.read(65536)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                target.chmod(0o700 if member.mode & 0o111 else 0o600)
+    return destination / RELEASE_DIRECTORY
+
+
+def install_pinned(url: str = DEFAULT_URL) -> dict:
+    assert_installable(url)
+    with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
+        root = Path(temporary)
+        archive = root / "release.tar.gz"
+        digest = hashlib.sha256()
+        downloaded = 0
+        deadline = time.monotonic() + 90
+        try:
+            with urllib.request.urlopen(RELEASE_URL, timeout=20) as response, archive.open("wb") as output:
+                if urlsplit(response.geturl()).scheme != "https":
+                    raise RuntimeError("ChatBridge download redirected outside HTTPS")
+                while True:
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    downloaded += len(chunk)
+                    if downloaded > MAX_ARCHIVE or time.monotonic() > deadline:
+                        raise RuntimeError("ChatBridge download exceeds size or time limit")
+                    digest.update(chunk)
+                    output.write(chunk)
+        except (OSError, urllib.error.URLError):
+            raise RuntimeError("Could not download pinned ChatBridge release; retry or use --without-chatbridge") from None
+        if digest.hexdigest() != RELEASE_SHA256:
+            raise RuntimeError("ChatBridge release SHA256 mismatch; installer was not executed")
+        try:
+            source = extract_release(archive, root / "source")
+        except (tarfile.TarError, OSError, EOFError):
+            raise RuntimeError("Invalid ChatBridge release archive; installer was not executed") from None
+        return install(source, url=url)
+
+
+def ensure(url: str = DEFAULT_URL, source: Path | None = None) -> dict:
+    """Reuse a compatible endpoint; only a refused connection permits fresh setup."""
+    try:
+        return verify(url)
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            raise RuntimeError("ChatBridge requires a matching MACCONTROL_CHATBRIDGE_API_KEY; existing service preserved") from None
+        raise RuntimeError("Existing HTTP service rejected ChatBridge API probe; preserved") from None
+    except urllib.error.URLError as error:
+        if not isinstance(error.reason, ConnectionRefusedError) or error.reason.errno != errno.ECONNREFUSED:
+            raise RuntimeError("ChatBridge probe failed; inspect the endpoint before installation") from None
+    except (TimeoutError, ValueError):
+        raise RuntimeError("ChatBridge probe timed out or returned invalid data; existing service preserved") from None
+    assert_installable(url)
+    return install(source, url=url) if source is not None else install_pinned(url)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -76,7 +215,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path)
     parser.add_argument("--install", action="store_true")
     opts = parser.parse_args()
-    result = install(opts.source, url=opts.url) if opts.install and opts.source else verify(opts.url)
+    result = ensure(opts.url, opts.source) if opts.install else verify(opts.url)
     print(json.dumps(result, indent=2))
     return 0
 
