@@ -18,9 +18,9 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-RELEASE_URL = "https://github.com/johnnykor82/chatbridge/releases/download/v0.2.0-beta.8/chatbridge_gateway-0.2.0b8.tar.gz"
-RELEASE_SHA256 = "306b1d80e475d8151938b4249f36e3fd33d933a0648b5427a8519324a1115d34"
-RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b8"
+RELEASE_URL = "https://github.com/johnnykor82/chatbridge/releases/download/v0.2.0-beta.9/chatbridge_gateway-0.2.0b9.tar.gz"
+RELEASE_SHA256 = "1248da4818998290d40f6491548a2a527d09a99d1612c39cc649ef7b2dadcf1e"
+RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b9"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 DEFAULT_URL = "http://127.0.0.1:8787"

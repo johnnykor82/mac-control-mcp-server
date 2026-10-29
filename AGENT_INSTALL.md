@@ -120,7 +120,7 @@ the device already publishes other services.
 ### Step 4 — Install Mac Control and connect standalone ChatBridge
 
 Use the standard `--install` path in Terminal. It reuses compatible ChatBridge or
-downloads `v0.2.0-beta.8`, verifies the pinned SHA256, safely extracts it and runs
+downloads `v0.2.0-beta.9`, verifies the pinned SHA256, safely extracts it and runs
 ChatBridge's own installer. Google Chrome is required; missing uv may be installed
 by ChatBridge only with its normal interactive owner consent. Bootstrap supports
 Python 3.9+; the MCP runtime remains isolated Python 3.13.
@@ -134,16 +134,18 @@ existing browser configuration on update. No key is needed by default; when used
 `MACCONTROL_CHATBRIDGE_API_KEY` must match ChatBridge's `CHATBRIDGE_API_KEY`.
 Never print or request credentials in chat.
 
-For a new default profile, first wait until `curl http://127.0.0.1:8787/v1/system/status`
-reports `browser.mode=managed` and `browser.state=running`. Then tell the owner to sign in manually:
+For a new interactive installation, ChatBridge offers to open the managed Chrome
+profile for manual sign-in when ready. If the offer was skipped, first wait until
+`curl http://127.0.0.1:8787/v1/system/status` reports `browser.mode=managed` and
+`browser.state=running`. Then tell the owner to sign in manually:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
 ```
 
 This command is for the default profile only; custom paths require ChatBridge's
-own instructions. Do not claim installation left a login window open or verified
-real ChatGPT login. ChatBridge survives a later Mac Control failure; retry reuses
+own instructions. Do not claim that opening a window verified real ChatGPT login.
+ChatBridge survives a later Mac Control failure; retry reuses
 its working compatible API. After the 30-minute setup timeout inspect its status
 before retrying.
 

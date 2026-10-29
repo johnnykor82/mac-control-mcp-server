@@ -24,7 +24,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 **ChatBridge is a separate application and repository.** It exposes an authorized ChatGPT web session and browser automation through HTTP. It works without Mac Control.
 
 The standard Mac Control installer reuses a compatible ChatBridge service or
-installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.8` release.
+installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.9` release.
 ChatBridge owns its Chrome profile, LaunchAgent and data; uninstalling Mac Control
 preserves ChatBridge. Use `--without-chatbridge` for standalone filesystem,
 terminal, Git and GUI use; on update this skips setup and preserves existing
@@ -65,16 +65,17 @@ No API key is required by default. If ChatBridge has `CHATBRIDGE_API_KEY`, set a
 matching `MACCONTROL_CHATBRIDGE_API_KEY` in installer and MCP client environments.
 Never paste keys into chat or command arguments.
 
-After a new installation, wait until `curl http://127.0.0.1:8787/v1/system/status`
-reports `browser.mode=managed` and `browser.state=running`. Then manually sign in
-using the **default profile only**:
+After a new interactive installation, ChatBridge offers to open its managed
+Chrome profile for manual ChatGPT login once the browser is ready. If you skip
+the offer, first wait until `curl http://127.0.0.1:8787/v1/system/status` reports
+`browser.mode=managed` and `browser.state=running`, then open the **default profile only**:
 
 ```sh
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
 ```
 
-For custom profile locations follow ChatBridge's instructions. Installation does
-not leave a login window open or verify a real ChatGPT login. If Mac Control
+For custom profile locations follow ChatBridge's instructions. Opening a login
+window does not verify a real ChatGPT login. If Mac Control
 fails later, ChatBridge remains installed independently; rerunning reuses its
 working compatible API. The dependency setup timeout is 30 minutes; after timeout
 inspect ChatBridge status before retrying.
