@@ -24,7 +24,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 **ChatBridge is a separate application and repository.** It exposes an authorized ChatGPT web session and browser automation through HTTP. It works without Mac Control.
 
 The standard Mac Control installer reuses a compatible ChatBridge service or
-installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.6` release.
+installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.8` release.
 ChatBridge owns its Chrome profile, LaunchAgent and data; uninstalling Mac Control
 preserves ChatBridge. Use `--without-chatbridge` for standalone filesystem,
 terminal, Git and GUI use; on update this skips setup and preserves existing
@@ -52,7 +52,7 @@ it downloads the pinned release, checks SHA256 before extracting or executing,
 and runs ChatBridge's own installer. Existing state, LaunchAgent, occupied port,
 HTTP 401 or incompatible API stop setup for independent recovery; nothing is
 silently overwritten. ChatBridge requires Google Chrome. If `uv` is absent, its
-installer offers the official standalone installation without Homebrew, with your consent; Python 3.9+ bootstraps the
+installer offers the official standalone installation without Homebrew, with your consent; if Astral is unavailable, it tries the official GitHub release. It selects uv for the Mac's architecture; Python 3.9+ bootstraps the
 isolated Python 3.13 runtime. For standalone mode or a reused service without uv,
 install [uv](https://docs.astral.sh/uv/getting-started/installation/) first.
 Preflight reports missing uv until it is installed; this does not prevent the
