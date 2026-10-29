@@ -1,0 +1,40 @@
+// DEV-only: capture exactly one independently identified window without changing focus.
+func captureOwnedWindow(_ req: [String:Any]) async throws -> [String:Any] {
+    guard CGPreflightScreenCaptureAccess() else {
+        throw AgentError.invalid("SCREEN_CAPTURE_DENIED: Dev GUI has no Screen Recording permission")
+    }
+    let targetPID = pid_t(number(req, "pid", -1))
+    guard targetPID > 0 else { throw AgentError.invalid("INVALID_PID") }
+    let title = argument(req, "title")
+    let x=number(req,"x"), y=number(req,"y")
+    let w=number(req,"width"), h=number(req,"height")
+    guard w>0 && h>0 && w<15000 && h<15000 else { throw AgentError.invalid("INVALID_WINDOW_GEOMETRY") }
+    let content=try await SCShareableContent.excludingDesktopWindows(false,onScreenWindowsOnly:false)
+    let matches=content.windows.filter { candidate in
+        guard candidate.owningApplication?.processID == targetPID,
+              candidate.title == title else { return false }
+        let bounds=candidate.frame
+        return abs(bounds.origin.x-x)<3 && abs(bounds.origin.y-y)<3 &&
+               abs(bounds.width-w)<4 && abs(bounds.height-h)<4
+    }
+    guard matches.count == 1,let selected=matches.first else {
+        throw AgentError.invalid("WINDOW_NOT_UNIQUE_OR_UNAVAILABLE")
+    }
+    let config=SCStreamConfiguration()
+    config.width=max(1,min(Int(selected.frame.width),1600))
+    config.height=max(1,min(Int(selected.frame.height),1000))
+    let filter=SCContentFilter(desktopIndependentWindow:selected)
+    let image=try await SCScreenshotManager.captureImage(contentFilter:filter,configuration:config)
+    let destination=argument(req,"destination")
+    let allowed="__MAC_CONTROL_CAPTURES__"
+    guard destination.hasPrefix(allowed),destination.hasSuffix(".jpg"),
+          !destination.contains("..") else { throw AgentError.invalid("INVALID_CAPTURE_PATH") }
+    let url=URL(fileURLWithPath:destination)
+    guard let writer=CGImageDestinationCreateWithURL(url as CFURL,"public.jpeg" as CFString,1,nil) else {
+        throw AgentError.invalid("IMAGE_ENCODER_FAILED")
+    }
+    CGImageDestinationAddImage(writer,image,[kCGImageDestinationLossyCompressionQuality:0.58] as CFDictionary)
+    guard CGImageDestinationFinalize(writer) else { throw AgentError.invalid("IMAGE_SAVE_FAILED") }
+    return ["file":destination,"pixel_width":image.width,"pixel_height":image.height,
+            "window_id":Int(selected.windowID),"pid":Int(targetPID),"capture_mode":"desktopIndependentWindow"]
+}

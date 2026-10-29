@@ -1,0 +1,42 @@
+name: macOS source validation
+
+on:
+  push:
+    branches: [main, "release/**", "feature/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  source-tests:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check installer bootstrap with Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Validate installer planning on Python 3.9
+        run: |
+          python scripts/install_mac_control.py --plan
+          python scripts/release_preflight.py --json
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements/dev-frozen.txt
+      - name: Audit current source tree
+        run: python scripts/release_audit.py --strict
+      - name: Audit committed Git history
+        run: python scripts/release_history_audit.py
+      - name: Validate Python sources
+        run: python -m compileall -q src scripts tests
+      - name: Install pinned dependencies
+        run: python -m pip install -r requirements/dev-frozen.txt
+      - name: Run source unit and integration tests
+        env:
+          PYTHONPATH: "src:."
+        run: python -P -B -m unittest discover -s tests -p 'test_*.py' -q

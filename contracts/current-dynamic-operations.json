@@ -1,0 +1,672 @@
+{
+  "schema": 1,
+  "kind": "static-ast-snapshot",
+  "operation_count": 95,
+  "operations": [
+    {
+      "name": "approved_commands",
+      "source": "workspace/system_ops.py",
+      "line": 39,
+      "read_only_hint": true,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "chrome_chat_adopt",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 154,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_archive",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 184,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_cleanup",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 193,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_new",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 149,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_read",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 173,
+      "read_only_hint": true,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_restore",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 202,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_save",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 178,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_send",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 164,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_switch",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 159,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_ui_status",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 144,
+      "read_only_hint": true,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_chat_wait",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 207,
+      "read_only_hint": true,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_orchestrator_launch",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 139,
+      "read_only_hint": false,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "chrome_orchestrator_status",
+      "source": "workspace/chrome_orchestrator_ops.py",
+      "line": 127,
+      "read_only_hint": true,
+      "source_sha256": "c87dfe792bdc56c32c402381db8fd4783b7a4d6e1d7af7f05bc8ef62f12f3f5a"
+    },
+    {
+      "name": "execute_approved",
+      "source": "workspace/system_ops.py",
+      "line": 48,
+      "read_only_hint": false,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "fs_list",
+      "source": "workspace/fs_ops.py",
+      "line": 103,
+      "read_only_hint": true,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_mkdir",
+      "source": "workspace/fs_ops.py",
+      "line": 206,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_move",
+      "source": "workspace/fs_ops.py",
+      "line": 215,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_read",
+      "source": "workspace/fs_ops.py",
+      "line": 135,
+      "read_only_hint": true,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_replace",
+      "source": "workspace/fs_ops.py",
+      "line": 170,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_restore",
+      "source": "workspace/fs_ops.py",
+      "line": 273,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_search",
+      "source": "workspace/fs_ops.py",
+      "line": 237,
+      "read_only_hint": true,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_stat",
+      "source": "workspace/fs_ops.py",
+      "line": 124,
+      "read_only_hint": true,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_trash",
+      "source": "workspace/fs_ops.py",
+      "line": 226,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "fs_write",
+      "source": "workspace/fs_ops.py",
+      "line": 149,
+      "read_only_hint": false,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "git_branches",
+      "source": "workspace/git_ops.py",
+      "line": 72,
+      "read_only_hint": true,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_commit",
+      "source": "workspace/git_ops.py",
+      "line": 85,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_create_branch",
+      "source": "workspace/git_ops.py",
+      "line": 93,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_diff",
+      "source": "workspace/git_ops.py",
+      "line": 54,
+      "read_only_hint": true,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_fetch",
+      "source": "workspace/git_ops.py",
+      "line": 100,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_history",
+      "source": "workspace/git_ops.py",
+      "line": 65,
+      "read_only_hint": true,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_pull_ff",
+      "source": "workspace/git_ops.py",
+      "line": 105,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_push",
+      "source": "workspace/git_ops.py",
+      "line": 114,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_stage",
+      "source": "workspace/git_ops.py",
+      "line": 77,
+      "read_only_hint": false,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "git_status",
+      "source": "workspace/git_ops.py",
+      "line": 47,
+      "read_only_hint": true,
+      "source_sha256": "d64837818bfc84585997dd66ea1b44a003cfe96593b98dc4cf6871cee2c50549"
+    },
+    {
+      "name": "gui_displays",
+      "source": "workspace/gui_ops.py",
+      "line": 75,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_focus",
+      "source": "workspace/gui_ops.py",
+      "line": 173,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_mouse",
+      "source": "workspace/gui_ops.py",
+      "line": 147,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_open_app",
+      "source": "workspace/gui_ops.py",
+      "line": 180,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_press",
+      "source": "workspace/gui_ops.py",
+      "line": 161,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_request_permissions",
+      "source": "workspace/gui_ops.py",
+      "line": 138,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_screenshot",
+      "source": "workspace/gui_ops.py",
+      "line": 108,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_scroll",
+      "source": "workspace/gui_ops.py",
+      "line": 156,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_status",
+      "source": "workspace/gui_ops.py",
+      "line": 70,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_tree",
+      "source": "workspace/gui_ops.py",
+      "line": 85,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_type",
+      "source": "workspace/gui_ops.py",
+      "line": 166,
+      "read_only_hint": false,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_wait_title",
+      "source": "workspace/gui_ops.py",
+      "line": 193,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "gui_windows",
+      "source": "workspace/gui_ops.py",
+      "line": 80,
+      "read_only_hint": true,
+      "source_sha256": "469016aaed934d20cd5f69d27c0054c975ba1069ec5e8a989f8a6fc99be468c7"
+    },
+    {
+      "name": "launchd_restart",
+      "source": "workspace/system_ops.py",
+      "line": 149,
+      "read_only_hint": false,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "launchd_status",
+      "source": "workspace/system_ops.py",
+      "line": 124,
+      "read_only_hint": true,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "local_http_probe",
+      "source": "workspace/system_ops.py",
+      "line": 98,
+      "read_only_hint": true,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "machine_health",
+      "source": "workspace/system_ops.py",
+      "line": 72,
+      "read_only_hint": true,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "mcp_bridge_call",
+      "source": "workspace/mcp_bridge_ops.py",
+      "line": 131,
+      "read_only_hint": false,
+      "source_sha256": "2965761215efc25362030f081c20897cbc9781e2a3bcf8bbeb03a6e7e4c39c48"
+    },
+    {
+      "name": "mcp_bridge_list",
+      "source": "workspace/mcp_bridge_ops.py",
+      "line": 121,
+      "read_only_hint": true,
+      "source_sha256": "2965761215efc25362030f081c20897cbc9781e2a3bcf8bbeb03a6e7e4c39c48"
+    },
+    {
+      "name": "mcp_bridge_read",
+      "source": "workspace/mcp_bridge_ops.py",
+      "line": 126,
+      "read_only_hint": true,
+      "source_sha256": "2965761215efc25362030f081c20897cbc9781e2a3bcf8bbeb03a6e7e4c39c48"
+    },
+    {
+      "name": "mcp_targets",
+      "source": "workspace/mcp_bridge_ops.py",
+      "line": 113,
+      "read_only_hint": true,
+      "source_sha256": "2965761215efc25362030f081c20897cbc9781e2a3bcf8bbeb03a6e7e4c39c48"
+    },
+    {
+      "name": "network_listeners",
+      "source": "workspace/system_ops.py",
+      "line": 88,
+      "read_only_hint": true,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "package_capabilities",
+      "source": "workspace/package_ops.py",
+      "line": 108,
+      "read_only_hint": true,
+      "source_sha256": "77791ade2c9b7704ac2b0980ddf04ca6d60c88446d1d87fbb1eed78c6a312f04"
+    },
+    {
+      "name": "package_install",
+      "source": "workspace/package_ops.py",
+      "line": 132,
+      "read_only_hint": false,
+      "source_sha256": "77791ade2c9b7704ac2b0980ddf04ca6d60c88446d1d87fbb1eed78c6a312f04"
+    },
+    {
+      "name": "package_installed",
+      "source": "workspace/package_ops.py",
+      "line": 120,
+      "read_only_hint": true,
+      "source_sha256": "77791ade2c9b7704ac2b0980ddf04ca6d60c88446d1d87fbb1eed78c6a312f04"
+    },
+    {
+      "name": "package_job_status",
+      "source": "workspace/package_ops.py",
+      "line": 168,
+      "read_only_hint": true,
+      "source_sha256": "77791ade2c9b7704ac2b0980ddf04ca6d60c88446d1d87fbb1eed78c6a312f04"
+    },
+    {
+      "name": "project_roots",
+      "source": "workspace/fs_ops.py",
+      "line": 97,
+      "read_only_hint": true,
+      "source_sha256": "2d98450b2516092bb9273fa9465559c792edf0f7ce9fbd10347b006ee790258a"
+    },
+    {
+      "name": "project_task",
+      "source": "workspace/system_ops.py",
+      "line": 167,
+      "read_only_hint": false,
+      "source_sha256": "5fb07b31196fdcfa40ba70203e4b2b4db858ce2304429b38a80fb70b1d816c23"
+    },
+    {
+      "name": "ssh_auth_diagnostics",
+      "source": "workspace/ssh_auth_diag.py",
+      "line": 8,
+      "read_only_hint": true,
+      "source_sha256": "2bf9bb430a187138e1f5515e845f3594501b528e03c14cf9f00e83dc8d7cc83b"
+    },
+    {
+      "name": "ssh_diagnostic",
+      "source": "workspace/ssh_bridge_ops.py",
+      "line": 128,
+      "read_only_hint": true,
+      "source_sha256": "6f0ca50888211990b7a34d559f41d9944c7f8fc91e8b42bfec7f4bc6d10db98b"
+    },
+    {
+      "name": "ssh_exec",
+      "source": "workspace/ssh_manage_ops.py",
+      "line": 155,
+      "read_only_hint": false,
+      "source_sha256": "fad126952804fae49e5941f2b6a89132b32bb78779014d00a85c7ee230c9e1fe"
+    },
+    {
+      "name": "ssh_identity_inspect",
+      "source": "workspace/ssh_auth_diag.py",
+      "line": 43,
+      "read_only_hint": true,
+      "source_sha256": "2bf9bb430a187138e1f5515e845f3594501b528e03c14cf9f00e83dc8d7cc83b"
+    },
+    {
+      "name": "ssh_open",
+      "source": "workspace/ssh_bridge_ops.py",
+      "line": 85,
+      "read_only_hint": false,
+      "source_sha256": "6f0ca50888211990b7a34d559f41d9944c7f8fc91e8b42bfec7f4bc6d10db98b"
+    },
+    {
+      "name": "ssh_profile_approve_alias",
+      "source": "workspace/ssh_manage_ops.py",
+      "line": 120,
+      "read_only_hint": false,
+      "source_sha256": "fad126952804fae49e5941f2b6a89132b32bb78779014d00a85c7ee230c9e1fe"
+    },
+    {
+      "name": "ssh_profile_inventory",
+      "source": "workspace/ssh_manage_ops.py",
+      "line": 111,
+      "read_only_hint": true,
+      "source_sha256": "fad126952804fae49e5941f2b6a89132b32bb78779014d00a85c7ee230c9e1fe"
+    },
+    {
+      "name": "ssh_profile_register",
+      "source": "workspace/ssh_manage_ops.py",
+      "line": 132,
+      "read_only_hint": false,
+      "source_sha256": "fad126952804fae49e5941f2b6a89132b32bb78779014d00a85c7ee230c9e1fe"
+    },
+    {
+      "name": "ssh_pty_open",
+      "source": "workspace/ssh_manage_ops.py",
+      "line": 183,
+      "read_only_hint": false,
+      "source_sha256": "fad126952804fae49e5941f2b6a89132b32bb78779014d00a85c7ee230c9e1fe"
+    },
+    {
+      "name": "ssh_targets",
+      "source": "workspace/ssh_bridge_ops.py",
+      "line": 72,
+      "read_only_hint": true,
+      "source_sha256": "6f0ca50888211990b7a34d559f41d9944c7f8fc91e8b42bfec7f4bc6d10db98b"
+    },
+    {
+      "name": "terminal_access_configure",
+      "source": "workspace/package_ops.py",
+      "line": 173,
+      "read_only_hint": false,
+      "source_sha256": "77791ade2c9b7704ac2b0980ddf04ca6d60c88446d1d87fbb1eed78c6a312f04"
+    },
+    {
+      "name": "terminal_capabilities",
+      "source": "workspace/command_plugins.py",
+      "line": 107,
+      "read_only_hint": true,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_close",
+      "source": "workspace/command_plugins.py",
+      "line": 239,
+      "read_only_hint": false,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_exec",
+      "source": "workspace/command_plugins.py",
+      "line": 125,
+      "read_only_hint": false,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_list",
+      "source": "workspace/command_plugins.py",
+      "line": 221,
+      "read_only_hint": true,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_open",
+      "source": "workspace/command_plugins.py",
+      "line": 163,
+      "read_only_hint": false,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_read",
+      "source": "workspace/command_plugins.py",
+      "line": 181,
+      "read_only_hint": true,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_resize",
+      "source": "workspace/command_plugins.py",
+      "line": 209,
+      "read_only_hint": false,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "terminal_send",
+      "source": "workspace/command_plugins.py",
+      "line": 187,
+      "read_only_hint": false,
+      "source_sha256": "46ec00045caca3b2ddbeac09e2c705465075f85445caf792b49760c106a32753"
+    },
+    {
+      "name": "watcher_ack_delivery",
+      "source": "workspace/watcher_ops.py",
+      "line": 166,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_error_status",
+      "source": "workspace/watcher_ops.py",
+      "line": 179,
+      "read_only_hint": true,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_guide",
+      "source": "workspace/watcher_ops.py",
+      "line": 58,
+      "read_only_hint": true,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_pause_project",
+      "source": "workspace/watcher_ops.py",
+      "line": 156,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_read_report",
+      "source": "workspace/watcher_ops.py",
+      "line": 138,
+      "read_only_hint": true,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_read_result",
+      "source": "workspace/watcher_ops.py",
+      "line": 209,
+      "read_only_hint": true,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_register_file_task",
+      "source": "workspace/watcher_ops.py",
+      "line": 116,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_register_project",
+      "source": "workspace/watcher_ops.py",
+      "line": 97,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_register_task",
+      "source": "workspace/watcher_ops.py",
+      "line": 106,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_resume_project",
+      "source": "workspace/watcher_ops.py",
+      "line": 161,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_resume_task",
+      "source": "workspace/watcher_ops.py",
+      "line": 144,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_status",
+      "source": "workspace/watcher_ops.py",
+      "line": 111,
+      "read_only_hint": true,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    },
+    {
+      "name": "watcher_submit_report",
+      "source": "workspace/watcher_ops.py",
+      "line": 125,
+      "read_only_hint": false,
+      "source_sha256": "5cc6b45c423c13101ebe4a9b0bc0ea35d9d99e817171c6bb167db73ec3a7219c"
+    }
+  ]
+}

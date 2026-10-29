@@ -1,0 +1,8 @@
+#!/bin/sh
+# Live read-only Mac Control MCP Server audit viewer, bundled with this release.
+set -eu
+BIN=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+ROOT=$(CDPATH= cd -- "$BIN/.." && pwd -P)
+DATA=$(CDPATH= cd -- "$ROOT/../../data" && pwd -P)
+export MAC_CONTROL_DATA_ROOT="$DATA"
+exec "$ROOT/.venv/bin/python" -P -B "$ROOT/scripts/mclog.py" "$@"
