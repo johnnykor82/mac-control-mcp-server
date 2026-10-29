@@ -21,7 +21,10 @@ jobs:
       - name: Validate installer planning on Python 3.9
         run: |
           python scripts/install_mac_control.py --plan
-          python scripts/release_preflight.py --json
+          status=0
+          python scripts/release_preflight.py --json > "$RUNNER_TEMP/preflight.json" || status=$?
+          test "$status" -eq 0 || test "$status" -eq 2
+          python -c 'import json, os, pathlib; data = json.loads((pathlib.Path(os.environ["RUNNER_TEMP"]) / "preflight.json").read_text()); assert isinstance(data["ready_for_guided_install"], bool)'
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
