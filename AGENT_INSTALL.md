@@ -120,7 +120,7 @@ the device already publishes other services.
 ### Step 4 — Install Mac Control and connect standalone ChatBridge
 
 Use the standard `--install` path in Terminal. It reuses compatible ChatBridge or
-downloads `v0.2.0-beta.9`, verifies the pinned SHA256, safely extracts it and runs
+downloads `v0.2.0-beta.10`, verifies the pinned SHA256, safely extracts it and runs
 ChatBridge's own installer. Google Chrome is required; missing uv may be installed
 by ChatBridge only with its normal interactive owner consent. Bootstrap supports
 Python 3.9+; the MCP runtime remains isolated Python 3.13.
@@ -135,7 +135,8 @@ existing browser configuration on update. No key is needed by default; when used
 Never print or request credentials in chat.
 
 For a new interactive installation, ChatBridge offers to open the managed Chrome
-profile for manual sign-in when ready. If the offer was skipped, first wait until
+profile for manual sign-in when ready. If the offer was skipped, first run
+`curl -fsS -X POST http://127.0.0.1:8787/v1/browser/wake`, then wait until
 `curl http://127.0.0.1:8787/v1/system/status` reports `browser.mode=managed` and
 `browser.state=running`. Then tell the owner to sign in manually:
 

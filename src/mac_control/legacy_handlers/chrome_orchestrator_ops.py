@@ -26,7 +26,7 @@ VALID_TASK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 VALID_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,180}$")
 
 
-def _api(method: str, path: str, data: dict | None = None) -> dict:
+def _api(method: str, path: str, data: dict | None = None, *, timeout: float = 22) -> dict:
     if not path.startswith("/") or path.startswith("//") or ".." in path:
         raise ValueError("Invalid ChatBridge endpoint")
     headers = {"Accept": "application/json"}
@@ -39,7 +39,7 @@ def _api(method: str, path: str, data: dict | None = None) -> dict:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(GATEWAY + path, data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=22) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             value = json.load(response)
         if not isinstance(value, dict):
             raise RuntimeError("Unexpected ChatBridge response")
@@ -161,9 +161,11 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
     def chrome_orchestrator_launch() -> dict:
-        """Compatibility check only. ChatBridge LaunchAgent alone manages Chrome."""
+        """Check or wake Chrome through its owning ChatBridge gateway."""
         status = _api("GET", "/v1/system/status")
         browser = status.get("browser", {})
+        if browser.get("state") == "idle":
+            browser = _api("POST", "/v1/browser/wake", timeout=60).get("browser", {})
         d = {"running": browser.get("state") == "running", "browser": browser,
              "transport": "ChatBridge HTTP"}
         if not d["running"]:

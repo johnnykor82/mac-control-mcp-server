@@ -24,7 +24,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 **ChatBridge is a separate application and repository.** It exposes an authorized ChatGPT web session and browser automation through HTTP. It works without Mac Control.
 
 The standard Mac Control installer reuses a compatible ChatBridge service or
-installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.9` release.
+installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.10` release.
 ChatBridge owns its Chrome profile, LaunchAgent and data; uninstalling Mac Control
 preserves ChatBridge. Use `--without-chatbridge` for standalone filesystem,
 terminal, Git and GUI use; on update this skips setup and preserves existing
@@ -67,7 +67,8 @@ Never paste keys into chat or command arguments.
 
 After a new interactive installation, ChatBridge offers to open its managed
 Chrome profile for manual ChatGPT login once the browser is ready. If you skip
-the offer, first wait until `curl http://127.0.0.1:8787/v1/system/status` reports
+the offer, first run `curl -fsS -X POST http://127.0.0.1:8787/v1/browser/wake`,
+then wait until `curl http://127.0.0.1:8787/v1/system/status` reports
 `browser.mode=managed` and `browser.state=running`, then open the **default profile only**:
 
 ```sh
@@ -79,6 +80,12 @@ window does not verify a real ChatGPT login. If Mac Control
 fails later, ChatBridge remains installed independently; rerunning reuses its
 working compatible API. The dependency setup timeout is 30 minutes; after timeout
 inspect ChatBridge status before retrying.
+
+After five minutes without browser operations, ChatBridge stops its own Chrome;
+the next browser operation starts it again. Profile data is preserved.
+During idle, `/ready` returns HTTP 503 with `reason=browser_idle` without waking
+Chrome. If API authentication is enabled, use an authenticated client for wake
+and status checks.
 
 Optional native GUI:
 
