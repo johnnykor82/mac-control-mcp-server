@@ -280,5 +280,5 @@ See [mclog](MCLOG.md), [security](../SECURITY.md), and [installation contents](I
 The installer supports plan/install/setup/update/status/rollback/uninstall.
 Versioned releases and `current`/`previous` pointers support rollback; user data is
 preserved. Updates reuse a verified GUI helper by default to preserve its TCC
-identity. ChatBridge remains independently installed. The software is experimental;
+identity. ChatBridge is automatically installed under ~/MacControlMCP/deps/ when missing; full removal also uninstalls this owned dependency. The software is experimental;
 check actual results, account access, and permissions before depending on a workflow.

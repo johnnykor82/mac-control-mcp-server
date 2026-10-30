@@ -88,11 +88,15 @@ Mac и имеет собственные разрешения macOS. Эти ко
 
 **ChatBridge имеет самостоятельную установку и репозиторий.** Он предоставляет HTTP-доступ к авторизованной браузерной сессии ChatGPT и фоновую автоматизацию браузера. Для его работы Mac Control не нужен.
 
-Стандартный установщик Mac Control переиспользует совместимый ChatBridge или
-устанавливает отдельный релиз `v0.2.0-beta.11` с закреплённой SHA256.
-Профиль Chrome, LaunchAgent и данные принадлежат ChatBridge; удаление Mac Control
-его сохраняет. Для работы без браузера используйте `--without-chatbridge`;
-при обновлении этот флаг пропускает настройку и сохраняет прежнюю конфигурацию.
+Стандартный установщик Mac Control **автоматически устанавливает ChatBridge**
+из проверенного SHA256-релиза `v0.2.0-beta.11`, если зависимость отсутствует.
+Исходники установщика, приложение, база и профиль Chrome помещаются в
+`~/MacControlMCP/deps/`. Уже запущенный ChatBridge переиспользуется, **только
+если он установлен в эту папку**; другая установка требует отдельного удаления.
+ChatBridge остаётся самостоятельным сервисом со своим LaunchAgent и HTTP API.
+Обычное удаление Mac Control сохраняет его, а `uninstall --all` штатно
+останавливает и удаляет также управляемую зависимость.
+Для работы без браузера используйте `--without-chatbridge`.
 
 **Исходники ChatBridge:** [johnnykor82/chatbridge](https://github.com/johnnykor82/chatbridge).
 Используйте проверенный опубликованный релиз ChatBridge.
@@ -122,7 +126,7 @@ python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --install
 Все собственные файлы Mac Control находятся в **`~/MacControlMCP`**:
 `source/` (исходники первичной установки), `releases/` (версии Python),
 `current`, `previous`, `apps/` (GUI), `data/` (настройки, рабочие файлы,
-журналы и резервные копии) и `bin/maccontrol`.
+журналы и резервные копии), `deps/` (ChatBridge и его данные) и `bin/maccontrol`.
 
 Команды работают **из любой папки** и больше не требуют `git pull`:
 при обновлении выбирается последний опубликованный beta-релиз GitHub, скачиваются
@@ -140,8 +144,11 @@ python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --install
 Пользовательский Mac Control целиком удаляется через `uninstall --all`, включая
 исходники `source`, GUI и рабочие данные. Установщик также останавливает и
 удаляет зарегистрированные им службы Mac Control из `~/Library/LaunchAgents`.
-**ChatBridge остаётся независимым**: его процесс, браузерный профиль, файлы и
-LaunchAgent не удаляются. Разрешения macOS управляются в «Системных настройках».
+`uninstall --all` удаляет также автоматически установленный ChatBridge:
+сначала останавливает его LaunchAgent и Chrome, затем удаляет браузерный профиль,
+базу данных и исходники из `deps/`. Обычное `uninstall` сохраняет данные и
+зависимость. **Tailscale не удаляется и не перенастраивается**. Разрешения macOS
+управляются в «Системных настройках».
 
 Старые установки по пути `~/Library/Application Support/MacControl/MCPServer`
 не переносятся автоматически: для новой структуры используйте чистую установку,
@@ -162,8 +169,10 @@ Python 3.13. При standalone-установке или переиспольз�
 Preflight возвращает код 2, если uv ещё отсутствует; команда выше допускает этот
 результат, чтобы интерактивный bootstrap ChatBridge мог предложить его установку.
 
-`--with-chatbridge` сохранён для совместимости; `--chatbridge-source PATH`
-позволяет использовать отдельно проверенные исходники. После новой интерактивной
+`--with-chatbridge` сохранён для совместимости. Для явного
+`--chatbridge-source PATH` источник должен лежать внутри
+`~/MacControlMCP/deps/chatbridge-source`. Отдельно устанавливать ChatBridge
+перед Mac Control **не нужно**. После новой интерактивной
 установки ChatBridge проверит сохранённую сессию ChatGPT, когда браузер будет
 готов. Если подтвердить её не удастся, он предложит открыть управляемый профиль
 для ручной проверки. Если вы пропустили предложение,
@@ -172,7 +181,7 @@ Preflight возвращает код 2, если uv ещё отсутствуе
 `browser.mode=managed` и `browser.state=running`, и откройте **только профиль по умолчанию**:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/MacControlMCP/deps/chatbridge-data/chrome-profile" --new-window https://chatgpt.com/
 ```
 
 Для другого расположения профиля следуйте инструкциям ChatBridge. Открытие окна

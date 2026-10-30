@@ -7,6 +7,8 @@ import hashlib
 import gzip
 import json
 import os
+import plistlib
+import shutil
 from pathlib import Path, PurePosixPath
 import socket
 import subprocess
@@ -57,18 +59,49 @@ def verify(url: str = DEFAULT_URL) -> dict:
             "mac_control_browser_provider": "chatbridge", "versioned_api": "v1"}
 
 
-def install(source: Path, *, url: str = DEFAULT_URL) -> dict:
+def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
+    root = install_root.expanduser().resolve()
+    return (root / "deps/chatbridge-source", root / "deps/chatbridge",
+            root / "deps/chatbridge-data")
+
+
+def verify_managed_install(install_root: Path) -> None:
+    """An available external ChatBridge cannot silently break consolidation."""
+    _, prefix, state = managed_paths(install_root)
+    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    if not plist.is_file() or plist.is_symlink():
+        raise RuntimeError("ChatBridge endpoint is running without a managed LaunchAgent; stop it before installing Mac Control")
+    try:
+        with plist.open("rb") as stream:
+            data = plistlib.load(stream)
+        workdir = Path(data["WorkingDirectory"]).resolve()
+        variables = data["EnvironmentVariables"]
+        database = Path(variables["CHATBRIDGE_DB"]).resolve()
+    except (OSError, KeyError, ValueError, TypeError):
+        raise RuntimeError("Cannot verify existing ChatBridge installation ownership") from None
+    if (data.get("Label") != "net.chatbridge.gateway"
+            or data.get("ChatBridgeInstaller") != "1"
+            or workdir.parent != prefix / "releases"
+            or database != state / "state.db"):
+        raise RuntimeError("ChatBridge is installed outside ~/MacControlMCP; remove or migrate it first")
+
+
+def install(source: Path, *, url: str = DEFAULT_URL,
+            install_root: Path | None = None) -> dict:
     """Owner-selected source checkout, not an implicit download or private API."""
     parsed = local_origin(url)
     source = source.expanduser().resolve()
+    if install_root is not None:
+        managed_source, _, _ = managed_paths(install_root)
+        if source != managed_source:
+            raise RuntimeError("For a consolidated installation, --chatbridge-source must be under ~/MacControlMCP/deps/chatbridge-source")
     for name in ("install.sh", "LICENSE", "pyproject.toml", "scripts/installer.py"):
         if not (source / name).is_file():
             raise RuntimeError("Not an independently installable ChatBridge source: " + name)
     manifest = (source / "pyproject.toml").read_text()
     if 'name = "chatbridge-gateway"' not in manifest:
         raise RuntimeError("Source is not the expected ChatBridge distribution")
-    # Explicit setup runs ChatBridge's own installer; its source remains
-    # independent and its own app/state/LaunchAgent are not managed by Mac Control.
+    # Let ChatBridge own its application and state lifecycle inside Mac Control's deps.
     assert_installable(url)
     environment = dict(os.environ)
     client_key = environment.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
@@ -77,10 +110,15 @@ def install(source: Path, *, url: str = DEFAULT_URL) -> dict:
         raise RuntimeError("Set matching MACCONTROL_CHATBRIDGE_API_KEY and CHATBRIDGE_API_KEY before setup")
     if client_key:
         environment["CHATBRIDGE_API_KEY"] = client_key
+    extra = []
+    if install_root is not None:
+        _, prefix, state = managed_paths(install_root)
+        extra = ["--prefix", str(prefix), "--state-dir", str(state)]
     try:
         # Preserve terminal input/output: ChatBridge owns interactive uv consent/login guidance.
         proc = subprocess.run([sys.executable, str(source / "scripts/installer.py"),
-                               "install", "--host", "127.0.0.1", "--port", str(parsed.port or 80)],
+                               "install", "--host", "127.0.0.1", "--port", str(parsed.port or 80),
+                               *extra],
                               cwd=source, check=False, timeout=1800, env=environment)
     except subprocess.TimeoutExpired:
         raise RuntimeError("ChatBridge setup timed out; inspect ChatBridge status before retrying") from None
@@ -88,7 +126,10 @@ def install(source: Path, *, url: str = DEFAULT_URL) -> dict:
         raise RuntimeError("ChatBridge setup failed; see its terminal diagnostics; no automatic overwrite attempted")
     print("Follow ChatBridge's printed guidance to open its managed profile and sign in.")
     print("Complete login manually; no real ChatGPT login has been verified by this installer.")
-    return verify(url)
+    result = verify(url)
+    if install_root is not None:
+        verify_managed_install(install_root)
+    return result
 
 
 def assert_installable(url: str) -> None:
@@ -161,7 +202,7 @@ def extract_release(archive: Path, destination: Path) -> Path:
     return destination / RELEASE_DIRECTORY
 
 
-def install_pinned(url: str = DEFAULT_URL) -> dict:
+def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
     assert_installable(url)
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
         root = Path(temporary)
@@ -190,13 +231,34 @@ def install_pinned(url: str = DEFAULT_URL) -> dict:
             source = extract_release(archive, root / "source")
         except (tarfile.TarError, OSError, EOFError):
             raise RuntimeError("Invalid ChatBridge release archive; installer was not executed") from None
-        return install(source, url=url)
+        if install_root is not None:
+            permanent, _, _ = managed_paths(install_root)
+            if permanent.is_symlink():
+                raise RuntimeError("Unsafe ChatBridge source directory")
+            if permanent.exists():
+                # A second install never overwrites an unreviewed source checkout.
+                if not (permanent / "scripts/installer.py").is_file():
+                    raise RuntimeError("Unexpected managed ChatBridge source directory")
+            else:
+                permanent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                staging = permanent.with_name(".chatbridge-source-pending-" + os.urandom(6).hex())
+                try:
+                    shutil.copytree(source, staging, symlinks=False)
+                    staging.rename(permanent)
+                finally:
+                    if staging.exists():
+                        shutil.rmtree(staging)
+            source = permanent
+        return install(source, url=url, install_root=install_root)
 
 
-def ensure(url: str = DEFAULT_URL, source: Path | None = None) -> dict:
+def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Path | None = None) -> dict:
     """Reuse a compatible endpoint; only a refused connection permits fresh setup."""
     try:
-        return verify(url)
+        result = verify(url)
+        if install_root is not None:
+            verify_managed_install(install_root)
+        return result
     except urllib.error.HTTPError as error:
         if error.code == 401:
             raise RuntimeError("ChatBridge requires a matching MACCONTROL_CHATBRIDGE_API_KEY; existing service preserved") from None
@@ -207,7 +269,12 @@ def ensure(url: str = DEFAULT_URL, source: Path | None = None) -> dict:
     except (TimeoutError, ValueError):
         raise RuntimeError("ChatBridge probe timed out or returned invalid data; existing service preserved") from None
     assert_installable(url)
-    return install(source, url=url) if source is not None else install_pinned(url)
+    if install_root is not None and source is None:
+        existing, _, _ = managed_paths(install_root)
+        if existing.is_dir() and (existing / "scripts/installer.py").is_file():
+            return install(existing, url=url, install_root=install_root)
+    return (install(source, url=url, install_root=install_root) if source is not None
+            else install_pinned(url, install_root=install_root))
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

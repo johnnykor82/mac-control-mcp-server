@@ -39,7 +39,7 @@ class BootstrapTests(unittest.TestCase):
              patch.object(dependency, "assert_installable"), \
              patch.object(dependency, "install_pinned", return_value={}) as install:
             dependency.ensure("http://127.0.0.1:9999")
-        install.assert_called_once_with("http://127.0.0.1:9999")
+        install.assert_called_once_with("http://127.0.0.1:9999", install_root=None)
         for error in (TimeoutError(), urllib.error.URLError(socket.timeout()),
                       urllib.error.HTTPError(dependency.DEFAULT_URL, 401, "Unauthorized", {}, None),
                       RuntimeError("incompatible API"), ValueError("invalid JSON")):

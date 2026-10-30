@@ -52,3 +52,10 @@ Mac Control MCP Server предоставляет авторизованному
 - New `~/MacControlMCP/bin/maccontrol` CLI updates from the latest complete published GitHub beta, verifies SHA256SUMS, and supports status, rollback and uninstall from any directory.
 - `uninstall --all` performs confirmed complete deletion of Mac Control-owned files and services, preserving the independent ChatBridge installation.
 - Legacy roots are deliberately not migrated automatically. A clean reinstall is supported after uninstalling the old instance.
+
+## v0.1.0-beta.19 — automatically managed ChatBridge dependency
+
+- Fresh Mac Control installation detects ChatBridge and, if absent, downloads the SHA256-pinned release and installs its service, Chrome profile, SQLite and retained installer source under `~/MacControlMCP/deps/`.
+- Existing ChatBridge services outside this root are rejected to avoid silently breaking the consolidated deployment.
+- Confirmed `maccontrol uninstall --all` invokes the owned ChatBridge uninstaller and stops its LaunchAgent before deleting the Mac Control tree. Tailscale is not changed.
+- The system LaunchAgent registration and any global tools, including `uv`, remain managed separately by macOS/tool installers.

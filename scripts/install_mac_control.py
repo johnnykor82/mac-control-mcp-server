@@ -439,7 +439,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             from scripts.setup_chatbridge_dependency import ensure
         except ModuleNotFoundError:
             from setup_chatbridge_dependency import ensure
-        ensure(provider_url, chatbridge_source)
+        ensure(provider_url, chatbridge_source, install_root=root)
     elif chatbridge_source is not None or chatbridge_url is not None:
         raise RuntimeError("ChatBridge options cannot be used with --without-chatbridge")
     uv = find_uv()
@@ -573,6 +573,33 @@ def _install_manager_launcher(root: Path) -> None:
         pending.unlink(missing_ok=True)
 
 
+
+def _remove_managed_chatbridge(root: Path) -> bool:
+    """Stop and uninstall only the ChatBridge dependency owned under root."""
+    try:
+        from scripts import setup_chatbridge_dependency as cb
+    except ModuleNotFoundError:
+        import setup_chatbridge_dependency as cb
+    source, prefix, state = cb.managed_paths(root)
+    # A separate ChatBridge on the host is not owned by this installation.
+    if not any(path.exists() or path.is_symlink() for path in (source, prefix, state)):
+        return False
+    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    if not plist.exists() and not plist.is_symlink():
+        return False
+    cb.verify_managed_install(root)
+    script = source / "scripts/installer.py"
+    if script.is_symlink() or not script.is_file():
+        raise RuntimeError("Managed ChatBridge installer is missing; refusing to orphan the service")
+    completed = subprocess.run(
+        [sys.executable, str(script), "uninstall", "--prefix", str(prefix),
+         "--state-dir", str(state), "--remove-app", "--purge-data", "--yes"],
+        cwd=source, check=False, timeout=180, capture_output=True, text=True)
+    if completed.returncode:
+        raise RuntimeError("Managed ChatBridge could not be uninstalled; its service was preserved or needs inspection")
+    return True
+
+
 def purge(root: Path) -> dict:
     """Delete a fully owned default installation only, after stopping owned services."""
     root = root.expanduser().absolute()
@@ -582,10 +609,19 @@ def purge(root: Path) -> dict:
     if not marker.is_file() or marker.is_symlink():
         raise RuntimeError("Refusing to purge a directory without installer ownership")
     with _lifecycle_lock(root) as locked_root:
+        # The public-route guard must pass before uninstalling either service.
+        try:
+            from scripts.setup_network import assert_public_route_safe_for_uninstall
+        except ModuleNotFoundError:
+            from setup_network import assert_public_route_safe_for_uninstall
+        assert_public_route_safe_for_uninstall(locked_root,
+            known_remote_service=_remote_plist_exists())
+        dependency_removed = _remove_managed_chatbridge(locked_root)
         result = _uninstall_locked(locked_root)
         shutil.rmtree(locked_root)
     return {"status": "purged", "root": str(root),
-            "owned_services_removed": True, "chatbridge_preserved": True,
+            "owned_services_removed": True,
+            "managed_chatbridge_removed": dependency_removed,
             "releases_removed": result["removed_releases"]}
 
 

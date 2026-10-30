@@ -88,12 +88,14 @@ account authentication.
 
 **ChatBridge is a separate application and repository.** It exposes an authorized ChatGPT web session and browser automation through HTTP. It works without Mac Control.
 
-The standard Mac Control installer reuses a compatible ChatBridge service or
-installs ChatBridge's independent, checksum-pinned `v0.2.0-beta.11` release.
-ChatBridge owns its Chrome profile, LaunchAgent and data; uninstalling Mac Control
-preserves ChatBridge. Use `--without-chatbridge` for standalone filesystem,
-terminal, Git and GUI use; on update this skips setup and preserves existing
-browser configuration.
+The default Mac Control installer **automatically provisions ChatBridge** from its
+SHA256-pinned `v0.2.0-beta.11` release when absent, with independent application,
+Chrome profile, SQLite state and its installer source under `~/MacControlMCP/deps/`.
+An existing ChatBridge is reused **only when already installed within that root**.
+A foreign standalone installation must be removed or relocated before consolidation.
+ChatBridge retains its own HTTP API and LaunchAgent. Plain `uninstall` preserves
+the dependency; `uninstall --all` stops and removes the owned dependency as well.
+Use `--without-chatbridge` for Mac Control without browser features.
 
 **ChatBridge source:** [johnnykor82/chatbridge](https://github.com/johnnykor82/chatbridge).
 Use a reviewed published release of ChatBridge.
@@ -117,7 +119,7 @@ python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --install
 All Mac Control-owned files live in **`~/MacControlMCP`**: `source/` for the
 initial checkout, versioned `releases/`, `current`, `previous`, `apps/`
 for the native GUI, `data/` for workspace, configuration, logs and backups,
-and the `bin/maccontrol` launcher.
+`deps/` for managed ChatBridge, and the `bin/maccontrol` launcher.
 
 Run these commands from **any working directory**. Updating downloads the latest
 published GitHub beta with its SHA256SUMS, validates the archive, and activates
@@ -131,9 +133,10 @@ the new release. No source checkout or `git pull` is required for updates:
 "$HOME/MacControlMCP/bin/maccontrol" uninstall --all # erase all (type DELETE)
 ```
 
-Complete removal also stops and removes only Mac Control-owned LaunchAgents in
-`~/Library/LaunchAgents`. **ChatBridge remains independent**: its state, Chrome
-profile and LaunchAgent are not deleted. macOS privacy permissions remain under
+Complete removal stops and removes Mac Control's own LaunchAgents and its
+**managed ChatBridge dependency** (service, application, Chrome profile and data).
+A plain `uninstall` leaves ChatBridge and user data in place. **Tailscale remains
+unchanged**. macOS privacy permissions remain under
 System Settings. Existing legacy installations are not automatically migrated:
 uninstall the old installation through its original installer, then install this
 new layout from scratch.
@@ -151,7 +154,8 @@ default interactive ChatBridge bootstrap from offering it.
 
 Default origin: `http://127.0.0.1:8787`; use `--chatbridge-url http://127.0.0.1:PORT`
 for another local port. `--with-chatbridge` remains accepted; advanced owners can
-provide `--chatbridge-source PATH` for a separately reviewed checkout.
+provide `--chatbridge-source PATH` only for a reviewed source already placed
+at `~/MacControlMCP/deps/chatbridge-source`. No separate ChatBridge installation is required.
 No API key is required by default. If ChatBridge has `CHATBRIDGE_API_KEY`, set a
 matching `MACCONTROL_CHATBRIDGE_API_KEY` in installer and MCP client environments.
 Never paste keys into chat or command arguments.
@@ -164,7 +168,7 @@ then wait until `curl http://127.0.0.1:8787/v1/system/status` reports
 `browser.mode=managed` and `browser.state=running`, then open the **default profile only**:
 
 ```sh
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/.chatbridge/chrome-profile" --new-window https://chatgpt.com/
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$HOME/MacControlMCP/deps/chatbridge-data/chrome-profile" --new-window https://chatgpt.com/
 ```
 
 For custom profile locations follow ChatBridge's instructions. Opening a login

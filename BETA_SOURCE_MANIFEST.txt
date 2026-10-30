@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 149
+Included files: 150
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -127,6 +127,7 @@ tests/integration/test_install_remote_lifecycle.py
 tests/integration/test_legacy_chrome_wake.py
 tests/integration/test_mac_control_lifecycle.py
 tests/integration/test_maintenance_ops.py
+tests/integration/test_managed_chatbridge_install.py
 tests/integration/test_mclog.py
 tests/integration/test_mclog_release.py
 tests/integration/test_native_feature_flag.py
