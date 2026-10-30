@@ -28,10 +28,10 @@ class FreshOAuthTests(unittest.TestCase):
              patch.object(guided_setup, "oauth_guide", side_effect=lambda *a: events.append("guide")), \
              patch.object(guided_setup, "oauth_configure", side_effect=lambda *a, **k: events.append("configure") or {"public_url": origin}) as configure, \
              patch.object(guided_setup, "ensure_remote_service", side_effect=lambda *a: events.append("remote")), \
-             patch.object(guided_setup, "verify_local_oauth", side_effect=lambda *a: events.append("guard")), \
+             patch.object(guided_setup, "verify_local_oauth", side_effect=lambda *a, **kw: events.append("guard")), \
              patch.object(guided_setup, "enable_funnel", side_effect=lambda *a, **k: events.append("funnel") or {"status": "funnel_command_succeeded"}), \
              patch.object(guided_setup, "oauth_probe", side_effect=lambda *a: {"status": "public_oauth_preflight_pass"}):
-            result = guided_setup.setup(self.root, input_fn=lambda _: next(responses), interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: next(responses), interactive=True, language="en")
         self.assertEqual(events, ["guide", "configure", "remote", "guard", "funnel"])
         self.assertEqual(configure.call_args.args[:3], (self.root, origin, "owner"))
         self.assertEqual(result["status"], "pending_chatgpt_connection")
@@ -43,7 +43,7 @@ class FreshOAuthTests(unittest.TestCase):
              patch.object(guided_setup, "oauth_guide"), \
              patch.object(guided_setup, "oauth_configure") as configure, \
              patch.object(guided_setup, "ensure_remote_service") as service:
-            result = guided_setup.setup(self.root, input_fn=lambda _: "s", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "s", interactive=True, language="en")
         self.assertEqual(result["status"], "pending_github_oauth")
         configure.assert_not_called()
         service.assert_not_called()

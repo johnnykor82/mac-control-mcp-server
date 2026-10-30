@@ -22,6 +22,12 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+try:
+    from scripts.setup_language import choose_language, detect_language, text
+except ImportError:
+    from setup_language import choose_language, detect_language, text
+
+
 DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
 GITHUB_NEW_APP_URL = "https://github.com/settings/applications/new"
 GITHUB_USER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
@@ -80,12 +86,40 @@ def github_account(login: str | None, *, allow_gh: bool = True) -> tuple[str, st
     return actual, str(value["id"]), "public_profile_unverified"
 
 
-def guide(url: str, login: str | None) -> None:
+def guide(url: str, login: str | None, language=None) -> None:
+    language = language or detect_language()
+    if language == "ru":
+        print("\nMac Control MCP Server — настройка GitHub OAuth App")
+        print("1. Проверьте публичный HTTPS-адрес и сетевой туннель.")
+        print("2. Войдите в GitHub как владелец этого Mac и откройте:")
+        print("   " + GITHUB_NEW_APP_URL)
+        print("3. В настройках разработчика GitHub откройте OAuth Apps → New OAuth App и заполните:")
+        print("   Нужен OAuth App. GitHub App — другой тип приложения.")
+        print("   Срок действия токенов пользователя — отдельная настройка, не Client Secret.")
+        print("   При желании отключите их истечение в настройках GitHub; длительный срок повышает риск при утечке.")
+        print("   Application name: Mac Control MCP Server (имя вашего компьютера)")
+        print("   Homepage URL: " + url)
+        print("   Authorization callback URL: " + url + "/auth/callback")
+        print("   Enable Device Flow: не включать (для MCP OAuth-прокси не требуется)")
+        print("4. Нажмите Register application и скопируйте Client ID.")
+        print("5. На странице настроек приложения создайте Client Secret.")
+        print("6. Введите Client ID и Client Secret локально. Ввод секрета будет скрыт.")
+        if login:
+            print("   Разрешённый аккаунт GitHub: @" + login)
+        print("   Приложение запрашивает только read:user; доступ к репозиториям не требуется.")
+        print("   Не отправляйте Client Secret, токены или ключи подписи в чат с ИИ.")
+        print("7. После настройки запустите локальный удалённый сервер Mac Control MCP Server,")
+        print("   опубликуйте его через HTTPS под вашим управлением и войдите через MCP-клиент")
+        print("   с поддержкой OAuth. Проверьте, что другим аккаунтам GitHub отказано в доступе.\n")
+        return
     print("\nMac Control MCP Server — GitHub OAuth App setup guide")
     print("1. First verify your public HTTPS address and network tunnel.")
     print("2. Sign in to GitHub as the owner of this Mac, then open:")
     print("   " + GITHUB_NEW_APP_URL)
     print("3. In GitHub Developer settings > OAuth Apps > New OAuth App, enter:")
+    print("   Use an OAuth App. GitHub App is a different application type.")
+    print("   User token expiration is a separate setting; it is not the Client Secret.")
+    print("   You may disable expiration in GitHub settings; long-lived tokens increase the impact of a leak.")
     print("   Application name: Mac Control MCP Server (your machine nickname)")
     print("   Homepage URL: " + url)
     print("   Authorization callback URL: " + url + "/auth/callback")
@@ -144,22 +178,24 @@ def save_new_config(path: Path, config: dict) -> None:
 
 
 def configure(root: Path, url: str, login: str | None, *, input_fn=input,
-              secret_fn=getpass.getpass) -> dict:
+              secret_fn=getpass.getpass, language=None) -> dict:
+    language = language or detect_language()
+    tr = lambda en, ru: text(language, en, ru)
     path = destination(root)
     if path.exists() or path.is_symlink():
         raise FileExistsError("OAuth credentials already exist; use --check instead")
     username, uid, method = github_account(login)
-    print("Resolved GitHub account: @" + username + " (numeric ID " + uid + ")")
+    print(tr("Resolved GitHub account: @", "Найден аккаунт GitHub: @") + username + tr(" (numeric ID ", " (числовой ID ") + uid + ")")
     if method == "public_profile_unverified":
-        print("WARNING: public profile lookup does not prove ownership. Only")
-        print("the specified account will pass subsequent GitHub OAuth verification.")
-    confirmation = input_fn("Authorize ONLY this GitHub account to control your Mac? Type YES: ")
+        print(tr("WARNING: public profile lookup does not prove ownership. Only", "ВНИМАНИЕ: публичный профиль не подтверждает владение аккаунтом. Только"))
+        print(tr("the specified account will pass subsequent GitHub OAuth verification.", "указанный аккаунт сможет пройти последующую проверку GitHub OAuth."))
+    confirmation = input_fn(tr("Authorize ONLY this GitHub account to control your Mac? Type YES: ", "Разрешить ТОЛЬКО этому аккаунту GitHub управлять вашим Mac? Введите YES: "))
     if confirmation != "YES":
         raise RuntimeError("Owner did not authorize this GitHub account")
-    client_id = input_fn("GitHub OAuth App Client ID: ").strip()
+    client_id = input_fn(tr("GitHub OAuth App Client ID: ", "Client ID приложения GitHub OAuth: ")).strip()
     if not CLIENT_ID_PATTERN.fullmatch(client_id):
         raise ValueError("Invalid GitHub OAuth Client ID")
-    client_secret = secret_fn("GitHub Client Secret (hidden; never pasted into chat): ").strip()
+    client_secret = secret_fn(tr("GitHub Client Secret (hidden; never pasted into chat): ", "GitHub Client Secret (ввод скрыт; не отправляйте в чат): ")).strip()
     if len(client_secret) < 20 or any(c.isspace() for c in client_secret):
         raise ValueError("Invalid Client Secret")
     config = {"github_client_id": client_id,
@@ -258,6 +294,7 @@ def probe(origin: str) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    parser.add_argument("--language", choices=("en", "ru"))
     commands = parser.add_mutually_exclusive_group(required=True)
     commands.add_argument("--guide", action="store_true", help="Print owner instructions, no changes")
     commands.add_argument("--configure", action="store_true", help="Interactive owner-approved credential setup")
@@ -275,13 +312,15 @@ def main(argv=None) -> int:
         if not args.public_url:
             parser.error("--public-url is required with --guide or --configure")
         origin = public_origin(args.public_url)
+        language = args.language
         if args.guide:
-            guide(origin, args.github_login)
+            guide(origin, args.github_login, language)
             return 0
-        guide(origin, args.github_login)
         if not sys.stdin.isatty():
             raise RuntimeError("Interactive Terminal required to enter Client Secret without echo")
-        report = configure(args.root, origin, args.github_login)
+        language = choose_language(language=language)
+        guide(origin, args.github_login, language)
+        report = configure(args.root, origin, args.github_login, language=language)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0
 

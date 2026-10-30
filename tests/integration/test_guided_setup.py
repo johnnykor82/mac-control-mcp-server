@@ -36,7 +36,7 @@ class GuidedSetupTests(unittest.TestCase):
             raise KeyboardInterrupt()
         with patch.object(guided_setup, "_setup_locked", side_effect=owner_steps, create=True):
             with self.assertRaises(KeyboardInterrupt):
-                guided_setup.setup(self.root, interactive=True)
+                guided_setup.setup(self.root, interactive=True, language="en")
         with install_mac_control._lifecycle_lock(self.root, timeout=0):
             pass
 
@@ -44,7 +44,7 @@ class GuidedSetupTests(unittest.TestCase):
         (self.root / ".mac-control-installer-owned").unlink()
         with patch.object(install_mac_control, "_lifecycle_lock") as lock:
             with self.assertRaises(RuntimeError):
-                guided_setup.setup(self.root, interactive=True)
+                guided_setup.setup(self.root, interactive=True, language="en")
             lock.assert_not_called()
 
     def test_noninteractive_uninstalled_root_does_not_create_any_files(self):
@@ -61,7 +61,7 @@ class GuidedSetupTests(unittest.TestCase):
         with patch.object(install_mac_control, "_lifecycle_lock", side_effect=changed_while_waiting), \
              patch.object(guided_setup, "_setup_locked") as wizard:
             with self.assertRaisesRegex(RuntimeError, "ownership marker is unsafe"):
-                guided_setup.setup(self.root, interactive=True)
+                guided_setup.setup(self.root, interactive=True, language="en")
             wizard.assert_not_called()
 
     def test_setup_cli_runs_as_a_real_noninteractive_subprocess(self):
@@ -92,7 +92,7 @@ class GuidedSetupTests(unittest.TestCase):
         run.assert_not_called()
 
     def test_interactive_install_runs_wizard_after_local_success(self):
-        with patch.object(install_mac_control.sys, "argv", ["installer", "--install", "--without-gui"]), \
+        with patch.object(install_mac_control.sys, "argv", ["installer", "--install", "--without-gui", "--language", "en"]), \
              patch.object(install_mac_control.sys.stdin, "isatty", return_value=True), \
              patch.object(install_mac_control, "paths", return_value={"root": Path("/tmp/owned")}), \
              patch.object(install_mac_control, "install", return_value={"status": "installed"}), \
@@ -117,7 +117,7 @@ class GuidedSetupTests(unittest.TestCase):
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
              patch.object(guided_setup, "_restart_gui", side_effect=lambda root: gui(root, "status")) as restart, \
              patch.object(guided_setup.subprocess, "run") as opener:
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=owner))
         restart.assert_called_once_with(self.root)
         self.assertEqual(calls, ["status", "request_accessibility", "status", "owner", "status",
                                  "request_screen_capture", "status", "owner", "status"])
@@ -134,7 +134,7 @@ class GuidedSetupTests(unittest.TestCase):
             return dict(state)
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
              patch.object(guided_setup.subprocess, "run") as opener:
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected wait")))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: self.fail("unexpected wait")))
         self.assertEqual(calls, ["status", "request_screen_capture", "status"])
         opener.assert_not_called()
 
@@ -146,7 +146,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "_restart_gui", return_value=ready, create=True) as restart, \
              patch.object(guided_setup.subprocess, "run"), \
              patch("builtins.print"):
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: next(answers)))
         restart.assert_called_once_with(self.root)
         self.assertEqual([call.args[1] for call in gui.call_args_list],
                          ["status", "request_screen_capture", "status"])
@@ -158,7 +158,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "_restart_gui", return_value=missing, create=True) as restart, \
              patch.object(guided_setup.subprocess, "run"), \
              patch("builtins.print"):
-            self.assertFalse(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+            self.assertFalse(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: next(answers)))
         self.assertEqual(restart.call_count, 2)
 
     def test_later_owner_confirmation_retries_restart_after_early_confirmation(self):
@@ -169,7 +169,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "_restart_gui", side_effect=[missing, ready], create=True) as restart, \
              patch.object(guided_setup.subprocess, "run"), \
              patch("builtins.print"):
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: next(answers)))
         self.assertEqual(restart.call_count, 2)
 
     def test_gui_restart_failure_stops_without_retrying(self):
@@ -179,7 +179,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup.subprocess, "run"), \
              patch("builtins.print"):
             with self.assertRaisesRegex(RuntimeError, "did not exit"):
-                guided_setup.gui_permissions(self.root, input_fn=lambda _: "")
+                guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: "")
         restart.assert_called_once_with(self.root)
 
     def test_gui_restart_verifies_ownership_then_stops_only_owned_app(self):
@@ -210,7 +210,7 @@ class GuidedSetupTests(unittest.TestCase):
         answers = iter(("", "s"))
         with patch.object(guided_setup, "_gui_call", return_value=missing) as gui, \
              patch.object(guided_setup.subprocess, "run"), redirect_stdout(output):
-            self.assertFalse(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+            self.assertFalse(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: next(answers)))
         self.assertEqual([call.args[1] for call in gui.call_args_list],
                          ["status", "request_accessibility", "status", "status"])
         self.assertIn("MacControlMCPServer.app", output.getvalue())
@@ -232,7 +232,7 @@ class GuidedSetupTests(unittest.TestCase):
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
              patch.object(guided_setup, "_restart_gui", side_effect=lambda root: gui(root, "status")), \
              patch.object(guided_setup.subprocess, "run"):
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=owner))
         self.assertEqual(calls[:3], ["status", "request_accessibility", "request_permissions"])
         self.assertEqual(calls.count("request_permissions"), 1)
         self.assertNotIn("request_screen_capture", calls)
@@ -241,7 +241,7 @@ class GuidedSetupTests(unittest.TestCase):
         missing = {"accessibility_trusted": False, "screen_capture_trusted": False}
         with patch.object(guided_setup, "_gui_call", side_effect=[missing, RuntimeError("IPC disconnected")]) as gui:
             with self.assertRaisesRegex(RuntimeError, "IPC disconnected"):
-                guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected wait"))
+                guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: self.fail("unexpected wait"))
         self.assertEqual([call.args[1] for call in gui.call_args_list], ["status", "request_accessibility"])
 
     def test_gui_call_preserves_unknown_operation_from_helper(self):
@@ -262,7 +262,7 @@ class GuidedSetupTests(unittest.TestCase):
     def test_existing_gui_permissions_do_not_prompt_or_open_settings(self):
         with patch.object(guided_setup, "_gui_call", return_value={"accessibility_trusted": True, "screen_capture_trusted": True}) as gui, \
              patch.object(guided_setup.subprocess, "run") as opener:
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected prompt")))
+            self.assertTrue(guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: self.fail("unexpected prompt")))
         self.assertEqual(gui.call_count, 1)
         opener.assert_not_called()
 
@@ -277,7 +277,7 @@ class GuidedSetupTests(unittest.TestCase):
     def test_missing_gui_permissions_do_not_configure_network(self):
         with patch.object(guided_setup, "gui_permissions", return_value=False), \
              patch.object(guided_setup, "guided_network") as network:
-            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         self.assertEqual(result["status"], "pending_gui_permissions")
         network.assert_not_called()
 
@@ -286,7 +286,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "guided_network", return_value={"status": "manual_setup_required"}), \
              patch.object(guided_setup, "ensure_remote_service") as remote, \
              patch.object(guided_setup, "enable_funnel") as funnel:
-            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         self.assertEqual(result["status"], "pending_network")
         remote.assert_not_called()
         funnel.assert_not_called()
@@ -298,10 +298,10 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "guided_network", return_value={"status": "ready_for_oauth", "route": "tailscale_funnel", "public_url": origin}), \
              patch.object(guided_setup, "oauth_check", side_effect=lambda root: {"public_url": origin}), \
              patch.object(guided_setup, "ensure_remote_service", side_effect=lambda root: events.append("remote")), \
-             patch.object(guided_setup, "verify_local_oauth", side_effect=lambda root, url: events.append("guard")), \
+             patch.object(guided_setup, "verify_local_oauth", side_effect=lambda root, url, **kw: events.append("guard")), \
              patch.object(guided_setup, "enable_funnel", side_effect=lambda root, **kw: events.append("funnel") or {"status": "ok"}), \
              patch.object(guided_setup, "oauth_probe", side_effect=lambda url: events.append("probe") or {"status": "public_oauth_preflight_pass"}):
-            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         self.assertEqual(events, ["remote", "guard", "funnel", "probe"])
         self.assertEqual(result["status"], "pending_chatgpt_connection")
 
@@ -312,7 +312,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "oauth_configure") as configure, \
              patch.object(guided_setup, "ensure_remote_service") as remote, \
              patch.object(guided_setup, "enable_funnel") as funnel:
-            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         self.assertEqual(result["status"], "oauth_origin_mismatch")
         configure.assert_not_called()
         remote.assert_not_called()
@@ -327,7 +327,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "verify_local_oauth", side_effect=RuntimeError("guard failed")), \
              patch.object(guided_setup, "enable_funnel") as funnel:
             with self.assertRaisesRegex(RuntimeError, "guard failed"):
-                guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+                guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         funnel.assert_not_called()
 
     def test_direct_route_does_not_change_tailscale(self):
@@ -339,7 +339,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(guided_setup, "verify_local_oauth"), \
              patch.object(guided_setup, "enable_funnel") as funnel, \
              patch.object(guided_setup, "oauth_probe", return_value={"status": "public_oauth_preflight_pass"}):
-            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True)
+            result = guided_setup.setup(self.root, input_fn=lambda _: "", interactive=True, language="en")
         self.assertEqual(result["status"], "pending_chatgpt_connection")
         funnel.assert_not_called()
 

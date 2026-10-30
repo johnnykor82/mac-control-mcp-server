@@ -18,9 +18,11 @@ import urllib.request
 from urllib.parse import urlsplit
 
 try:
+    from .setup_language import detect_language, text
     from .release_preflight import inspect
     from .setup_github_oauth import check as check_oauth, public_origin
 except ImportError:  # Allow direct execution: python scripts/setup_network.py
+    from setup_language import detect_language, text
     from release_preflight import inspect
     from setup_github_oauth import check as check_oauth, public_origin
 
@@ -74,7 +76,7 @@ def tailscale_state() -> dict:
     }
 
 
-def publication_state(executable: str, hostname: str) -> dict:
+def publication_state(executable: str, hostname: str, *, language: str = "ru") -> dict:
     """Read both views; accept only an empty or exactly matching publication.
 
     ServeConfig fields: https://github.com/tailscale/tailscale/blob/main/ipn/serve.go
@@ -85,21 +87,21 @@ def publication_state(executable: str, hostname: str) -> dict:
         try:
             result = run([executable, command, "status", "--json"])
             if result.returncode != 0:
-                return {"status": "unreadable", "reason": command + " status завершилась с ошибкой"}
+                return {"status": "unreadable", "reason": command + text(language, ' status failed', ' status завершилась с ошибкой')}
             config = json.loads(result.stdout)
         except (OSError, subprocess.TimeoutExpired, ValueError):
-            return {"status": "unreadable", "reason": command + " status недоступен или вернул некорректный JSON"}
+            return {"status": "unreadable", "reason": command + text(language, ' status is unavailable or returned invalid JSON', ' status недоступен или вернул некорректный JSON')}
         if config is None:
             config = {}
         if not isinstance(config, dict):
-            return {"status": "unreadable", "reason": command + " status вернул неизвестный формат"}
+            return {"status": "unreadable", "reason": command + text(language, ' status returned an unknown format', ' status вернул неизвестный формат')}
         # Only documented empty optional maps can be omitted during comparison.
         for key in ("TCP", "Web", "AllowFunnel", "Services", "Foreground"):
             if key in config and config[key] in ({}, None):
                 del config[key]
         configs.append(config)
     if json.dumps(configs[0], sort_keys=True) != json.dumps(configs[1], sort_keys=True):
-        return {"status": "conflict", "reason": "Конфигурации Funnel и Serve не совпадают"}
+        return {"status": "conflict", "reason": text(language, 'Funnel and Serve configurations do not match', 'Конфигурации Funnel и Serve не совпадают')}
     if not configs[0]:
         return {"status": "empty"}
     target = hostname + ":443"
@@ -111,7 +113,7 @@ def publication_state(executable: str, hostname: str) -> dict:
     # JSON comparison distinguishes required booleans from numeric 0/1.
     if json.dumps(configs[0], sort_keys=True) == json.dumps(expected, sort_keys=True):
         return {"status": "existing_matching", "public_url": "https://" + hostname}
-    return {"status": "conflict", "reason": "Существующие маршруты не соответствуют точно HTTPS для Mac Control на локальном порту 3201"}
+    return {"status": "conflict", "reason": text(language, 'Existing routes do not exactly match HTTPS for Mac Control on local port 3201', 'Существующие маршруты не соответствуют точно HTTPS для Mac Control на локальном порту 3201')}
 
 
 def assert_public_route_safe_for_uninstall(root: Path, *, known_remote_service: bool = False,
@@ -172,7 +174,7 @@ def _guided_tailscale(local: dict) -> dict:
     return state
 
 
-def guided_network(root: Path, *, network: bool = True, input_fn=input) -> dict:
+def guided_network(root: Path, *, network: bool = True, input_fn=input, language: str = "ru") -> dict:
     """Select a remote HTTPS route without changing network or service state.
 
     A ready_for_oauth result is input for owner-led OAuth setup, not proof of
@@ -197,32 +199,34 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input) -> dict:
                       "external_ipv4_checked": "address" in echo,
                       "external_ipv6_checked": "address" in base.get("external_ipv6", {})},
     }
-    print("Проверка сети завершена; настройки сети не изменялись.")
-    print("Ответ внешнего сервиса определения IP: " + ("получен" if "address" in echo else "недоступен или проверка пропущена"))
-    print("Локальный частный IPv4: " + ("обнаружен" if private else "не обнаружен"))
-    print("Адрес IPv4 из общего диапазона 100.64.0.0/10: " + ("обнаружен" if shared else "не обнаружен"))
-    print("Частные и общие адреса могут указывать на NAT или VPN; они не позволяют подтвердить CGNAT у провайдера.")
-    print("Ответ внешнего сервиса с публичным IP не доказывает доступность входящего HTTPS, даже при совпадении с локальным IP.")
-    print("Уточните у провайдера наличие белого IP и проверьте входящий HTTPS из другой сети.")
+    print(text(language, 'Network checks complete; network settings were not changed.', 'Проверка сети завершена; настройки сети не изменялись.'))
+    print(text(language, 'External IP lookup response: ', 'Ответ внешнего сервиса определения IP: ') + (text(language, 'received', 'получен') if "address" in echo else text(language, 'unavailable or check skipped', 'недоступен или проверка пропущена')))
+    print(text(language, 'Private local IPv4: ', 'Локальный частный IPv4: ') + (text(language, 'detected', 'обнаружен') if private else text(language, 'not detected', 'не обнаружен')))
+    print(text(language, 'Shared IPv4 address in 100.64.0.0/10: ', 'Адрес IPv4 из общего диапазона 100.64.0.0/10: ') + (text(language, 'detected', 'обнаружен') if shared else text(language, 'not detected', 'не обнаружен')))
+    print(text(language, 'Private and shared addresses can indicate NAT or VPN; they cannot confirm ISP CGNAT.', 'Частные и общие адреса могут указывать на NAT или VPN; они не позволяют подтвердить CGNAT у провайдера.'))
+    print(text(language, 'An external public IP response does not prove incoming HTTPS is reachable, even when it matches the local IP.', 'Ответ внешнего сервиса с публичным IP не доказывает доступность входящего HTTPS, даже при совпадении с локальным IP.'))
+    print(text(language, 'Ask your ISP about a public IP and check incoming HTTPS from another network.', 'Уточните у провайдера наличие белого IP и проверьте входящий HTTPS из другой сети.'))
     while True:
-        answer = input_fn("У вас есть белый (публичный) IP с доступным входящим HTTPS? [да/нет/не знаю/выход]: ").strip().casefold()
+        answer = input_fn(text(language, 'Do you have a public IP with reachable incoming HTTPS? [yes/no/unknown/quit]: ', 'У вас есть белый (публичный) IP с доступным входящим HTTPS? [да/нет/не знаю/выход]: ')).strip().casefold()
         answer = {"да": "yes", "д": "yes", "нет": "no", "н": "no",
                   "не знаю": "unknown", "выход": "quit", "в": "quit"}.get(answer, answer)
         if answer in ("yes", "y", "no", "n", "unknown", "don't know", "quit", "q"):
             break
-        print("Введите «да», «нет», «не знаю» или «выход» (yes/no/unknown/quit также принимаются).")
+        print(text(language, 'Enter yes, no, unknown or quit (Russian equivalents are also accepted).', 'Введите «да», «нет», «не знаю» или «выход» (yes/no/unknown/quit также принимаются).'))
     if answer in ("quit", "q"):
         return {**report, "status": "cancelled"}
     if answer in ("yes", "y"):
-        print("Используйте публичный HTTPS-домен с доверенным TLS-сертификатом.")
-        print("После настройки OAuth и проверки анонимного ответа HTTP 401 настройте обратный HTTPS-прокси")
-        print("на TCP 443 и проброс TCP 443 к этому прокси на маршрутизаторе, если он используется.")
-        print(f"Mac Control должен слушать только 127.0.0.1:{PORT}; проксируйте HTTPS на этот локальный сервис.")
-        print("Проксируйте все пути этого HTTPS-домена, включая /mcp, /.well-known/ и /auth/callback.")
-        print("TCP 80 нужен только при необходимости HTTP-01 для сертификата или перенаправления HTTP на HTTPS.")
-        print(f"Не пробрасывайте TCP {PORT} на маршрутизаторе и не открывайте его на LAN или публичном интерфейсе.")
+        print(text(language, 'Use a public HTTPS domain with a trusted TLS certificate.', 'Используйте публичный HTTPS-домен с доверенным TLS-сертификатом.'))
+        print(text(language, 'After configuring OAuth and verifying anonymous HTTP 401 responses, configure an HTTPS reverse proxy', 'После настройки OAuth и проверки анонимного ответа HTTP 401 настройте обратный HTTPS-прокси'))
+        print(text(language, 'on TCP 443 and forward TCP 443 to that proxy on your router, if used.', 'на TCP 443 и проброс TCP 443 к этому прокси на маршрутизаторе, если он используется.'))
+        print(text(language, f"Mac Control must listen only on 127.0.0.1:{PORT}; proxy HTTPS to this local service.",
+                   f"Mac Control должен слушать только 127.0.0.1:{PORT}; проксируйте HTTPS на этот локальный сервис."))
+        print(text(language, 'Proxy all paths on this HTTPS domain, including /mcp, /.well-known/ and /auth/callback.', 'Проксируйте все пути этого HTTPS-домена, включая /mcp, /.well-known/ и /auth/callback.'))
+        print(text(language, 'TCP 80 is needed only for HTTP-01 certificate validation or HTTP to HTTPS redirects.', 'TCP 80 нужен только при необходимости HTTP-01 для сертификата или перенаправления HTTP на HTTPS.'))
+        print(text(language, f"Do not forward TCP {PORT} on the router or expose it on a LAN or public interface.",
+                   f"Не пробрасывайте TCP {PORT} на маршрутизаторе и не открывайте его на LAN или публичном интерфейсе."))
         while True:
-            value = input_fn("Публичный HTTPS-адрес домена (https://control.example.com) или «выход»: ").strip()
+            value = input_fn(text(language, 'Public HTTPS domain URL (https://control.example.com) or quit: ', 'Публичный HTTPS-адрес домена (https://control.example.com) или «выход»: ')).strip()
             if value.casefold() in ("quit", "q", "выход", "в"):
                 return {**report, "status": "cancelled"}
             try:
@@ -239,10 +243,10 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input) -> dict:
                 else:
                     is_domain = False
                 if not is_domain or parsed.port not in (None, 443):
-                    raise ValueError("Укажите HTTPS-домен на TCP 443")
+                    raise ValueError(text(language, 'Provide an HTTPS domain on TCP 443', 'Укажите HTTPS-домен на TCP 443'))
                 break
             except ValueError:
-                print("Укажите публичный HTTPS-домен на TCP 443, без пути и учётных данных.")
+                print(text(language, 'Provide a public HTTPS domain on TCP 443, without a path or credentials.', 'Укажите публичный HTTPS-домен на TCP 443, без пути и учётных данных.'))
         return {**report, "status": "ready_for_oauth", "route": "direct_https",
                 "public_url": origin, "requires_owner_https_setup": True}
 
@@ -253,33 +257,33 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input) -> dict:
                     state.get("cli_path") and state.get("interface_verified") and
                     state.get("device_dns_name", "").endswith(".ts.net"))
     if not ready():
-        print("Нужны подключённый клиент Tailscale и соответствующий локальный сетевой интерфейс.")
-        print("При необходимости вручную установите официальный клиент для macOS:")
+        print(text(language, 'A connected Tailscale client and its matching local network interface are required.', 'Нужны подключённый клиент Tailscale и соответствующий локальный сетевой интерфейс.'))
+        print(text(language, 'If needed, manually install the official macOS client:', 'При необходимости вручную установите официальный клиент для macOS:'))
         print("https://tailscale.com/docs/install/mac")
-        print("Создайте учётную запись Tailscale, если её нет, войдите в неё и подтвердите сетевые разрешения macOS.")
-        print("Мастер не изменяет существующие VPN, маршруты по умолчанию и выбор Exit Node.")
+        print(text(language, 'Create a Tailscale account if needed, sign in and approve macOS network permissions.', 'Создайте учётную запись Tailscale, если её нет, войдите в неё и подтвердите сетевые разрешения macOS.'))
+        print(text(language, 'The wizard does not change existing VPNs, default routes or Exit Node selection.', 'Мастер не изменяет существующие VPN, маршруты по умолчанию и выбор Exit Node.'))
     while not ready():
-        answer = input_fn("После выполнения этих шагов введите READY или «ГОТОВО» для повторной проверки; Enter — продолжить позже: ").strip().casefold()
+        answer = input_fn(text(language, 'After completing these steps, enter READY to check again; Enter to continue later: ', 'После выполнения этих шагов введите READY или «ГОТОВО» для повторной проверки; Enter — продолжить позже: ')).strip().casefold()
         if answer not in ("ready", "готово"):
             return {**report, "tailscale": state}
         state = _guided_tailscale(inspect(network=False))
         if not ready():
-            print("Клиент или интерфейс Tailscale пока не подтверждён; проверьте ручные шаги и повторите READY или отложите настройку.")
-    existing = publication_state(state["cli_path"], state["device_dns_name"])
+            print(text(language, 'The Tailscale client or interface is not verified yet; check the manual steps and enter READY again or defer setup.', 'Клиент или интерфейс Tailscale пока не подтверждён; проверьте ручные шаги и повторите READY или отложите настройку.'))
+    existing = publication_state(state["cli_path"], state["device_dns_name"], language=language)
     report.update({"tailscale": state, "publication_state": existing})
     if existing["status"] not in ("empty", "existing_matching"):
-        print("Нельзя безопасно использовать существующую конфигурацию Funnel/Serve: " + existing["reason"])
-        print("Проверьте её вручную; мастер не вносил изменений.")
+        print(text(language, 'The existing Funnel/Serve configuration cannot be safely used: ', 'Нельзя безопасно использовать существующую конфигурацию Funnel/Serve: ') + existing["reason"])
+        print(text(language, 'Review it manually; the wizard made no changes.', 'Проверьте её вручную; мастер не вносил изменений.'))
         return report
     if existing["status"] == "existing_matching":
-        print("Существующий маршрут Funnel точно соответствует Mac Control; он будет использован без замены.")
-    print("Клиент Tailscale работает, его назначенный IP найден на локальном интерфейсе.")
-    print("Это не доказывает доступность из интернета: публичный HTTPS проверяется позже из внешней сети.")
-    print("Далее настройте GitHub OAuth для адреса:")
+        print(text(language, 'The existing Funnel route exactly matches Mac Control; it will be reused without replacement.', 'Существующий маршрут Funnel точно соответствует Mac Control; он будет использован без замены.'))
+    print(text(language, 'The Tailscale client is running and its assigned IP was found on a local interface.', 'Клиент Tailscale работает, его назначенный IP найден на локальном интерфейсе.'))
+    print(text(language, 'This does not prove internet reachability: public HTTPS is checked later from an external network.', 'Это не доказывает доступность из интернета: публичный HTTPS проверяется позже из внешней сети.'))
+    print(text(language, 'Next, configure GitHub OAuth for this URL:', 'Далее настройте GitHub OAuth для адреса:'))
     origin = "https://" + state["device_dns_name"]
     print(origin)
-    print("В вашей сети Tailscale могут потребоваться MagicDNS, HTTPS и разрешение владельца на Funnel.")
-    print("Для публикации нужны настроенный OAuth, анонимный ответ HTTP 401 и отдельное подтверждение владельца PUBLISH.")
+    print(text(language, 'Your Tailscale network may require MagicDNS, HTTPS and owner authorization for Funnel.', 'В вашей сети Tailscale могут потребоваться MagicDNS, HTTPS и разрешение владельца на Funnel.'))
+    print(text(language, 'Publication requires configured OAuth, an anonymous HTTP 401 response and separate owner confirmation with PUBLISH.', 'Для публикации нужны настроенный OAuth, анонимный ответ HTTP 401 и отдельное подтверждение владельца PUBLISH.'))
     print("https://tailscale.com/docs/reference/tailscale-cli/funnel")
     return {**report, "status": "ready_for_oauth", "public_url": origin}
 
@@ -316,29 +320,29 @@ def diagnose(*, network: bool = False) -> dict:
     }
 
 
-def guide() -> None:
-    print("Mac Control remote connection (no verified public inbound IP/port):")
-    print("1. Confirm whether public IPv4/IPv6 with incoming HTTPS is actually reachable.")
-    print("   Public IP echo alone does not prove inbound access; CGNAT may exist.")
-    print("2. Use the existing Tailscale app if installed (App Store or Standalone).")
-    print("   If absent, install the official macOS client:")
+def guide(*, language: str = "en") -> None:
+    print(text(language, 'Mac Control remote connection (no verified public inbound IP/port):', 'Удалённое подключение Mac Control (публичный входящий IP/порт не подтверждён):'))
+    print(text(language, '1. Confirm whether public IPv4/IPv6 with incoming HTTPS is actually reachable.', '1. Проверьте доступность публичного IPv4/IPv6 с входящим HTTPS.'))
+    print(text(language, '   Public IP echo alone does not prove inbound access; CGNAT may exist.', '   Ответ сервиса определения IP не доказывает входящую доступность; возможен CGNAT.'))
+    print(text(language, '2. Use the existing Tailscale app if installed (App Store or Standalone).', '2. Используйте установленное приложение Tailscale (App Store или Standalone).'))
+    print(text(language, '   If absent, install the official macOS client:', '   Если его нет, установите официальный клиент для macOS:'))
     print("   https://tailscale.com/docs/install/mac")
-    print("3. Log in to Tailscale and approve macOS networking permissions.")
-    print("   The installer detects the CLI inside Tailscale.app when not in PATH.")
-    print("   Existing VPN connections, routes and Exit Node selections are untouched.")
-    print("4. Enable MagicDNS / HTTPS and Funnel for this device in your tailnet.")
-    print("   Tailscale prompts for web approval as needed (owner performs login).")
-    print("5. Configure your own GitHub OAuth App in Mac Control using the resulting")
-    print("   HTTPS origin: https://YOUR-DEVICE.YOUR-TAILNET.ts.net")
-    print("   callback: https://YOUR-DEVICE.YOUR-TAILNET.ts.net/auth/callback")
-    print("6. Start Mac Control's AUTHENTICATED loopback service on 127.0.0.1:3201.")
-    print("7. Confirm unauthenticated /mcp requests return HTTP 401.")
-    print("8. Run this guide's --enable-funnel with explicit owner consent.")
-    print("   Underlying Tailscale CLI command: tailscale funnel --bg 3201")
-    print("9. Check tailscale funnel status, external HTTPS and actual GitHub OAuth.")
-    print("   Tailscale Serve is tailnet-only; Funnel is public HTTPS.")
-    print("   DO NOT expose the unauthenticated DEV preview port 3101.")
-    print("Docs: https://tailscale.com/docs/features/tailscale-funnel")
+    print(text(language, '3. Log in to Tailscale and approve macOS networking permissions.', '3. Войдите в Tailscale и подтвердите сетевые разрешения macOS.'))
+    print(text(language, '   The installer detects the CLI inside Tailscale.app when not in PATH.', '   Установщик найдёт CLI внутри Tailscale.app, если его нет в PATH.'))
+    print(text(language, '   Existing VPN connections, routes and Exit Node selections are untouched.', '   Существующие VPN, маршруты и выбор Exit Node не изменяются.'))
+    print(text(language, '4. Enable MagicDNS / HTTPS and Funnel for this device in your tailnet.', '4. Включите MagicDNS / HTTPS и Funnel для этого устройства в вашей сети Tailscale.'))
+    print(text(language, '   Tailscale prompts for web approval as needed (owner performs login).', '   При необходимости Tailscale запросит подтверждение в браузере (владелец входит сам).'))
+    print(text(language, '5. Configure your own GitHub OAuth App in Mac Control using the resulting', '5. Настройте своё приложение GitHub OAuth в Mac Control для полученного адреса:'))
+    print(text(language, '   HTTPS origin: https://YOUR-DEVICE.YOUR-TAILNET.ts.net', '   HTTPS-адрес: https://YOUR-DEVICE.YOUR-TAILNET.ts.net'))
+    print(text(language, '   callback: https://YOUR-DEVICE.YOUR-TAILNET.ts.net/auth/callback', '   Адрес возврата: https://YOUR-DEVICE.YOUR-TAILNET.ts.net/auth/callback'))
+    print(text(language, "6. Start Mac Control's AUTHENTICATED loopback service on 127.0.0.1:3201.", '6. Запустите локальный сервис Mac Control С АВТОРИЗАЦИЕЙ на 127.0.0.1:3201.'))
+    print(text(language, '7. Confirm unauthenticated /mcp requests return HTTP 401.', '7. Убедитесь, что запросы к /mcp без авторизации возвращают HTTP 401.'))
+    print(text(language, "8. Run this guide's --enable-funnel with explicit owner consent.", '8. Запустите этот скрипт с --enable-funnel и явным подтверждением владельца.'))
+    print(text(language, '   Underlying Tailscale CLI command: tailscale funnel --bg 3201', '   Используемая команда Tailscale CLI: tailscale funnel --bg 3201'))
+    print(text(language, '9. Check tailscale funnel status, external HTTPS and actual GitHub OAuth.', '9. Проверьте tailscale funnel status, HTTPS из внешней сети и вход через GitHub OAuth.'))
+    print(text(language, '   Tailscale Serve is tailnet-only; Funnel is public HTTPS.', '   Tailscale Serve доступен только в сети Tailscale; Funnel предоставляет публичный HTTPS.'))
+    print(text(language, '   DO NOT expose the unauthenticated DEV preview port 3101.', '   НЕ открывайте доступ к порту DEV-просмотра 3101 без авторизации.'))
+    print(text(language, 'Docs: https://tailscale.com/docs/features/tailscale-funnel', 'Документация: https://tailscale.com/docs/features/tailscale-funnel'))
     print("      https://tailscale.com/docs/reference/tailscale-cli/funnel")
 
 
@@ -347,7 +351,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _oauth_guard(root: Path) -> dict:
+def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
     configured = check_oauth(root)
     # Probe this Mac directly: inherited proxy settings and redirects must not
     # substitute a remote issuer or authentication challenge for the loopback app.
@@ -370,9 +374,9 @@ def _oauth_guard(root: Path) -> dict:
             raise ValueError("OAuth issuer does not match configured origin")
     except urllib.error.HTTPError as exc:
         exc.close()
-        raise RuntimeError("Локальные OAuth metadata недоступны; перенаправления запрещены") from None
+        raise RuntimeError(text(language, 'Local OAuth metadata is unavailable; redirects are forbidden', 'Локальные OAuth metadata недоступны; перенаправления запрещены')) from None
     except (OSError, ValueError) as exc:
-        raise RuntimeError("Не удалось проверить локальный OAuth issuer и размер metadata") from exc
+        raise RuntimeError(text(language, 'Could not verify the local OAuth issuer and metadata size', 'Не удалось проверить локальный OAuth issuer и размер metadata')) from exc
     request = urllib.request.Request(
         local + "/mcp", method="POST",
         headers={"Content-Type": "application/json"},
@@ -389,65 +393,67 @@ def _oauth_guard(root: Path) -> dict:
         finally:
             exc.close()
     except (urllib.error.URLError, OSError) as exc:
-        raise RuntimeError("Локальный сервер Mac Control с авторизацией недоступен") from exc
+        raise RuntimeError(text(language, 'The authenticated local Mac Control server is unavailable', 'Локальный сервер Mac Control с авторизацией недоступен')) from exc
     if status != 401 or not challenge:
-        raise RuntimeError("Публикация запрещена: анонимный запрос к локальному MCP не вернул HTTP 401 с OAuth challenge")
+        raise RuntimeError(text(language, 'Publication blocked: the anonymous local MCP request did not return HTTP 401 with an OAuth challenge', 'Публикация запрещена: анонимный запрос к локальному MCP не вернул HTTP 401 с OAuth challenge'))
     return configured
 
 
-def enable_funnel(root: Path, *, input_fn=input) -> dict:
+def enable_funnel(root: Path, *, input_fn=input, language: str = "ru") -> dict:
     executable = tailscale_cli()
     ts = tailscale_state()
     if not executable or not ts.get("logged_in"):
-        raise RuntimeError("Сначала установите Tailscale и войдите в свою учётную запись")
+        raise RuntimeError(text(language, 'Install Tailscale and sign in to your account first', 'Сначала установите Tailscale и войдите в свою учётную запись'))
     hostname = ts.get("device_dns_name", "")
     if not hostname.endswith(".ts.net"):
-        raise RuntimeError("Доменное имя устройства Tailscale недоступно; настройте MagicDNS и HTTPS")
-    configured = _oauth_guard(root)
+        raise RuntimeError(text(language, 'The Tailscale device domain name is unavailable; configure MagicDNS and HTTPS', 'Доменное имя устройства Tailscale недоступно; настройте MagicDNS и HTTPS'))
+    configured = _oauth_guard(root, language=language)
     expected = "https://" + hostname
     if configured["public_url"].rstrip("/") != expected:
-        raise RuntimeError("HTTPS-адрес в настройках GitHub OAuth не совпадает с адресом устройства Tailscale")
-    existing = publication_state(executable, hostname)
+        raise RuntimeError(text(language, 'The GitHub OAuth HTTPS URL does not match the Tailscale device URL', 'HTTPS-адрес в настройках GitHub OAuth не совпадает с адресом устройства Tailscale'))
+    existing = publication_state(executable, hostname, language=language)
     if existing["status"] not in ("empty", "existing_matching"):
-        raise RuntimeError("Отказ от изменения существующей конфигурации Funnel/Serve: " + existing["reason"])
+        raise RuntimeError(text(language, 'Refusing to change the existing Funnel/Serve configuration: ', 'Отказ от изменения существующей конфигурации Funnel/Serve: ') + existing["reason"])
     report = {
         "public_url": expected,
         "port": PORT,
         "external_connectivity_verified": False,
         "github_oauth_login_verified": False,
-        "next": "Проверьте tailscale funnel status и публичный OAuth из внешнего MCP-клиента",
+        "next": text(language, 'Check tailscale funnel status and public OAuth from an external MCP client', 'Проверьте tailscale funnel status и публичный OAuth из внешнего MCP-клиента'),
     }
     if existing["status"] == "existing_matching":
         return {**report, "status": "existing_funnel_reused"}
     if not sys.stdin.isatty():
-        raise RuntimeError("Нужно интерактивное подтверждение владельца в Терминале")
-    print("ВНИМАНИЕ: Funnel опубликует в интернете HTTP-сервис Mac Control, защищённый авторизацией.")
-    print("Публичный HTTPS-адрес:", expected)
-    print("ID разрешённых учётных записей:", ", ".join(configured["allowed_github_ids"]))
-    if input_fn("Введите PUBLISH, чтобы включить публичный HTTPS через Funnel на этом Mac: ") != "PUBLISH":
-        raise RuntimeError("Владелец не подтвердил публикацию в интернете")
-    current_oauth = _oauth_guard(root)
+        raise RuntimeError(text(language, 'Interactive owner confirmation in Terminal is required', 'Нужно интерактивное подтверждение владельца в Терминале'))
+    print(text(language, 'WARNING: Funnel will publish the authenticated Mac Control HTTP service on the internet.', 'ВНИМАНИЕ: Funnel опубликует в интернете HTTP-сервис Mac Control, защищённый авторизацией.'))
+    print(text(language, 'Public HTTPS URL:', 'Публичный HTTPS-адрес:'), expected)
+    print(text(language, 'Allowed account IDs:', 'ID разрешённых учётных записей:'), ", ".join(configured["allowed_github_ids"]))
+    if input_fn(text(language, 'Enter PUBLISH to enable public HTTPS through Funnel on this Mac: ', 'Введите PUBLISH, чтобы включить публичный HTTPS через Funnel на этом Mac: ')) != "PUBLISH":
+        raise RuntimeError(text(language, 'The owner did not confirm internet publication', 'Владелец не подтвердил публикацию в интернете'))
+    current_oauth = _oauth_guard(root, language=language)
     if (current_oauth["public_url"].rstrip("/") != expected or
             set(current_oauth["allowed_github_ids"]) != set(configured["allowed_github_ids"])):
-        raise RuntimeError("OAuth origin или разрешённые владельцы изменились за время ожидания; публикация запрещена")
+        raise RuntimeError(text(language, 'The OAuth origin or allowed owners changed while waiting; publication is blocked', 'OAuth origin или разрешённые владельцы изменились за время ожидания; публикация запрещена'))
     # The owner may spend time reviewing; do not overwrite routes created then.
-    current = publication_state(executable, hostname)
+    current = publication_state(executable, hostname, language=language)
     if current["status"] == "existing_matching":
         return {**report, "status": "existing_funnel_reused"}
     if current["status"] != "empty":
-        raise RuntimeError("Конфигурация Funnel/Serve изменилась за время ожидания подтверждения; изменения не внесены")
+        raise RuntimeError(text(language, 'The Funnel/Serve configuration changed while waiting for confirmation; no changes were made', 'Конфигурация Funnel/Serve изменилась за время ожидания подтверждения; изменения не внесены'))
     outcome = run([executable, "funnel", "--bg", str(PORT)], timeout=50)
     if outcome.returncode != 0:
-        raise RuntimeError("Не удалось настроить Tailscale Funnel; проверьте tailscale funnel status")
-    verified = publication_state(executable, hostname)
+        raise RuntimeError(text(language, 'Could not configure Tailscale Funnel; check tailscale funnel status', 'Не удалось настроить Tailscale Funnel; проверьте tailscale funnel status'))
+    verified = publication_state(executable, hostname, language=language)
     if verified["status"] != "existing_matching":
-        raise RuntimeError("Не удалось проверить конфигурацию Funnel после публикации; проверьте состояние вручную")
+        raise RuntimeError(text(language, 'Could not verify the Funnel configuration after publication; check its status manually', 'Не удалось проверить конфигурацию Funnel после публикации; проверьте состояние вручную'))
     return {**report, "status": "funnel_command_succeeded"}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    parser.add_argument("--language", choices=("en", "ru"), default=detect_language(),
+                        help="Language for interactive setup (defaults to system language)")
     choices = parser.add_mutually_exclusive_group(required=True)
     choices.add_argument("--diagnose", action="store_true")
     choices.add_argument("--guide", action="store_true")
@@ -458,12 +464,12 @@ def main() -> int:
                         help="Opt in to external IP echo lookups for diagnostics")
     args = parser.parse_args()
     if args.guide:
-        guide()
+        guide(language=args.language)
     else:
         if args.guided:
-            report = guided_network(args.root, network=True)
+            report = guided_network(args.root, network=True, language=args.language)
         else:
-            report = enable_funnel(args.root) if args.enable_funnel else diagnose(network=args.network)
+            report = enable_funnel(args.root, language=args.language) if args.enable_funnel else diagnose(network=args.network)
         print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0
 

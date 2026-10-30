@@ -11,10 +11,12 @@ import sys
 import urllib.request
 
 try:
+    from scripts.setup_language import choose_language, detect_language, text
     from scripts.setup_network import guided_network, enable_funnel
     from scripts.setup_github_oauth import check as oauth_check, configure as oauth_configure
     from scripts.setup_github_oauth import guide as oauth_guide, probe as oauth_probe
 except ImportError:
+    from setup_language import choose_language, detect_language, text
     from setup_network import guided_network, enable_funnel
     from setup_github_oauth import check as oauth_check, configure as oauth_configure
     from setup_github_oauth import guide as oauth_guide, probe as oauth_probe
@@ -28,13 +30,13 @@ def ensure_remote_service(root):
     return ensure(root)
 
 
-def verify_local_oauth(root, origin):
+def verify_local_oauth(root, origin, *, language=None):
     """Check the loopback challenge and issuer before offering publication."""
     try:
         from scripts.setup_network import _oauth_guard
     except ImportError:
         from setup_network import _oauth_guard
-    _oauth_guard(root)
+    _oauth_guard(root, language=language or detect_language())
     request = urllib.request.Request(
         "http://127.0.0.1:3201/.well-known/oauth-authorization-server",
         headers={"Accept": "application/json"},
@@ -84,12 +86,14 @@ def _restart_gui(root):
     return _gui_call(root, "status")
 
 
-def gui_permissions(root, *, input_fn=input):
+def gui_permissions(root, *, input_fn=input, language=None):
     """Request missing grants in order; only the owner can grant TCC access."""
+    language = language or detect_language()
+    tr = lambda en, ru: text(language, en, ru)
     state = _gui_call(root, "status")
     permissions = (
-        ("accessibility_trusted", "request_accessibility", "Accessibility", "Privacy_Accessibility"),
-        ("screen_capture_trusted", "request_screen_capture", "Screen Recording / Screen & System Audio Recording", "Privacy_ScreenCapture"),
+        ("accessibility_trusted", "request_accessibility", tr("Accessibility", "Универсальный доступ"), "Privacy_Accessibility"),
+        ("screen_capture_trusted", "request_screen_capture", tr("Screen Recording / Screen & System Audio Recording", "Запись экрана / Запись экрана и системного аудио"), "Privacy_ScreenCapture"),
     )
     requested = set()
     legacy_helper = False
@@ -98,35 +102,35 @@ def gui_permissions(root, *, input_fn=input):
             return True
         key, operation, label, pane = next(item for item in permissions if not state.get(item[0]))
         if key not in requested and not legacy_helper:
-            print("Mac Control отправит macOS запрос на " + label + ". Системное окно может не появиться.")
+            print(tr("Mac Control will request " + label + " from macOS. A system dialog may not appear.", "Mac Control отправит macOS запрос на " + label + ". Системное окно может не появиться."))
             try:
                 _gui_call(root, operation)
             except RuntimeError as error:
                 if str(error) != "Unknown GUI operation":
                     raise
                 # Older deployed helpers only support the combined request.
-                print("Установлен прежний GUI helper: он поддерживает только общий запрос двух разрешений.")
+                print(tr("The installed older GUI helper supports only a combined request for both permissions.", "Установлен прежний GUI helper: он поддерживает только общий запрос двух разрешений."))
                 _gui_call(root, "request_permissions")
                 legacy_helper = True
             requested.add(key)
             state = _gui_call(root, "status")
             if state.get(key):
                 continue
-        print("Разрешение " + label + " пока не подтверждено для MacControlMCPServer.app.")
-        print("Включите Mac Control MCP Server в System Settings → Privacy & Security → " + label + ".")
-        print("Если приложения нет в списке, нажмите + и выберите ~/Applications/MacControlMCPServer.app.")
+        print(tr(label + " permission is not yet confirmed for MacControlMCPServer.app.", "Разрешение " + label + " пока не подтверждено для MacControlMCPServer.app."))
+        print(tr("Enable Mac Control MCP Server in System Settings → Privacy & Security → " + label + ".", "Включите Mac Control MCP Server в Системные настройки → Конфиденциальность и безопасность → " + label + "."))
+        print(tr("If the app is missing, click + and select ~/Applications/MacControlMCPServer.app.", "Если приложения нет в списке, нажмите + и выберите ~/Applications/MacControlMCPServer.app."))
         try:
             opened = subprocess.run(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?" + pane],
                                     check=False, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if opened.returncode:
-                print("Откройте вручную System Settings → Privacy & Security → " + label)
+                print(tr("Open System Settings → Privacy & Security → " + label + " manually.", "Откройте вручную Системные настройки → Конфиденциальность и безопасность → " + label))
         except (OSError, subprocess.SubprocessError):
-            print("Откройте вручную System Settings → Privacy & Security → " + label)
-        answer = input_fn("После выдачи прав нажмите Enter для проверки; S — отложить: ").strip().lower()
+            print(tr("Open System Settings → Privacy & Security → " + label + " manually.", "Откройте вручную Системные настройки → Конфиденциальность и безопасность → " + label))
+        answer = input_fn(tr("After granting access, press Enter to check; S to defer: ", "После выдачи прав нажмите Enter для проверки; S — отложить: ")).strip().lower()
         if answer in ("s", "skip", "q"):
             return False
         if key == "screen_capture_trusted":
-            print("Перезапускаем Mac Control MCP Server, чтобы обновить состояние разрешения записи экрана.")
+            print(tr("Restarting Mac Control MCP Server to refresh the screen recording permission.", "Перезапускаем Mac Control MCP Server, чтобы обновить состояние разрешения записи экрана."))
             state = _restart_gui(root)
         else:
             state = _gui_call(root, "status")
@@ -158,12 +162,13 @@ def _validate_setup_install(root):
     return root
 
 
-def setup(root, *, input_fn=input, interactive=None, with_gui=True):
+def setup(root, *, input_fn=input, interactive=None, with_gui=True, language=None):
     if interactive is None:
         interactive = sys.stdin.isatty()
     if not interactive:
         return {"status": "pending_owner_interaction", "next": "Run --setup in an interactive Terminal"}
     root = _validate_setup_install(root)
+    language = choose_language(input_fn=input_fn, language=language)
     try:
         from scripts.install_mac_control import _lifecycle_lock
     except ImportError:
@@ -171,13 +176,15 @@ def setup(root, *, input_fn=input, interactive=None, with_gui=True):
     with _lifecycle_lock(root) as locked_root:
         # Recheck ownership/release after waiting for another lifecycle action.
         _validate_setup_install(locked_root)
-        return _setup_locked(locked_root, input_fn=input_fn, with_gui=with_gui)
+        return _setup_locked(locked_root, input_fn=input_fn, with_gui=with_gui, language=language)
 
 
-def _setup_locked(root, *, input_fn=input, with_gui=True):
-    if with_gui and not gui_permissions(root, input_fn=input_fn):
+def _setup_locked(root, *, input_fn=input, with_gui=True, language=None):
+    language = language or detect_language()
+    tr = lambda en, ru: text(language, en, ru)
+    if with_gui and not gui_permissions(root, input_fn=input_fn, language=language):
         return {"status": "pending_gui_permissions", "next": "Grant macOS permissions and run --setup"}
-    network = guided_network(root, network=True, input_fn=input_fn)
+    network = guided_network(root, network=True, input_fn=input_fn, language=language)
     if network.get("status") != "ready_for_oauth":
         return {"status": "pending_network", "network": network, "next": "Run --setup to continue"}
     origin = network.get("public_url", "").rstrip("/")
@@ -186,31 +193,32 @@ def _setup_locked(root, *, input_fn=input, with_gui=True):
     try:
         configured = oauth_check(root)
     except FileNotFoundError:
-        oauth_guide(origin, None)
-        answer = input_fn("Создайте GitHub OAuth App по инструкции. Enter — продолжить, S — отложить: ").strip().lower()
+        oauth_guide(origin, None, language)
+        answer = input_fn(tr("Create the GitHub OAuth App using the guide. Enter to continue, S to defer: ", "Создайте GitHub OAuth App по инструкции. Enter — продолжить, S — отложить: ")).strip().lower()
         if answer in ("s", "skip", "q"):
             return {"status": "pending_github_oauth", "public_url": origin, "next": "Run --setup to continue"}
-        login = input_fn("GitHub username (Enter, если уже выполнен gh auth login): ").strip() or None
-        configured = oauth_configure(root, origin, login, input_fn=input_fn)
+        login = input_fn(tr("GitHub username (Enter if gh auth login is already complete): ", "Имя пользователя GitHub (Enter, если уже выполнен gh auth login): ")).strip() or None
+        configured = oauth_configure(root, origin, login, input_fn=input_fn, language=language)
     if configured.get("public_url", "").rstrip("/") != origin:
         return {"status": "oauth_origin_mismatch", "next": "Review existing OAuth configuration; no overwrite"}
     ensure_remote_service(root)
-    verify_local_oauth(root, origin)
+    verify_local_oauth(root, origin, language=language)
     if network.get("route") == "tailscale_funnel":
-        enable_funnel(root, input_fn=input_fn)
+        enable_funnel(root, input_fn=input_fn, language=language)
     elif network.get("route") == "direct_https":
-        answer = input_fn("Настройте HTTPS proxy и TCP 443 по инструкции. Enter — проверить, S — отложить: ").strip().lower()
+        answer = input_fn(tr("Configure the HTTPS proxy and TCP 443 using the guide. Enter to check, S to defer: ", "Настройте HTTPS-прокси и TCP 443 по инструкции. Enter — проверить, S — отложить: ")).strip().lower()
         if answer in ("s", "skip", "q"):
             return {"status": "pending_https_proxy", "public_url": origin, "next": "Run --setup to continue"}
     else:
         return {"status": "pending_network", "reason": "unknown_route"}
     verified = oauth_probe(origin)
     if verified.get("status") != "public_oauth_preflight_pass":
+        print(tr("Public HTTPS could not be verified. OAuth credentials are saved; check DNS, TLS and Funnel, then run --setup again.", "Не удалось проверить публичный HTTPS. Учётные данные OAuth сохранены; проверьте DNS, TLS и Funnel, затем повторите --setup."))
         return {"status": "pending_public_https", "public_url": origin, "probe": verified,
                 "next": "Run --setup to continue"}
-    print("В ChatGPT на сайте откройте Plugins → + → Add custom MCP server.")
-    print("Укажите OAuth и Server URL: " + origin + "/mcp")
-    print("Войдите через GitHub и проверьте system_info. Секреты в чат не отправляйте.")
+    print(tr("On the ChatGPT website, open Plugins → + → Add custom MCP server.", "На сайте ChatGPT откройте Плагины → + → Добавить пользовательский MCP-сервер."))
+    print(tr("Select OAuth and set Server URL: ", "Выберите OAuth и укажите URL сервера: ") + origin + "/mcp")
+    print(tr("Sign in through GitHub and check system_info. Never send secrets to chat.", "Войдите через GitHub и проверьте system_info. Секреты в чат не отправляйте."))
     return {"status": "pending_chatgpt_connection", "public_url": origin,
             "public_oauth_preflight": "passed", "chatgpt_oauth_verified": False}
 
@@ -220,9 +228,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--without-gui", action="store_true")
+    parser.add_argument("--language", choices=("en", "ru"))
     args = parser.parse_args()
     try:
-        result = setup(args.root, with_gui=not args.without_gui)
+        result = setup(args.root, with_gui=not args.without_gui, language=args.language)
     except (EOFError, KeyboardInterrupt):
         result = {"status": "pending_owner_interaction", "next": "Run --setup to continue"}
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

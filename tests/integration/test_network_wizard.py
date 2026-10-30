@@ -149,11 +149,11 @@ class NetworkWizardTests(unittest.TestCase):
         self.assertIn('HTTPS-домен', output)
 
     def test_guided_cli_dispatches_new_flow(self):
-        with patch.object(setup_network.sys, 'argv', ['setup_network.py', '--guided']), \
+        with patch.object(setup_network.sys, 'argv', ['setup_network.py', '--guided', '--language', 'en']), \
              patch.object(setup_network, 'guided_network', return_value={'status': 'ready_for_oauth'}) as guided, \
              patch('sys.stdout', new_callable=io.StringIO):
             self.assertEqual(setup_network.main(), 0)
-        guided.assert_called_once_with(setup_network.DEFAULT_ROOT, network=True)
+        guided.assert_called_once_with(setup_network.DEFAULT_ROOT, network=True, language='en')
 
     def test_tailscale_state_includes_interface_addresses(self):
         payload = {'BackendState': 'Running', 'Self': {'DNSName': 'mac.tailnet.ts.net.',

@@ -112,6 +112,8 @@ Resume setup in Terminal:
 ```sh
 python3 scripts/install_mac_control.py --setup
 ```
+Interactive installation and setup offer English or Russian and suggest the macOS language. Use `--language en` or `--language ru` to select explicitly. Third-party installer output may remain in its original language.
+
 
 `--update` reuses the verified GUI app without replacing it, preserving its TCC
 identity; it does not rerun the wizard. Resume with `--setup` as needed.

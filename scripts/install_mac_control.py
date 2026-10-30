@@ -502,12 +502,22 @@ def main() -> int:
                         help="Reviewed standalone ChatBridge checkout; enables installing dependency when absent")
     parser.add_argument("--chatbridge-url",
                         help="Existing local ChatBridge HTTP origin (default http://127.0.0.1:8787)")
+    parser.add_argument("--language", choices=("ru", "en"), help="Choose setup language")
     args = parser.parse_args()
+    selected_language = args.language
+    if args.install and sys.stdin.isatty() and selected_language is None:
+        try:
+            from scripts.setup_language import choose_language
+        except ModuleNotFoundError:
+            from setup_language import choose_language
+        selected_language = choose_language()
     info = paths(args.root)
     if args.setup:
         command = [sys.executable, str(SOURCE / "scripts/guided_setup.py"), "--root", str(info["root"])]
         if args.with_gui is False:
             command.append("--without-gui")
+        if selected_language:
+            command += ["--language", selected_language]
         return run(command, timeout=None, check=False).returncode
     if args.network_guide or args.network_diagnose or args.enable_funnel:
         choice = ("--guide" if args.network_guide
@@ -516,6 +526,8 @@ def main() -> int:
                    "--root", str(info["root"]), choice]
         if args.network and args.network_diagnose:
             command.append("--network")
+        if selected_language:
+            command += ["--language", selected_language]
         return run(command, timeout=None if args.enable_funnel else 110).returncode
     if args.github_oauth_login_test:
         launcher = info["current"] / ".venv/bin/python"
@@ -533,6 +545,8 @@ def main() -> int:
             command += ["--public-url", args.public_url]
         if args.github_login:
             command += ["--github-login", args.github_login]
+        if selected_language:
+            command += ["--language", selected_language]
         return run(command, timeout=None if args.setup_github_oauth else 120).returncode
     if args.plan:
         result = {"status": "plan_only", "root": str(info["root"]),
@@ -567,6 +581,8 @@ def main() -> int:
             command = [sys.executable, str(SOURCE / "scripts/guided_setup.py"), "--root", str(info["root"])]
             if args.with_gui is False:
                 command.append("--without-gui")
+            if selected_language:
+                command += ["--language", selected_language]
             return run(command, timeout=None, check=False).returncode
     print(json.dumps(result, indent=2), flush=True)
     return 0
