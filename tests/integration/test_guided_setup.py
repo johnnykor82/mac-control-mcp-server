@@ -244,6 +244,23 @@ class GuidedSetupTests(unittest.TestCase):
                 guided_setup.gui_permissions(self.root, language="en", input_fn=lambda _: self.fail("unexpected wait"))
         self.assertEqual([call.args[1] for call in gui.call_args_list], ["status", "request_accessibility"])
 
+    def test_funnel_public_failure_reports_acme_diagnostic(self):
+        origin = "https://owner.example.ts.net"
+        network = {"status": "ready_for_oauth", "route": "tailscale_funnel", "public_url": origin}
+        diagnostic = {"status": "acme_unreachable_from_setup", "daemon_connectivity_verified": False}
+        with patch.object(guided_setup, "gui_permissions", return_value=True), \
+             patch.object(guided_setup, "guided_network", return_value=network), \
+             patch.object(guided_setup, "oauth_check", return_value={"public_url": origin}), \
+             patch.object(guided_setup, "ensure_remote_service"), \
+             patch.object(guided_setup, "verify_local_oauth"), \
+             patch.object(guided_setup, "enable_funnel"), \
+             patch.object(guided_setup, "oauth_probe", return_value={"status": "public_oauth_preflight_failed"}), \
+             patch.object(guided_setup, "funnel_tls_diagnostics", return_value=diagnostic) as check:
+            result = guided_setup._setup_locked(self.root, input_fn=lambda _: "", language="ru")
+        self.assertEqual(result["status"], "pending_public_https")
+        self.assertEqual(result["certificate_diagnostics"], diagnostic)
+        check.assert_called_once_with(language="ru")
+
     def test_gui_call_preserves_unknown_operation_from_helper(self):
         current = self.root / "current"
         python = current / ".venv/bin/python"

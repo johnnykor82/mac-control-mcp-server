@@ -351,6 +351,40 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def funnel_tls_diagnostics(*, language: str = "ru") -> dict:
+    """Check ACME HTTPS from this process without requesting a certificate."""
+    directory = "https://acme-v02.api.letsencrypt.org/directory"
+    reachable = False
+    try:
+        # Keep default TLS verification and this process's proxy behavior;
+        # neither is evidence of the separate daemon's connectivity.
+        opener = urllib.request.build_opener(_NoRedirect())
+        request = urllib.request.Request(directory, headers={"Accept": "application/json"})
+        with opener.open(request, timeout=8) as response:
+            reachable = response.status == 200
+    except urllib.error.HTTPError as exc:
+        exc.close()
+    except (OSError, ValueError):
+        # Proxy/transport exceptions can contain credentials; never display them.
+        pass
+    print(text(language,
+        "Let's Encrypt ACME HTTPS is reachable from the setup process." if reachable else
+        "The setup process could not reach Let's Encrypt ACME HTTPS.",
+        "HTTPS Let's Encrypt ACME доступен из процесса настройки." if reachable else
+        "Из процесса настройки не удалось проверить доступ к HTTPS Let's Encrypt ACME."))
+    print(text(language,
+        "Tailscale may use a different network or proxy; this check does not verify daemon connectivity or certificate issuance.",
+        "Tailscale может использовать другую сеть или прокси; эта проверка не подтверждает доступ из демона или выдачу сертификата."))
+    print(text(language,
+        "Check Tailscale logs for ACME/certificate errors and its TLS certificate status in the admin console. Verify daemon access to " + directory + ", then retry --setup.",
+        "Проверьте журнал Tailscale на ошибки ACME/сертификата и статус TLS-сертификата в консоли администратора. Проверьте доступ демона к " + directory + ", затем повторите --setup."))
+    print(text(language,
+        "No certificate was requested and network settings were not changed.",
+        "Сертификат не запрашивался, настройки сети не изменялись."))
+    return {"status": "acme_reachable_from_setup" if reachable else "acme_unreachable_from_setup",
+            "daemon_connectivity_verified": False}
+
+
 def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
     configured = check_oauth(root)
     # Probe this Mac directly: inherited proxy settings and redirects must not

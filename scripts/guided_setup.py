@@ -12,12 +12,12 @@ import urllib.request
 
 try:
     from scripts.setup_language import choose_language, detect_language, text
-    from scripts.setup_network import guided_network, enable_funnel
+    from scripts.setup_network import guided_network, enable_funnel, funnel_tls_diagnostics
     from scripts.setup_github_oauth import check as oauth_check, configure as oauth_configure
     from scripts.setup_github_oauth import guide as oauth_guide, probe as oauth_probe
 except ImportError:
     from setup_language import choose_language, detect_language, text
-    from setup_network import guided_network, enable_funnel
+    from setup_network import guided_network, enable_funnel, funnel_tls_diagnostics
     from setup_github_oauth import check as oauth_check, configure as oauth_configure
     from setup_github_oauth import guide as oauth_guide, probe as oauth_probe
 
@@ -214,8 +214,11 @@ def _setup_locked(root, *, input_fn=input, with_gui=True, language=None):
     verified = oauth_probe(origin)
     if verified.get("status") != "public_oauth_preflight_pass":
         print(tr("Public HTTPS could not be verified. OAuth credentials are saved; check DNS, TLS and Funnel, then run --setup again.", "Не удалось проверить публичный HTTPS. Учётные данные OAuth сохранены; проверьте DNS, TLS и Funnel, затем повторите --setup."))
-        return {"status": "pending_public_https", "public_url": origin, "probe": verified,
-                "next": "Run --setup to continue"}
+        result = {"status": "pending_public_https", "public_url": origin, "probe": verified,
+                  "next": "Run --setup to continue"}
+        if network.get("route") == "tailscale_funnel":
+            result["certificate_diagnostics"] = funnel_tls_diagnostics(language=language)
+        return result
     print(tr("On the ChatGPT website, open Plugins → + → Add custom MCP server.", "На сайте ChatGPT откройте Плагины → + → Добавить пользовательский MCP-сервер."))
     print(tr("Select OAuth and set Server URL: ", "Выберите OAuth и укажите URL сервера: ") + origin + "/mcp")
     print(tr("Sign in through GitHub and check system_info. Never send secrets to chat.", "Войдите через GitHub и проверьте system_info. Секреты в чат не отправляйте."))
