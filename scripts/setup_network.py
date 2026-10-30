@@ -27,7 +27,7 @@ except ImportError:  # Allow direct execution: python scripts/setup_network.py
     from release_preflight import inspect
     from setup_github_oauth import check as check_oauth, public_origin
 
-DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 PORT = 3201
 
 

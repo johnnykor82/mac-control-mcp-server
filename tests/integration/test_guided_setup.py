@@ -190,7 +190,7 @@ class GuidedSetupTests(unittest.TestCase):
              patch.object(dependency, "_stop_owned_app", side_effect=lambda app: calls.append(app)) as stop, \
              patch.object(guided_setup, "_gui_call", side_effect=lambda *args: calls.append("status") or ready):
             self.assertEqual(guided_setup._restart_gui(self.root), ready)
-        app = Path.home() / "Applications" / dependency.gui.APP_NAME
+        app = self.root / "apps" / dependency.gui.APP_NAME
         stop.assert_called_once_with(app)
         self.assertEqual(calls, ["verify", app, "status"])
 

@@ -132,9 +132,9 @@ class ServerToolParityTests(unittest.TestCase):
     def test_installed_tool_parity_and_watcher_feature_gate(self):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder) / 'home'
-            data = Path(folder) / 'data'
-            data.mkdir()
-            helper = home / 'Applications/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer'
+            data = Path(folder) / 'home/MacControlMCP/data'
+            data.mkdir(parents=True)
+            helper = home / 'MacControlMCP/apps/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer'
             helper.parent.mkdir(parents=True)
             helper.touch()
             flags = data / 'feature_flags.json'

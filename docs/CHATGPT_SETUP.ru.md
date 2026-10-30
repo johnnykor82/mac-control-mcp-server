@@ -53,7 +53,7 @@ python3 scripts/install_mac_control.py --setup
 переиспользует GUI helper без замены; мастер возобновляется через `--setup`.
 
 GUI helper устанавливается по умолчанию отдельно как
-`~/Applications/MacControlMCPServer.app`. Установщик скачивает готовые universal
+`~/MacControlMCP/apps/MacControlMCPServer.app`. Установщик скачивает готовые universal
 GUI и Unicode clipboard helper из закреплённого релиза и сверяет SHA256 до
 распаковки. Обычная установка не компилирует helper и не требует Apple Command
 Line Tools. Бинарные файлы имеют ad hoc подпись, без Developer ID и
@@ -67,7 +67,7 @@ Line Tools. Бинарные файлы имеют ad hoc подпись, без
 Privacy & Security** и вручную разрешите helper доступ. Мастер открывает
 соответствующий раздел настроек; если это не удалось, перейдите туда вручную.
 Если приложения нет в списке, нажмите **+** и выберите
-`~/Applications/MacControlMCPServer.app`. Следуйте запросу
+`~/MacControlMCP/apps/MacControlMCPServer.app`. Следуйте запросу
 macOS о перезапуске. После нажатия Enter мастер перезапустит свой helper и повторно проверит разрешение; S — отложить.
 При отказе настройка остаётся `pending_gui_permissions`; продолжите через `--setup`.
 
@@ -124,7 +124,7 @@ GitHub используется через FastMCP OAuthProxy с `read:user`, б
 репозиториям; допускаются только настроенные числовые ID. Реальное владение
 аккаунтом проверяется последующим OAuth-входом.
 
-Файл `~/Library/Application Support/MacControl/MCPServer/data/remote_auth.json`
+Файл `~/MacControlMCP/data/remote_auth.json`
 создаётся с правами `0600` и содержит секрет и случайный ключ подписи. Не
 выводите его в чат или Git. Существующая конфигурация не перезаписывается;
 при несовпадении origin мастер остановится. Смена адреса, приложения, ID или
@@ -190,7 +190,7 @@ https://YOUR-DEVICE.YOUR-TAILNET.ts.net/mcp
 Для локального наблюдения вызовов откройте ещё одно окно Terminal:
 
 ```sh
-"$HOME/Library/Application Support/MacControl/MCPServer/current/bin/mclog"
+"$HOME/MacControlMCP/current/bin/mclog"
 ```
 
 Монитор показывает вызовы, ошибки и длительность; он не доказывает, что все права настроены. О содержимом журнала — [MCLOG.md](MCLOG.md).

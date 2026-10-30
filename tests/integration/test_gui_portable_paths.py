@@ -101,7 +101,7 @@ do {
 
     def test_default_uses_the_current_users_home(self):
         result = self.resolve()
-        root = "/Users/new-owner/Library/Application Support/MacControl/MCPServer/data"
+        root = "/Users/new-owner/MacControlMCP/data"
         self.assertEqual(result, {"data": root, "socket": root + "/run/maccontrol-gui.sock",
                                   "captures": root + "/run/gui-captures/"})
 

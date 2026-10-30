@@ -38,7 +38,7 @@ def require_build_tools() -> None:
 def verify_owned(install_root: Path) -> bool:
     """Validate app ownership and signature without changing or launching it."""
     root = install_root.expanduser().resolve()
-    app = Path.home() / "Applications" / APP_NAME
+    app = root.expanduser().resolve() / "apps" / APP_NAME
     record = root / "data/gui-owned.json"
     if record.parent.is_symlink() or record.is_symlink() or (record.exists() and not record.is_file()):
         raise RuntimeError("Untrusted GUI ownership record")
@@ -128,7 +128,7 @@ def build(install_root: Path) -> Path:
 
 def install(root: Path, candidate: Path) -> dict:
     verify_owned(root)
-    target = Path.home() / "Applications" / APP_NAME
+    target = root.expanduser().resolve() / "apps" / APP_NAME
     backups = root.expanduser().resolve() / "data/backups"
     target.parent.mkdir(parents=True, exist_ok=True)
     backups.mkdir(parents=True, exist_ok=True, mode=0o700)

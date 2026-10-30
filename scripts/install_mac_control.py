@@ -3,7 +3,7 @@
 
 This is NOT an installer for the public remote HTTPS/OAuth service.
 Run --plan first. --install provisions Python packages and writes under
-~/Library/Application Support/MacControl/MCPServer only (or --root).
+~/MacControlMCP only (or --root).
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ except ModuleNotFoundError:
     from runtime_tools import find_uv
 
 SOURCE = Path(__file__).resolve().parents[1]
-DEFAULT_ROOT = Path.home() / "Library" / "Application Support" / "MacControl" / "MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 COPY_DIRS = ("src", "scripts", "bin", "requirements")
 COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "AGENT_WORKSPACE_POLICY.md", "SECURITY.md", "LICENSE",
@@ -350,7 +350,7 @@ def _uninstall_locked(root: Path) -> dict:
         if ownership.is_symlink():
             raise RuntimeError("Untrusted Mac Control MCP Server GUI ownership record")
         owned = json.loads(ownership.read_text())
-        app = Path.home() / "Applications/MacControlMCPServer.app"
+        app = root / "apps/MacControlMCPServer.app"
         if owned != {"app": str(app), "bundle": "org.maccontrol.mcpserver.gui",
                      "installed_by": str(root)}:
             raise RuntimeError("GUI ownership record is inconsistent")
@@ -371,6 +371,13 @@ def _uninstall_locked(root: Path) -> dict:
     if _remote_plist_exists():
         _remote_service_module().remove_if_installed(root)
     if app is not None and app.exists():
+        # The helper may still be serving GUI requests: stop the exact owned
+        # process before removing its executable.
+        try:
+            from scripts.setup_gui_dependency import _stop_owned_app
+        except ModuleNotFoundError:
+            from setup_gui_dependency import _stop_owned_app
+        _stop_owned_app(app)
         # Keep a recoverable backup in the user's preserved data folder.
         backup = root / "data/backups" / ("gui-uninstalled-" + os.urandom(6).hex() + ".app")
         backup.parent.mkdir(parents=True, exist_ok=True)
@@ -514,7 +521,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         temp.chmod(0o600)
         temp.replace(flags)
         print("GUI helper " + gui_status + ". Owner must grant Accessibility and Screen Recording "
-              "in System Settings → Privacy & Security for ~/Applications/MacControlMCPServer.app. "
+              "in System Settings → Privacy & Security for ~/MacControlMCP/apps/MacControlMCPServer.app. "
               "Installation cannot grant TCC permissions; interactive setup starts the helper "
               "and requests owner approval.", file=sys.stderr)
     if not with_watcher:
@@ -537,6 +544,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     _activate_release_locked(info["root"], dest)
     watcher_status = (_watcher_service_module().status(root)["status"]
                       if _watcher_enabled(root, dest) else "disabled")
+    _install_manager_launcher(info["root"])
     pointer = info["current"]
     return {"status": "installed", "watcher": watcher_status, "release": str(dest),
             "current": str(pointer), "data": str(data),
@@ -544,6 +552,41 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             "entrypoint": str(pointer / "bin/mac-control-stdio-mcp.sh"),
             "native_gui": gui_status,
             "remote_https_oauth": "EXPERIMENTAL_UNVERIFIED"}
+
+
+
+def _install_manager_launcher(root: Path) -> None:
+    """Keep only one command launcher outside the immutable release snapshots."""
+    target = root / "bin/maccontrol"
+    source = SOURCE / "bin/maccontrol"
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if target.is_symlink() or (target.exists() and not target.is_file()):
+        raise RuntimeError("Refusing unsafe Mac Control CLI launcher")
+    if target.exists() and target.stat().st_uid != os.getuid():
+        raise PermissionError("Existing Mac Control CLI is not owner-managed")
+    pending = target.with_name(".maccontrol-pending-" + os.urandom(6).hex())
+    try:
+        shutil.copy2(source, pending)
+        pending.chmod(0o700)
+        pending.replace(target)
+    finally:
+        pending.unlink(missing_ok=True)
+
+
+def purge(root: Path) -> dict:
+    """Delete a fully owned default installation only, after stopping owned services."""
+    root = root.expanduser().absolute()
+    if root != DEFAULT_ROOT or root.is_symlink():
+        raise RuntimeError("Full deletion allowed only at ~/MacControlMCP")
+    marker = root / ".mac-control-installer-owned"
+    if not marker.is_file() or marker.is_symlink():
+        raise RuntimeError("Refusing to purge a directory without installer ownership")
+    with _lifecycle_lock(root) as locked_root:
+        result = _uninstall_locked(locked_root)
+        shutil.rmtree(locked_root)
+    return {"status": "purged", "root": str(root),
+            "owned_services_removed": True, "chatbridge_preserved": True,
+            "releases_removed": result["removed_releases"]}
 
 
 def status(root: Path) -> dict:
@@ -568,6 +611,8 @@ def main() -> int:
     action.add_argument("--update", action="store_true", help="Install new version, preserve previous for rollback")
     action.add_argument("--rollback", action="store_true", help="Restore previous verified release")
     action.add_argument("--uninstall", action="store_true", help="Remove installed binaries only; retain data")
+    action.add_argument("--purge", action="store_true", help="Delete entire owned ~/MacControlMCP after confirmation")
+    parser.add_argument("--yes", action="store_true", help="Confirm previously approved full removal")
     action.add_argument("--github-oauth-guide", action="store_true", help="Show GitHub OAuth App registration steps")
     action.add_argument("--setup-github-oauth", action="store_true", help="Owner-guided GitHub OAuth registration and credential setup")
     action.add_argument("--github-oauth-check", action="store_true", help="Validate configured GitHub OAuth without showing credentials")
@@ -664,6 +709,10 @@ def main() -> int:
         result = rollback(args.root)
     elif args.uninstall:
         result = uninstall(args.root)
+    elif args.purge:
+        if not args.yes:
+            raise RuntimeError("Use --yes only after explicit full-removal confirmation")
+        result = purge(args.root)
     else:
         result = install(args.root, args.with_chatbridge, args.with_gui,
                          args.chatbridge_source, args.chatbridge_url, with_watcher=args.with_watcher)

@@ -27,7 +27,7 @@ try:
 except ImportError:
     from setup_github_oauth import check as check_oauth
 
-DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 LABEL = "org.maccontrol.mcpserver.remote"
 PORT = 3201
 POLL_COUNT = 40

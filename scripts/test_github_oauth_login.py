@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 import sys
 
-DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 
 
 async def verify_login(endpoint: str) -> dict:

@@ -57,7 +57,7 @@ def _gui_call(root, operation):
     python = current / ".venv/bin/python"
     data = root / "data"
     env = {**os.environ, "MAC_CONTROL_DATA_ROOT": str(data),
-           "MAC_CONTROL_GUI_APP": str(Path.home() / "Applications/MacControlMCPServer.app"),
+           "MAC_CONTROL_GUI_APP": str(root / "apps/MacControlMCPServer.app"),
            "PYTHONPATH": str(current / "src"), "PYTHONNOUSERSITE": "1"}
     code = ("import json\nfrom mac_control.legacy_handlers.gui_ops import _call\n"
             "try:\n    v=_call(" + repr(operation) + ", timeout=90)\n"
@@ -80,7 +80,7 @@ def _restart_gui(root):
         import setup_gui_dependency as dependency
     if not dependency.gui.verify_owned(root):
         raise RuntimeError("Cannot restart: owned GUI helper is missing")
-    app = Path.home() / "Applications" / dependency.gui.APP_NAME
+    app = root / "apps" / dependency.gui.APP_NAME
     dependency._stop_owned_app(app)
     # The normal IPC recovery relaunches the helper with this installation's data root.
     return _gui_call(root, "status")
@@ -118,7 +118,7 @@ def gui_permissions(root, *, input_fn=input, language=None):
                 continue
         print(tr(label + " permission is not yet confirmed for MacControlMCPServer.app.", "Разрешение " + label + " пока не подтверждено для MacControlMCPServer.app."))
         print(tr("Enable Mac Control MCP Server in System Settings → Privacy & Security → " + label + ".", "Включите Mac Control MCP Server в Системные настройки → Конфиденциальность и безопасность → " + label + "."))
-        print(tr("If the app is missing, click + and select ~/Applications/MacControlMCPServer.app.", "Если приложения нет в списке, нажмите + и выберите ~/Applications/MacControlMCPServer.app."))
+        print(tr("If the app is missing, click + and select ~/MacControlMCP/apps/MacControlMCPServer.app.", "Если приложения нет в списке, нажмите + и выберите ~/MacControlMCP/apps/MacControlMCPServer.app."))
         try:
             opened = subprocess.run(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?" + pane],
                                     check=False, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -12,7 +12,7 @@ import time
 
 DEFAULT_LOG = (Path(os.environ["MAC_CONTROL_DATA_ROOT"]) / "logs"
                if os.environ.get("MAC_CONTROL_DATA_ROOT") else
-               Path.home() / "Library/Application Support/MacControl/MCPServer/data/logs")
+               Path.home() / "MacControlMCP/data/logs")
 SECRET = re.compile(r"(token|secret|password|passwd|api.?key|authorization|cookie|credential|bearer|private.?key)", re.I)
 
 

@@ -74,14 +74,14 @@ class PrebuiltTests(unittest.TestCase):
     def test_installs_universal_app_and_clipboard_without_developer_tools(self):
         result = dependency.ensure(self.root, self.release)
         self.assertEqual(result['native_gui'], 'installed')
-        self.assertTrue((self.home / 'Applications' / gui.APP_NAME).is_dir())
+        self.assertTrue((self.root / 'apps' / gui.APP_NAME).is_dir())
         self.assertEqual((self.release / 'build/gui_clipboard_paste').read_bytes(), universal())
         self.assertTrue(all(c[0] in ('/usr/bin/codesign', '/bin/ps') for c in self.commands))
         self.assertEqual(json.loads((self.root / 'data/gui-owned.json').read_text())['installed_by'], str(self.root.resolve()))
 
     def test_default_reuses_app_and_refreshes_clipboard(self):
         dependency.ensure(self.root, self.release)
-        app = self.home / 'Applications' / gui.APP_NAME
+        app = self.root / 'apps' / gui.APP_NAME
         binary = app / 'Contents/MacOS' / gui.EXEC_NAME
         binary.write_bytes(b'old signed app')
         result = dependency.ensure(self.root, self.release)
@@ -91,7 +91,7 @@ class PrebuiltTests(unittest.TestCase):
 
     def test_explicit_replacement_keeps_previous_backup(self):
         dependency.ensure(self.root, self.release)
-        binary = self.home / 'Applications' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
+        binary = self.root / 'apps' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
         binary.write_bytes(b'old app')
         result = dependency.ensure(self.root, self.release, replace=True)
         self.assertEqual(result['native_gui'], 'installed')
@@ -101,7 +101,7 @@ class PrebuiltTests(unittest.TestCase):
 
     def test_running_owned_app_stops_exact_user_process_before_replacement(self):
         dependency.ensure(self.root, self.release)
-        executable = self.home / 'Applications' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
+        executable = self.root.resolve() / 'apps' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
         ps_outputs = iter([f'{dependency.os.getuid()} 123 {executable} --serve\n', ''])
         def run(argv, **kwargs):
             return subprocess.CompletedProcess(argv, 0, stdout=next(ps_outputs) if argv[0] == '/bin/ps' else '')
@@ -112,7 +112,7 @@ class PrebuiltTests(unittest.TestCase):
 
     def test_unresponsive_owned_app_fails_before_download(self):
         dependency.ensure(self.root, self.release)
-        executable = self.home / 'Applications' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
+        executable = self.root.resolve() / 'apps' / gui.APP_NAME / 'Contents/MacOS' / gui.EXEC_NAME
         output = f'{dependency.os.getuid()} 123 {executable} --serve\n'
         with patch.object(subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=output)), patch.object(dependency.os, 'kill') as kill, patch.object(dependency.time, 'sleep'):
             with self.assertRaisesRegex(RuntimeError, 'did not exit'):
@@ -122,14 +122,14 @@ class PrebuiltTests(unittest.TestCase):
 
     def test_group_writable_owned_app_refused_before_download(self):
         dependency.ensure(self.root, self.release)
-        app = self.home / 'Applications' / gui.APP_NAME
+        app = self.root / 'apps' / gui.APP_NAME
         app.chmod(0o777)
         with self.assertRaisesRegex(RuntimeError, 'ownership or permissions'):
             dependency.ensure(self.root, self.release)
         self.assertEqual(self.download.call_count, 1)
 
     def test_unknown_app_refused_before_network(self):
-        (self.home / 'Applications' / gui.APP_NAME).mkdir(parents=True)
+        (self.root / 'apps' / gui.APP_NAME).mkdir(parents=True)
         with self.assertRaisesRegex(RuntimeError, 'owner metadata'):
             dependency.ensure(self.root, self.release, replace=True)
         self.download.assert_not_called()
@@ -138,7 +138,7 @@ class PrebuiltTests(unittest.TestCase):
         with patch.object(dependency, 'RELEASE_SHA256', '0' * 64):
             with self.assertRaisesRegex(RuntimeError, 'SHA256'):
                 dependency.ensure(self.root, self.release)
-        self.assertFalse((self.home / 'Applications' / gui.APP_NAME).exists())
+        self.assertFalse((self.root / 'apps' / gui.APP_NAME).exists())
         self.assertFalse((self.release / 'build/gui_clipboard_paste').exists())
 
     def test_unpublished_pin_fails_without_download(self):

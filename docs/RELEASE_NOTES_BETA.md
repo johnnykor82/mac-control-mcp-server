@@ -45,3 +45,10 @@ Mac Control MCP Server предоставляет авторизованному
 - Expand English/Russian README, module overview, complete 122-tool catalog, practical Watcher guide and FAQ; include the guides in installed releases.
 - Fix packaged interactive SSH imports. Local identity inspection no longer targets a developer's fixed host; effective SSH configuration is inspected only for an explicitly supplied approved profile.
 - Watcher runtime remains as introduced in beta.16. Real notification delivery on the upgraded target Mac remains the next acceptance step.
+
+## v0.1.0-beta.18 — consolidated, self-updating Mac Control
+
+- All Mac Control-managed code, versions, GUI helper, data and workspaces now reside in `~/MacControlMCP`.
+- New `~/MacControlMCP/bin/maccontrol` CLI updates from the latest complete published GitHub beta, verifies SHA256SUMS, and supports status, rollback and uninstall from any directory.
+- `uninstall --all` performs confirmed complete deletion of Mac Control-owned files and services, preserving the independent ChatBridge installation.
+- Legacy roots are deliberately not migrated automatically. A clean reinstall is supported after uninstalling the old instance.

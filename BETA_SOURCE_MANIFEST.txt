@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 146
+Included files: 149
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -14,6 +14,7 @@ SECURITY.md
 bin/dev-stdio-mcp.sh
 bin/mac-control-remote-mcp.sh
 bin/mac-control-stdio-mcp.sh
+bin/maccontrol
 bin/mclog
 contracts/current-dynamic-operations.json
 contracts/stable-parity-20261023.json
@@ -46,6 +47,7 @@ scripts/guided_setup.py
 scripts/install_mac_control.py
 scripts/install_manifest.txt
 scripts/mac_control_smoke.py
+scripts/maccontrol_manager.py
 scripts/mclog.py
 scripts/package_gui_release.py
 scripts/release_audit.py
@@ -110,6 +112,7 @@ tests/integration/test_background_feature_flag.py
 tests/integration/test_chatbridge_bootstrap.py
 tests/integration/test_chatbridge_browser_adapter.py
 tests/integration/test_chatbridge_dependency.py
+tests/integration/test_consolidated_install.py
 tests/integration/test_fastmcp_metadata.py
 tests/integration/test_github_oauth_onboarding.py
 tests/integration/test_gui_default_install.py

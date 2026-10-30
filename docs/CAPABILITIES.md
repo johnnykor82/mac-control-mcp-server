@@ -36,7 +36,7 @@ the separately installed native helper.
 The default workspace is:
 
 ```text
-~/Library/Application Support/MacControl/MCPServer/data/workspace
+~/MacControlMCP/data/workspace
 ```
 
 It contains `projects`, `scratch`, `scratch/tmp`, `artifacts`, `downloads`, and
@@ -163,7 +163,7 @@ No SSH credentials or production host inventory is supplied by installation.
 The helper exposes displays, windows, Accessibility trees, screenshots, app
 opening/focus, mouse actions, scrolling, key presses, text input, and title waits.
 These are useful when a desktop application has no suitable API or CLI.
-The helper is installed under `~/Applications/MacControlMCPServer.app` by default.
+The helper is installed under `~/MacControlMCP/apps/MacControlMCPServer.app` by default.
 Its normal prebuilt installation does not require compiling Swift locally.
 
 macOS Accessibility and Screen Recording permissions are separate owner grants.

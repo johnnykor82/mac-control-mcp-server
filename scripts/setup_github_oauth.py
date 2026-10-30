@@ -28,7 +28,7 @@ except ImportError:
     from setup_language import choose_language, detect_language, text
 
 
-DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 GITHUB_NEW_APP_URL = "https://github.com/settings/applications/new"
 GITHUB_USER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_]{8,128}$")

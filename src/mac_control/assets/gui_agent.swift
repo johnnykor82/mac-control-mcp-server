@@ -28,7 +28,7 @@ struct GUIRuntimePaths {
             selected = arguments[index + 1]
         } else {
             let override = (environment["MAC_CONTROL_DATA_ROOT"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            selected = override.isEmpty ? home + "/Library/Application Support/MacControl/MCPServer/data" : override
+            selected = override.isEmpty ? home + "/MacControlMCP/data" : override
         }
         let expanded = (selected as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/"), !expanded.utf8.contains(0) else {

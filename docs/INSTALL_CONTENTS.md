@@ -7,22 +7,22 @@ The portable second Mac is the intended independent acceptance-test host.
 
 | Component | Destination | Status |
 | --- | --- | --- |
-| Pinned Python 3.13 runtime and dependencies | MCPServer/releases/<version>/.venv | Tested on developer's Mac |
-| Mac Control MCP local stdio server, tools and library | MCPServer/releases/<version> | Tested |
+| Pinned Python 3.13 runtime and dependencies | MCPServer/~/MacControlMCP/releases/<version>/.venv | Tested on developer's Mac |
+| Mac Control MCP local stdio server, tools and library | MCPServer/~/MacControlMCP/releases/<version> | Tested |
 | MCPServer/current and previous pointers | Mac Control MCP Server root | Tested update/rollback |
-| Agent workspace | MCPServer/data/workspace | Created at install |
-| Workspace subdirectories: projects, scratch, scratch/tmp, artifacts, downloads, logs | MCPServer/data/workspace | Created at install |
-| mclog read-only terminal audit viewer and launcher | releases/<version>/scripts/mclog.py and bin/mclog | Tested |
-| Owner-only metadata audit JSONL (7 daily backups) | MCPServer/data/logs/audit.jsonl* | Tested |
+| Agent workspace | ~/MacControlMCP/data/workspace | Created at install |
+| Workspace subdirectories: projects, scratch, scratch/tmp, artifacts, downloads, logs | ~/MacControlMCP/data/workspace | Created at install |
+| mclog read-only terminal audit viewer and launcher | ~/MacControlMCP/releases/<version>/scripts/mclog.py and bin/mclog | Tested |
+| Owner-only metadata audit JSONL (7 daily backups) | ~/MacControlMCP/data/logs/audit.jsonl* | Tested |
 | MCP server instructions and workspace_policy tool | MCP initialization/tool catalogue | Source and test verified |
 | Shell temp/cache defaults inside workspace | terminal environment | Source and test verified |
-| Owner data/configuration and recoverable backups | MCPServer/data | Preserved on uninstall |
+| Owner data/configuration and recoverable backups | ~/MacControlMCP/data | Preserved on uninstall |
 | Installer lifecycle: plan/install/setup/update/rollback/status/uninstall | install_mac_control.py | Test-verified |
 | Read-only public IP and transport capability diagnosis | setup_network.py | Tests; not external connectivity proof |
 | Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Unit-tested, public E2E pending |
 | Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Guarded tests, external validation pending |
-| Prebuilt universal native GUI helper (macOS 14+, Apple Silicon/Intel) | ~/Applications/MacControlMCPServer.app | Pinned SHA256 download; install if absent, reuse verified owner-managed app; TCC owner approval required |
-| Prebuilt universal Unicode clipboard helper | releases/<version>/build/gui_clipboard_paste | Provisioned from the same pinned native archive without compilation |
+| Prebuilt universal native GUI helper (macOS 14+, Apple Silicon/Intel) | ~/MacControlMCP/apps/MacControlMCPServer.app | Pinned SHA256 download; install if absent, reuse verified owner-managed app; TCC owner approval required |
+| Prebuilt universal Unicode clipboard helper | ~/MacControlMCP/releases/<version>/build/gui_clipboard_paste | Provisioned from the same pinned native archive without compilation |
 | Interactive connection wizard | guided_setup.py | TCC, network selection, OAuth, service and public checks; ChatGPT manual |
 | Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Configured after OAuth by setup; live remote E2E pending |
 | Smoke test for installed MCP file ops and optional browser | mac_control_smoke.py | Tested |
@@ -77,8 +77,8 @@ Tailscale routes and the user's VPN/Exit Node selection remain unchanged.
 ## Default folder layout
 
 ```text
-~/Library/Application Support/MacControl/MCPServer/
-├── current -> releases/<version>
+~/MacControlMCP/
+├── current -> ~/MacControlMCP/releases/<version>
 ├── previous -> releases/<older-version>
 ├── releases/
 │   └── <version>/

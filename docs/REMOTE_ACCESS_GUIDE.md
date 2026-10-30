@@ -56,7 +56,7 @@ The manual configuration below is reference material, not the default path.
 4. Obtain the **numeric** GitHub user ID(s) authorized to use this Mac.
 5. Generate a strong signing key locally and keep it private.
 6. Create the file below under
-   ~/Library/Application Support/MacControl/MCPServer/data/remote_auth.json
+   ~/MacControlMCP/data/remote_auth.json
    with owner-only permissions (0600). Do not put this file in Git.
 
 Example JSON **with deliberately invalid placeholder values**:

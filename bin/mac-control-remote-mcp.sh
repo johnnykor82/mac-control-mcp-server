@@ -7,6 +7,7 @@ DATA=$(CDPATH='' cd -- "$ROOT/../../data" && pwd -P)
 unset PYTHONHOME PYTHONPATH
 export PYTHONPATH="$ROOT/src"
 export MAC_CONTROL_DATA_ROOT="$DATA"
+export MAC_CONTROL_GUI_APP="$DATA/../apps/MacControlMCPServer.app"
 if [ -f "$DATA/chatbridge_connection.txt" ]; then
     IFS= read -r MACCONTROL_CHATBRIDGE_URL < "$DATA/chatbridge_connection.txt" || true
     export MACCONTROL_CHATBRIDGE_URL

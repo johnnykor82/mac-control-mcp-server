@@ -36,7 +36,7 @@ Mac Control MCP Server связывает авторизованного ИИ-а
 Рабочая папка по умолчанию:
 
 ```text
-~/Library/Application Support/MacControl/MCPServer/data/workspace
+~/MacControlMCP/data/workspace
 ```
 
 В ней создаются `projects`, `scratch`, `scratch/tmp`, `artifacts`, `downloads`
@@ -168,7 +168,7 @@ SSH использует ключи владельца и строгую про�
 Нативный помощник предоставляет список дисплеев и окон, дерево Accessibility,
 снимки экрана, открытие приложений, фокус, мышь, прокрутку, клавиши, ввод текста
 и ожидание заголовка окна. Это полезно для приложений без подходящего API или CLI.
-По умолчанию помощник находится в `~/Applications/MacControlMCPServer.app`.
+По умолчанию помощник находится в `~/MacControlMCP/apps/MacControlMCPServer.app`.
 Обычная установка готового приложения не требует локальной компиляции Swift.
 
 «Универсальный доступ» и «Запись экрана» — отдельные разрешения владельца macOS.

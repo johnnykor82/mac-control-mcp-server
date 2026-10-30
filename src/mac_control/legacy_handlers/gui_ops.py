@@ -19,8 +19,8 @@ from . import gui_ipc_recovery as _gui_ipc
 
 BASE = DATA_ROOT
 GUI_APP = (Path(os.environ["MAC_CONTROL_GUI_APP"]).expanduser() if os.environ.get("MAC_CONTROL_GUI_APP")
-           else Path.home() / "Applications" / ("MacControlMCPServer.app" if os.environ.get("MAC_CONTROL_DATA_ROOT")
-                                                 else "MacControlGUIDev.app"))
+           else (BASE.parent / "apps/MacControlMCPServer.app" if os.environ.get("MAC_CONTROL_DATA_ROOT")
+                 else Path.home() / "Applications/MacControlGUIDev.app"))
 GUI_EXECUTABLE = "MacControlMCPServer" if GUI_APP.name == "MacControlMCPServer.app" else "MacControlGUIDev"
 HELPER = GUI_APP / "Contents" / "MacOS" / GUI_EXECUTABLE
 CAPTURES = BASE / "run" / "gui-captures"

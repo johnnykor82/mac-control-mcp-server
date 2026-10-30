@@ -14,7 +14,7 @@ from scripts import install_mac_control as installer
 
 
 def managed_app(root, home):
-    app = home / "Applications" / gui.APP_NAME
+    app = root / "apps" / gui.APP_NAME
     binary = app / "Contents/MacOS" / gui.EXEC_NAME
     binary.parent.mkdir(parents=True)
     binary.write_text("existing binary")

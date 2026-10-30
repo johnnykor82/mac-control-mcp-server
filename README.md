@@ -103,14 +103,40 @@ Use a reviewed published release of ChatBridge.
 Requires macOS, Python 3.9+ for bootstrap, Google Chrome and a compatible MCP client. Native helpers require macOS 14+ on Apple Silicon or Intel. The installer provisions isolated Python 3.13 using [uv](https://docs.astral.sh/uv/). Review the source first.
 
 ```sh
-git clone https://github.com/johnnykor82/mac-control-mcp-server.git
-cd mac-control-mcp-server
-python3 scripts/release_preflight.py --json || [ "$?" -eq 2 ]
-python3 scripts/release_audit.py --strict
-python3 scripts/install_mac_control.py --plan
-python3 scripts/install_mac_control.py --install
-python3 scripts/install_mac_control.py --status
+mkdir -p "$HOME/MacControlMCP"
+git clone https://github.com/johnnykor82/mac-control-mcp-server.git "$HOME/MacControlMCP/source"
+python3 "$HOME/MacControlMCP/source/scripts/release_preflight.py" --json || [ "$?" -eq 2 ]
+python3 "$HOME/MacControlMCP/source/scripts/release_audit.py" --strict
+python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --plan
+python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --install
+"$HOME/MacControlMCP/bin/maccontrol" status
 ```
+
+### Managing a consolidated installation
+
+All Mac Control-owned files live in **`~/MacControlMCP`**: `source/` for the
+initial checkout, versioned `releases/`, `current`, `previous`, `apps/`
+for the native GUI, `data/` for workspace, configuration, logs and backups,
+and the `bin/maccontrol` launcher.
+
+Run these commands from **any working directory**. Updating downloads the latest
+published GitHub beta with its SHA256SUMS, validates the archive, and activates
+the new release. No source checkout or `git pull` is required for updates:
+
+```sh
+"$HOME/MacControlMCP/bin/maccontrol" update
+"$HOME/MacControlMCP/bin/maccontrol" status
+"$HOME/MacControlMCP/bin/maccontrol" rollback
+"$HOME/MacControlMCP/bin/maccontrol" uninstall       # preserve data
+"$HOME/MacControlMCP/bin/maccontrol" uninstall --all # erase all (type DELETE)
+```
+
+Complete removal also stops and removes only Mac Control-owned LaunchAgents in
+`~/Library/LaunchAgents`. **ChatBridge remains independent**: its state, Chrome
+profile and LaunchAgent are not deleted. macOS privacy permissions remain under
+System Settings. Existing legacy installations are not automatically migrated:
+uninstall the old installation through its original installer, then install this
+new layout from scratch.
 
 Run `--install` in Terminal. It checks the local ChatBridge API first. If absent,
 it downloads the pinned release, checks SHA256 before extracting or executing,
@@ -154,7 +180,7 @@ Chrome. If API authentication is enabled, use an authenticated client for wake
 and status checks.
 
 Default `--install` installs the GUI helper under
-`~/Applications/MacControlMCPServer.app`, or reuses the verified helper owned by
+`~/MacControlMCP/apps/MacControlMCPServer.app`, or reuses the verified helper owned by
 this installation. It downloads prebuilt universal GUI and Unicode clipboard
 helpers from the pinned release and verifies SHA256 before extraction. Normal
 installation does not compile helpers or require Apple Command Line Tools.
@@ -193,7 +219,7 @@ runs the installed `bin/mac-control-stdio-mcp.sh` launcher.
 
 Agent-created files, clones, temporary outputs, downloads and artifacts belong in:
 
-`~/Library/Application Support/MacControl/MCPServer/data/workspace`
+`~/MacControlMCP/data/workspace`
 
 This is conveyed by MCP server instructions and the `workspace_policy` tool. Writing elsewhere requires an explicit owner instruction or necessary OS-specific service setup. **It is a behavioral convention, not an OS-enforced sandbox.**
 
@@ -210,11 +236,11 @@ scroll, and `q` to exit.
 After installing Mac Control, launch it from a separate terminal:
 
 ```sh
-"$HOME/Library/Application Support/MacControl/MCPServer/current/bin/mclog"
+"$HOME/MacControlMCP/current/bin/mclog"
 ```
 
 The bundled executable automatically reads
-`~/Library/Application Support/MacControl/MCPServer/data/logs/audit.jsonl*`.
+`~/MacControlMCP/data/logs/audit.jsonl*`.
 Use `--log-dir PATH` to inspect another authorized audit directory.
 For privacy, the public installer stores **tool names, times, statuses and
 execution durations only**, not command arguments, file contents, responses
@@ -337,7 +363,7 @@ an independent cloud service nor an additional AI model.
 
 ### Where are projects and state stored?
 
-By default under `~/Library/Application Support/MacControl/MCPServer/data/`.
+By default under `~/MacControlMCP/data/`.
 Agent projects use `data/workspace/`; Watcher state uses `data/run/watcher/`.
 Updates retain data. Older customized servers require a separate configuration
 migration. Never publish credentials or browser profiles in a public repository.

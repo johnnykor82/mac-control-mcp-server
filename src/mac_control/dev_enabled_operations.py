@@ -152,7 +152,7 @@ def operation_enabled(name: str) -> bool:
                 and (Path(__file__).parent / "watcher_runtime/__main__.py").is_file())
     if name.startswith("gui_"):
         return (flags.get("native_gui") is True and
-                (Path.home() / "Applications/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer").is_file())
+                (DATA_ROOT.parent / "apps/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer").is_file())
     if name.startswith(("chrome_chat_", "chrome_orchestrator_")):
         return flags.get("background_browser") is True
     return True

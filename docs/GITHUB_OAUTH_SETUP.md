@@ -37,7 +37,7 @@ prompt. Never paste Client Secret into an AI conversation or command line.
 
 An owner-only file (0600) is created under:
 
-    ~/Library/Application Support/MacControl/MCPServer/data/remote_auth.json
+    ~/MacControlMCP/data/remote_auth.json
 
 Containing the client ID, client secret, numeric authorized owner ID,
 public URL and randomly generated JWT signing key. Existing secrets are

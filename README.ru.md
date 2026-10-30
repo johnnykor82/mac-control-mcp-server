@@ -108,14 +108,44 @@ MCP-клиента. Не вставляйте ключ в чат или аргу
 Требуются macOS, Python 3.9+ для bootstrap, Google Chrome и совместимый MCP-клиент. Нативные helper требуют macOS 14+ на Apple Silicon или Intel. Установщик создаёт изолированный Python 3.13 через [uv](https://docs.astral.sh/uv/). Перед запуском изучите исходники.
 
 ```sh
-git clone https://github.com/johnnykor82/mac-control-mcp-server.git
-cd mac-control-mcp-server
-python3 scripts/release_preflight.py --json || [ "$?" -eq 2 ]
-python3 scripts/release_audit.py --strict
-python3 scripts/install_mac_control.py --plan
-python3 scripts/install_mac_control.py --install
-python3 scripts/install_mac_control.py --status
+mkdir -p "$HOME/MacControlMCP"
+git clone https://github.com/johnnykor82/mac-control-mcp-server.git "$HOME/MacControlMCP/source"
+python3 "$HOME/MacControlMCP/source/scripts/release_preflight.py" --json || [ "$?" -eq 2 ]
+python3 "$HOME/MacControlMCP/source/scripts/release_audit.py" --strict
+python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --plan
+python3 "$HOME/MacControlMCP/source/scripts/install_mac_control.py" --install
+"$HOME/MacControlMCP/bin/maccontrol" status
 ```
+
+### Управление установленным Mac Control
+
+Все собственные файлы Mac Control находятся в **`~/MacControlMCP`**:
+`source/` (исходники первичной установки), `releases/` (версии Python),
+`current`, `previous`, `apps/` (GUI), `data/` (настройки, рабочие файлы,
+журналы и резервные копии) и `bin/maccontrol`.
+
+Команды работают **из любой папки** и больше не требуют `git pull`:
+при обновлении выбирается последний опубликованный beta-релиз GitHub, скачиваются
+архив и SHA256SUMS, проверяется контрольная сумма, затем устанавливается новая
+версия с сохранением предыдущей для отката.
+
+```sh
+"$HOME/MacControlMCP/bin/maccontrol" update
+"$HOME/MacControlMCP/bin/maccontrol" status
+"$HOME/MacControlMCP/bin/maccontrol" rollback
+"$HOME/MacControlMCP/bin/maccontrol" uninstall       # оставить данные
+"$HOME/MacControlMCP/bin/maccontrol" uninstall --all # удалить всё, требуется ввод DELETE
+```
+
+Пользовательский Mac Control целиком удаляется через `uninstall --all`, включая
+исходники `source`, GUI и рабочие данные. Установщик также останавливает и
+удаляет зарегистрированные им службы Mac Control из `~/Library/LaunchAgents`.
+**ChatBridge остаётся независимым**: его процесс, браузерный профиль, файлы и
+LaunchAgent не удаляются. Разрешения macOS управляются в «Системных настройках».
+
+Старые установки по пути `~/Library/Application Support/MacControl/MCPServer`
+не переносятся автоматически: для новой структуры используйте чистую установку,
+предварительно удалив прежнюю штатным установщиком старой версии.
 
 Запускайте `--install` в Terminal. Установщик сначала проверяет API ChatBridge.
 При отсутствии сервиса он скачивает закреплённый релиз, сверяет SHA256 до
@@ -157,7 +187,7 @@ Preflight возвращает код 2, если uv ещё отсутствуе
 30 минут; после таймаута сначала проверьте состояние ChatBridge.
 
 Стандартный `--install` устанавливает GUI helper в
-`~/Applications/MacControlMCPServer.app` или переиспользует проверенный helper
+`~/MacControlMCP/apps/MacControlMCPServer.app` или переиспользует проверенный helper
 этой установки. Он скачивает готовые universal GUI и Unicode clipboard helper
 из закреплённого релиза и сверяет SHA256 до распаковки. Обычная установка не
 компилирует helper и не требует Apple Command Line Tools. Бинарные файлы имеют
@@ -197,7 +227,7 @@ helper готовится для нового релиза. После этог�
 
 Новые проекты, временные файлы, клоны репозиториев, загрузки и результаты по умолчанию создаются здесь:
 
-`~/Library/Application Support/MacControl/MCPServer/data/workspace`
+`~/MacControlMCP/data/workspace`
 
 Правило находится в инструкциях MCP-сервера и инструменте `workspace_policy`. Запись вне каталога — только по прямому указанию владельца или для необходимых системных настроек. **Это правило для агента, а не системная песочница.**
 
@@ -214,11 +244,11 @@ helper готовится для нового релиза. После этог�
 После установки откройте отдельное окно терминала и запустите:
 
 ```sh
-"$HOME/Library/Application Support/MacControl/MCPServer/current/bin/mclog"
+"$HOME/MacControlMCP/current/bin/mclog"
 ```
 
 Утилита автоматически читает журнал
-`~/Library/Application Support/MacControl/MCPServer/data/logs/audit.jsonl*`.
+`~/MacControlMCP/data/logs/audit.jsonl*`.
 Для просмотра другого разрешённого каталога есть параметр `--log-dir PATH`.
 В целях безопасности релизный MCP сохраняет **названия инструментов, время,
 статус и длительность выполнения**, но не аргументы команд, содержимое
@@ -350,7 +380,7 @@ Watcher — не отдельная облачная служба и не доп
 
 ### Где хранятся мои проекты и данные?
 
-По умолчанию — в `~/Library/Application Support/MacControl/MCPServer/data/`.
+По умолчанию — в `~/MacControlMCP/data/`.
 Агентские проекты создаются в `data/workspace/`, состояние Watcher — в
 `data/run/watcher/`. Обновление сохраняет данные; старые индивидуальные установки
 требуют отдельного переноса настроек. Не помещайте ключи и профили в публичный Git.

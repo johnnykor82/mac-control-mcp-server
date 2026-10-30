@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run the installed updater from any directory; no Git checkout required.
+set -eu
+SELF=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+ROOT=$(CDPATH='' cd -- "$SELF/.." && pwd -P)
+exec "$ROOT/current/.venv/bin/python" -P -B "$ROOT/current/scripts/maccontrol_manager.py" --root "$ROOT" "$@"

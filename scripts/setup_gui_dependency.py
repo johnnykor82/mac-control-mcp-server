@@ -178,7 +178,7 @@ def ensure(root: Path, release: Path, *, replace: bool = False) -> dict:
     """Preserve an owned helper by default; refresh release-local clipboard."""
     existing = gui.verify_owned(root)
     if existing:
-        app = Path.home() / 'Applications' / gui.APP_NAME
+        app = root.expanduser().resolve() / 'apps' / gui.APP_NAME
         for path in (app.parent, app, *app.rglob('*')):
             info = path.lstat()
             if info.st_uid != os.getuid() or info.st_mode & 0o022:

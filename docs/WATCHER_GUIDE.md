@@ -102,7 +102,7 @@ python3 scripts/setup_watcher_service.py --status
 ```
 
 The service is `org.maccontrol.mcpserver.watcher`. State lives under
-`~/Library/Application Support/MacControl/MCPServer/data/run/watcher/`; logs are in
+`~/MacControlMCP/data/run/watcher/`; logs are in
 `data/logs/`. Updates retain state. A fresh installation does not import another
 Mac's history automatically.
 

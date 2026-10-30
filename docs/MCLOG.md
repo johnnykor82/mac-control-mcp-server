@@ -7,13 +7,13 @@ A bundled, **read-only** curses dashboard for observing locally authorized MCP t
 Open a separate terminal on the Mac with Mac Control installed:
 
 ```sh
-"$HOME/Library/Application Support/MacControl/MCPServer/current/bin/mclog"
+"$HOME/MacControlMCP/current/bin/mclog"
 ```
 
 The launcher follows the currently activated version and automatically reads:
 
 ```text
-~/Library/Application Support/MacControl/MCPServer/data/logs/audit.jsonl*
+~/MacControlMCP/data/logs/audit.jsonl*
 ```
 
 For a custom root, invoke that installation's `current/bin/mclog`. The viewer also supports `--log-dir /path/to/logs` for explicitly permitted logs.

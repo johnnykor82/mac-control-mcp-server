@@ -26,7 +26,7 @@ except ImportError:
         _owned, _prepare_logs, _read_owned_plist, _safe_path, _write_new_plist,
     )
 
-DEFAULT_ROOT = Path.home() / "Library/Application Support/MacControl/MCPServer"
+DEFAULT_ROOT = Path.home() / "MacControlMCP"
 LABEL = "org.maccontrol.mcpserver.watcher"
 POLL_COUNT = 40
 POLL_INTERVAL = 0.25

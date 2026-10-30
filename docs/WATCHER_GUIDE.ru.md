@@ -117,7 +117,7 @@ python3 scripts/setup_watcher_service.py --status
 ```
 
 Служба называется `org.maccontrol.mcpserver.watcher`. Данные сохраняются в
-`~/Library/Application Support/MacControl/MCPServer/data/run/watcher/`, журналы —
+`~/MacControlMCP/data/run/watcher/`, журналы —
 в соседнем каталоге `data/logs/`. Обновление сохраняет эти данные. На чистой
 установке история с другого Mac не появляется автоматически.
 
