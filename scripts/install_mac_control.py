@@ -37,7 +37,9 @@ COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "docs/GITHUB_OAUTH_SETUP.md", "docs/REMOTE_ACCESS_GUIDE.md",
               "docs/INSTALL_CONTENTS.md", "docs/MCLOG.md", "docs/PUBLIC_RELEASE_GATES.md",
               "docs/RELEASE_NOTES_BETA.md", "docs/CHATBRIDGE_BROWSER_MIGRATION.md",
-              "docs/CHATGPT_SETUP.ru.md")
+              "docs/CHATGPT_SETUP.ru.md", "docs/CAPABILITIES.md", "docs/CAPABILITIES.ru.md",
+              "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/WATCHER_GUIDE.md",
+              "docs/WATCHER_GUIDE.ru.md")
 
 
 def run(argv: list[str], **kwargs) -> subprocess.CompletedProcess:

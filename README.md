@@ -1,23 +1,88 @@
 [**English**](README.md) · [Русский](README.ru.md)
 
-# Mac Control MCP Server
+# Mac Control MCP Server — macOS automation over MCP
 
-**Full macOS access for owner-authorized AI agents.** Files, terminal, Git, SSH, native GUI, background browser operations through ChatBridge, and remote MCP.
+**A macOS MCP server for ChatGPT and compatible AI clients.** Mac Control combines native desktop automation, files, terminal sessions, Git, SSH, ChatBridge browser automation and Watcher coordination across ChatGPT conversations.
 
 Mac Control MCP Server is an experimental Model Context Protocol (MCP) server designed for autonomous tasks. It offers powerful control of the owner's Mac, not a restrictive sandbox.
 
-> **Beta preparation.** Local tests pass, including a working ChatBridge browser adapter. An independent clean-Mac installation and real public OAuth login still require acceptance tests. This is not a production-certified release.
+> **Beta release.** The owner confirmed installation and connection on another Mac. Automated Watcher migration tests pass; real notification delivery after upgrading remains a separate acceptance step. This is experimental software.
 
 
 
 
-## Capabilities
+## Start here
 
-- **Files, terminal and Git:** manage projects, shell commands, services, processes and approved SSH targets.
-- **Native macOS GUI:** separate native helper installed by default using Accessibility and Screen Recording permissions, with background window operations where supported.
-- **Browser through ChatBridge:** navigate, click, fill forms, inspect the DOM and take screenshots using ChatBridge HTTP; Mac Control never owns Chrome.
-- **Agent workspace:** store generated projects, tests, downloads, logs and artifacts under one default working directory.
-- **Experimental remote access:** each owner configures a GitHub OAuth App and optionally publishes the authenticated MCP endpoint using Tailscale Funnel.
+- [Capabilities and use cases](#capabilities-and-use-cases).
+- [Mac Control modules](#mac-control-modules) and the [detailed capability guide](docs/CAPABILITIES.md).
+- [Complete MCP tool reference](docs/TOOLS.md): purpose, prerequisites and read/write behavior.
+- [macOS installation](#installation-macos), [remote access](docs/REMOTE_ACCESS_GUIDE.md) and [OAuth setup](docs/GITHUB_OAUTH_SETUP.md).
+- [Watcher: first project and example prompts](docs/WATCHER_GUIDE.md).
+- [Installation contents](docs/INSTALL_CONTENTS.md), [mclog audit viewer](docs/MCLOG.md) and [security](SECURITY.md).
+- [Frequently asked questions](#frequently-asked-questions).
+
+## Capabilities and use cases
+
+Mac Control MCP Server exposes Model Context Protocol tools for owner-authorized
+AI agents on a Mac. Agents can inspect data, work in approved projects and perform
+authorized actions through an MCP client. ChatGPT connects through authenticated
+remote HTTPS/OAuth; local MCP clients can use stdio.
+
+Example requests after configuring the relevant modules:
+
+- **Projects and files:** “Create a project in the workspace, inspect its sources and prepare changes using SHA256 checks.”
+- **Git:** “Show repository status and diffs; commit or publish only when I request it.”
+- **Terminal:** “Run the approved check in a terminal session, read the result and close it.”
+- **macOS desktop:** “Find the application window, inspect its accessible controls and capture a screenshot.”
+- **Browser:** “Open a page in a background session, inspect its structure and save the findings.”
+- **SSH:** “Check the configured server using its approved connection profile.”
+- **Multiple chats:** “Split this research into executor tasks and collect reports through Watcher.”
+- **Delayed checks:** “In 15 minutes, check the result and report in this conversation using Watcher.”
+- **Diagnostics:** “Show recent tool failures and Mac Control service status.”
+
+The full configuration with GUI, ChatBridge and Watcher exposes **122 MCP tools**.
+Registration does not replace setup: SSH needs profiles, terminal requires opt-in,
+GUI needs macOS permissions and Watcher needs registered tasks.
+[Full English tool catalog](docs/TOOLS.md) · [Каталог на русском](docs/TOOLS.ru.md).
+
+## Mac Control modules
+
+| Module | Capabilities | Prerequisites |
+|---|---|---|
+| **Files and projects** | Directory listing, search, reads, writes, SHA256 checks, backups and recovery. | Workspace or explicitly approved project roots. |
+| **Git** | Status, history, diffs, branches, staging, commits, fetch/pull/push. | An approved project repository and owner credentials for remote Git. |
+| **Terminal** | Persistent PTY sessions, input/output, resize and close. | Explicit local terminal policy opt-in and tmux. |
+| **SSH** | Host profiles, authentication diagnostics, fixed checks, managed remote commands and PTYs. | Approved profiles, owner keys, known_hosts and applicable policy. |
+| **GUI helper** | Windows/displays, Accessibility tree, screenshots, mouse, keyboard and Unicode input. | Installed app and owner-approved Accessibility/Screen Recording. |
+| **ChatBridge browser** | Background sessions, navigation, element actions, DOM snapshots, screenshots and session lifecycle. | Separate ChatBridge and Google Chrome; the owner signs in to sites. |
+| **ChatGPT conversations** | Create, switch, read, send and wait for responses through the browser adapter. | ChatGPT login in ChatBridge's profile and a working web integration. |
+| **Watcher** | Project coordination, executor reports, continuation, delayed checks and delivery acknowledgements. | ChatBridge, exact registered conversations and a running Mac. |
+| **System, services and packages** | Machine/port health, approved commands, service checks/restart and controlled package installation. | Owner-managed allowlists; a package manager when required by the selected action. |
+| **MCP bridge** | Access separately configured downstream MCP servers. | Target configuration, dependencies and authentication. |
+| **Audit and maintenance** | Invocation metadata, audit search, service logs, diagnostics and owned server restart. | Installed Mac Control; audit omits message and file contents. |
+| **Installer and remote access** | Isolated Python, prebuilt GUI, updates/rollback, GitHub OAuth, HTTPS and Tailscale Funnel. | Owner action for accounts, permissions and public HTTPS publication. |
+
+[Detailed module behavior, limitations and examples](docs/CAPABILITIES.md).
+Experimental `background_app_*` tools are not part of the standard beta.16 set.
+
+## How Mac Control, ChatBridge and Watcher fit together
+
+```mermaid
+flowchart LR
+    Client["ChatGPT / MCP client"] -->|"HTTPS + OAuth or local stdio"| MCP["Mac Control MCP Server"]
+    MCP --> GUI["GUI helper: native macOS desktop"]
+    MCP --> Local["Files · Git · terminal · SSH"]
+    MCP --> CB["ChatBridge: browser HTTP API"]
+    MCP --> W["Watcher: projects and task queue"]
+    W --> CB
+    CB --> Chrome["Managed Google Chrome"]
+```
+
+Mac Control exposes MCP tools. ChatBridge is a separate product and the browser's
+owner. Watcher persists task state and routes results between exact conversations.
+The GUI helper controls native macOS interfaces under its own permissions.
+These components do not share a universal session or substitute for each other's
+account authentication.
 
 ## ChatBridge is independent
 
@@ -176,17 +241,26 @@ Funnel requires separate `PUBLISH` confirmation and preserves unrelated
 published routes. A public probe follows. VPN, WireGuard and Exit Node routing
 are not changed.
 
-A passing probe does not verify real OAuth or ChatGPT connectivity. Live
-GitHub OAuth and ChatGPT E2E remain unverified release gates.
+A passing probe alone does not verify real OAuth or ChatGPT connectivity.
+The owner confirmed a base connection on another Mac; each installation still
+needs its own real login and tool test, including Watcher delivery after upgrade.
 See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCESS_GUIDE.md) and [agent instructions](AGENT_INSTALL.md).
 
 ## Security, status and license
 
 An agent authorized to use shell, GUI and network tools can delete or disclose data and make consequential changes. It is not isolated by a security sandbox. See [SECURITY.md](SECURITY.md). ChatBridge is unofficial and depends on a changing web UI, not the official OpenAI API.
 
-**License: MIT.** Copyright © 2026 Ivan Konstantinov. See [LICENSE](LICENSE). A final source-provenance review and independent acceptance test remain prerequisites for public publication. See [release gates](docs/PUBLIC_RELEASE_GATES.md).
+**License: MIT.** Copyright © 2026 Ivan Konstantinov. See [LICENSE](LICENSE). Beta releases include source checks and automated tests; validate the workflows you intend to use on your own Mac. See [release gates](docs/PUBLIC_RELEASE_GATES.md).
 
 ## Watcher and maintenance tools (beta.16)
+
+Use Watcher when one conversation coordinates research or development while
+other conversations execute individual tasks. It delivers reports, questions
+and blocked-work notices to the coordinator. It can also schedule a later check
+or continue work in an existing executor conversation.
+
+**[Step-by-step guide with example prompts](docs/WATCHER_GUIDE.md)**: first project,
+file and browser tasks, delayed checks, project pause and troubleshooting.
 
 Default installation with ChatBridge now provisions Watcher and its user login
 LaunchAgent `org.maccontrol.mcpserver.watcher`. It reuses the installed Mac Control
@@ -220,3 +294,57 @@ files requires their current SHA256. Audit logs retain metadata only.
 
 An older customized server requires a separate configuration migration. Never
 publish its secrets, Watcher database or browser profiles.
+
+## Frequently asked questions
+
+### Can ChatGPT control my Mac?
+
+Yes, through a configured MCP connection with HTTPS and OAuth. Installing the
+software alone does not add the ChatGPT connector: the owner completes connection
+setup and login. Available actions depend on tools, local configuration and permissions.
+
+### Does it support Apple Silicon and Intel Macs?
+
+The prebuilt GUI helper supports arm64 and x86_64 on macOS 14+. The installer uses
+an isolated Python 3.13 managed by uv; launching it requires Python 3.9+.
+Normal installation does not compile the helper or build Rust/LLVM through
+Homebrew. Cloning requires Git; release source archives are also available.
+
+### Are ChatBridge and Watcher installed automatically?
+
+Yes, default installation provisions both, and installs the GUI helper. Watcher
+reuses Mac Control's Python environment. Developer accounts, ChatGPT login, macOS
+permissions, SSH profiles and Watcher projects are not copied to a fresh Mac.
+
+### Can I use it without ChatGPT or a browser?
+
+A local MCP client can use stdio. Files, Git, system tools and configured
+terminal/SSH do not depend on ChatGPT login. `--without-chatbridge` skips dependency
+setup while preserving existing configuration. Browser tasks and Watcher ChatGPT
+notifications require ChatBridge.
+
+### Is this the official OpenAI API?
+
+No. MCP is the tool interface; ChatBridge integrates with the ChatGPT website
+through a browser. This path does not require a separate OpenAI API key, but
+account availability, website behavior and provider limits still apply.
+
+### Does Watcher run while my Mac sleeps?
+
+No. Delivery requires the Mac to be running and logged in to macOS. State survives
+restarts, but work resumes only once service access returns. Watcher is neither
+an independent cloud service nor an additional AI model.
+
+### Where are projects and state stored?
+
+By default under `~/Library/Application Support/MacControl/MCPServer/data/`.
+Agent projects use `data/workspace/`; Watcher state uses `data/run/watcher/`.
+Updates retain data. Older customized servers require a separate configuration
+migration. Never publish credentials or browser profiles in a public repository.
+
+### How stable is this release?
+
+This is beta software. Beta.16 passed 388 local tests and GitHub CI. The owner
+confirmed base installation and connection on another Mac; real delivery of the
+new Watcher remains a post-upgrade acceptance test. ChatGPT website changes,
+account limits and network settings can affect operation.

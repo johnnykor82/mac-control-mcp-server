@@ -8,6 +8,8 @@ bin/dev-stdio-mcp.sh
 bin/mac-control-remote-mcp.sh
 bin/mac-control-stdio-mcp.sh
 bin/mclog
+docs/CAPABILITIES.md
+docs/CAPABILITIES.ru.md
 docs/CHATBRIDGE_BROWSER_MIGRATION.md
 docs/CHATGPT_SETUP.ru.md
 docs/GITHUB_OAUTH_SETUP.md
@@ -16,6 +18,10 @@ docs/MCLOG.md
 docs/PUBLIC_RELEASE_GATES.md
 docs/RELEASE_NOTES_BETA.md
 docs/REMOTE_ACCESS_GUIDE.md
+docs/TOOLS.md
+docs/TOOLS.ru.md
+docs/WATCHER_GUIDE.md
+docs/WATCHER_GUIDE.ru.md
 requirements/dev-frozen.txt
 scripts/__init__.py
 scripts/build_dev_clipboard.py

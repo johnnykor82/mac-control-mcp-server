@@ -183,7 +183,7 @@ def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def ssh_pty_open(host: str) -> dict:
         """Open interactive SSH session in a persistent tmux PTY using approved profile."""
-        import command_plugins
+        from . import command_plugins
         command_plugins._require()
         if command_plugins.TMUX is None:
             raise RuntimeError("tmux required for interactive SSH")

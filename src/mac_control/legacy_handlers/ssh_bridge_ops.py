@@ -90,7 +90,7 @@ def register(mcp):
         Local terminal policy must explicitly be enabled.
         """
         import secrets
-        import command_plugins
+        from . import command_plugins
         command_plugins._require()
         if command_plugins.TMUX is None:
             raise RuntimeError("tmux is not installed")

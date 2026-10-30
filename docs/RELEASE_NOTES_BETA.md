@@ -39,3 +39,9 @@ Mac Control MCP Server предоставляет авторизованному
 - Provision the owned Watcher login service with default installation; stop/restart it safely on update, rollback and uninstall.
 - Preserve metadata-only audit logging and separate all runtime state from release code.
 - Live ChatGPT delivery on the upgraded Mac is a separate beta acceptance step; automated tests do not sign in or send real messages.
+
+## v0.1.0-beta.17 — bilingual module and Watcher guides
+
+- Expand English/Russian README, module overview, complete 122-tool catalog, practical Watcher guide and FAQ; include the guides in installed releases.
+- Fix packaged interactive SSH imports. Local identity inspection no longer targets a developer's fixed host; effective SSH configuration is inspected only for an explicitly supplied approved profile.
+- Watcher runtime remains as introduced in beta.16. Real notification delivery on the upgraded target Mac remains the next acceptance step.
