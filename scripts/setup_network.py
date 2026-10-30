@@ -10,6 +10,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,14 @@ def run(argv: list[str], timeout: int = 12) -> subprocess.CompletedProcess:
                           check=False, env={**os.environ, "TAILSCALE_BE_CLI": "1"})
 
 
+def _embedded_tailscale_clis():
+    for app in (Path("/Applications/Tailscale.app"),
+                Path.home() / "Applications/Tailscale.app"):
+        embedded = app / "Contents/MacOS/Tailscale"
+        if embedded.is_file() and os.access(embedded, os.X_OK):
+            yield str(embedded)
+
+
 def tailscale_cli() -> str | None:
     """Locate CLI in PATH or inside the official macOS GUI app.
 
@@ -44,12 +53,12 @@ def tailscale_cli() -> str | None:
     executable = shutil.which("tailscale")
     if executable:
         return executable
-    for app in (Path("/Applications/Tailscale.app"),
-                Path.home() / "Applications/Tailscale.app"):
-        embedded = app / "Contents/MacOS/Tailscale"
-        if embedded.is_file() and os.access(embedded, os.X_OK):
-            return str(embedded)
-    return None
+    return next(_embedded_tailscale_clis(), None)
+
+
+def _release_version(value) -> str | None:
+    match = re.match(r"^(\d+\.\d+\.\d+)(?:-|$)", value) if isinstance(value, str) else None
+    return match.group(1) if match else None
 
 
 def tailscale_state() -> dict:
@@ -65,12 +74,41 @@ def tailscale_state() -> dict:
         data = json.loads(status.stdout)
     except ValueError:
         data = {}
+    if not isinstance(data, dict):
+        data = {}
     device = data.get("Self") if isinstance(data.get("Self"), dict) else {}
+    client_version = (version.stdout.splitlines() or ["unknown"])[0]
+    daemon_release = _release_version(data.get("Version"))
+    client_release = _release_version(client_version)
+    mismatch = bool(daemon_release and client_release and daemon_release != client_release)
+    node_id = device.get("ID")
+    if mismatch and isinstance(node_id, str) and node_id and data.get("BackendState") == "Running":
+        for candidate in _embedded_tailscale_clis():
+            if candidate == executable:
+                continue
+            try:
+                candidate_version = run([candidate, "version"])
+                candidate_status = run([candidate, "status", "--json"])
+                candidate_data = json.loads(candidate_status.stdout)
+            except (OSError, subprocess.TimeoutExpired, ValueError):
+                continue
+            candidate_client = (candidate_version.stdout.splitlines() or ["unknown"])[0]
+            candidate_device = candidate_data.get("Self") if isinstance(candidate_data, dict) else None
+            if (candidate_version.returncode == 0 and candidate_status.returncode == 0
+                    and isinstance(candidate_device, dict) and candidate_device.get("ID") == node_id
+                    and candidate_data.get("BackendState") == "Running"
+                    and _release_version(candidate_data.get("Version")) == daemon_release
+                    and _release_version(candidate_client) == daemon_release):
+                executable, client_version, data, device = candidate, candidate_client, candidate_data, candidate_device
+                mismatch = False
+                break
     return {
         "installed": True, "logged_in": data.get("BackendState") == "Running",
         "device_dns_name": str(device.get("DNSName", "")).rstrip("."),
         "backend_state": data.get("BackendState", "unknown"),
-        "version": (version.stdout.splitlines() or ["unknown"])[0],
+        "version": client_version,
+        "daemon_version": daemon_release,
+        "version_mismatch": mismatch,
         "cli_path": executable,
         "tailscale_ips": device.get("TailscaleIPs", []),
     }
@@ -269,6 +307,10 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input, language
         state = _guided_tailscale(inspect(network=False))
         if not ready():
             print(text(language, 'The Tailscale client or interface is not verified yet; check the manual steps and enter READY again or defer setup.', 'Клиент или интерфейс Tailscale пока не подтверждён; проверьте ручные шаги и повторите READY или отложите настройку.'))
+    if state.get("version_mismatch"):
+        print(text(language,
+            "WARNING: Tailscale CLI and daemon versions differ. Review the installed Tailscale variants and update the CLI for the running daemon; no software was changed.",
+            "ВНИМАНИЕ: версии CLI и демона Tailscale различаются. Проверьте установленные варианты Tailscale и обновите CLI для работающего демона; программы не изменялись."))
     existing = publication_state(state["cli_path"], state["device_dns_name"], language=language)
     report.update({"tailscale": state, "publication_state": existing})
     if existing["status"] not in ("empty", "existing_matching"):
@@ -436,6 +478,7 @@ def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
 def enable_funnel(root: Path, *, input_fn=input, language: str = "ru") -> dict:
     executable = tailscale_cli()
     ts = tailscale_state()
+    executable = ts.get("cli_path") or executable
     if not executable or not ts.get("logged_in"):
         raise RuntimeError(text(language, 'Install Tailscale and sign in to your account first', 'Сначала установите Tailscale и войдите в свою учётную запись'))
     hostname = ts.get("device_dns_name", "")
