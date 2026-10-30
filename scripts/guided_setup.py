@@ -55,6 +55,7 @@ def _gui_call(root, operation):
     python = current / ".venv/bin/python"
     data = root / "data"
     env = {**os.environ, "MAC_CONTROL_DATA_ROOT": str(data),
+           "MAC_CONTROL_GUI_APP": str(Path.home() / "Applications/MacControlMCPServer.app"),
            "PYTHONPATH": str(current / "src"), "PYTHONNOUSERSITE": "1"}
     code = ("import json\nfrom mac_control.legacy_handlers.gui_ops import _call\n"
             "try:\n    v=_call(" + repr(operation) + ", timeout=90)\n"
@@ -67,6 +68,20 @@ def _gui_call(root, operation):
     if "error" in response:
         raise RuntimeError(response["error"])
     return response
+
+
+def _restart_gui(root):
+    """Refresh permission state by restarting only the verified owner-managed app."""
+    try:
+        from scripts import setup_gui_dependency as dependency
+    except ImportError:
+        import setup_gui_dependency as dependency
+    if not dependency.gui.verify_owned(root):
+        raise RuntimeError("Cannot restart: owned GUI helper is missing")
+    app = Path.home() / "Applications" / dependency.gui.APP_NAME
+    dependency._stop_owned_app(app)
+    # The normal IPC recovery relaunches the helper with this installation's data root.
+    return _gui_call(root, "status")
 
 
 def gui_permissions(root, *, input_fn=input):
@@ -110,7 +125,11 @@ def gui_permissions(root, *, input_fn=input):
         answer = input_fn("После выдачи прав нажмите Enter для проверки; S — отложить: ").strip().lower()
         if answer in ("s", "skip", "q"):
             return False
-        state = _gui_call(root, "status")
+        if key == "screen_capture_trusted":
+            print("Перезапускаем Mac Control MCP Server, чтобы обновить состояние разрешения записи экрана.")
+            state = _restart_gui(root)
+        else:
+            state = _gui_call(root, "status")
 
 
 def _validate_setup_install(root):

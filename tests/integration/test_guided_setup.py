@@ -115,8 +115,10 @@ class GuidedSetupTests(unittest.TestCase):
             state[key] = True
             return ""
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
+             patch.object(guided_setup, "_restart_gui", side_effect=lambda root: gui(root, "status")) as restart, \
              patch.object(guided_setup.subprocess, "run") as opener:
             self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
+        restart.assert_called_once_with(self.root)
         self.assertEqual(calls, ["status", "request_accessibility", "status", "owner", "status",
                                  "request_screen_capture", "status", "owner", "status"])
         self.assertIn("Privacy_Accessibility", opener.call_args_list[0].args[0][1])
@@ -135,6 +137,72 @@ class GuidedSetupTests(unittest.TestCase):
             self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected wait")))
         self.assertEqual(calls, ["status", "request_screen_capture", "status"])
         opener.assert_not_called()
+
+    def test_screen_grant_confirmation_restarts_stale_helper_once(self):
+        missing = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        ready = {"accessibility_trusted": True, "screen_capture_trusted": True}
+        answers = iter(("",))
+        with patch.object(guided_setup, "_gui_call", return_value=missing) as gui, \
+             patch.object(guided_setup, "_restart_gui", return_value=ready, create=True) as restart, \
+             patch.object(guided_setup.subprocess, "run"), \
+             patch("builtins.print"):
+            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+        restart.assert_called_once_with(self.root)
+        self.assertEqual([call.args[1] for call in gui.call_args_list],
+                         ["status", "request_screen_capture", "status"])
+
+    def test_screen_grant_still_missing_restarts_only_after_each_owner_confirmation(self):
+        missing = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        answers = iter(("", "", "s"))
+        with patch.object(guided_setup, "_gui_call", return_value=missing), \
+             patch.object(guided_setup, "_restart_gui", return_value=missing, create=True) as restart, \
+             patch.object(guided_setup.subprocess, "run"), \
+             patch("builtins.print"):
+            self.assertFalse(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+        self.assertEqual(restart.call_count, 2)
+
+    def test_later_owner_confirmation_retries_restart_after_early_confirmation(self):
+        missing = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        ready = {"accessibility_trusted": True, "screen_capture_trusted": True}
+        answers = iter(("", ""))
+        with patch.object(guided_setup, "_gui_call", return_value=missing), \
+             patch.object(guided_setup, "_restart_gui", side_effect=[missing, ready], create=True) as restart, \
+             patch.object(guided_setup.subprocess, "run"), \
+             patch("builtins.print"):
+            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+        self.assertEqual(restart.call_count, 2)
+
+    def test_gui_restart_failure_stops_without_retrying(self):
+        missing = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        with patch.object(guided_setup, "_gui_call", return_value=missing), \
+             patch.object(guided_setup, "_restart_gui", side_effect=RuntimeError("Owned helper did not exit")) as restart, \
+             patch.object(guided_setup.subprocess, "run"), \
+             patch("builtins.print"):
+            with self.assertRaisesRegex(RuntimeError, "did not exit"):
+                guided_setup.gui_permissions(self.root, input_fn=lambda _: "")
+        restart.assert_called_once_with(self.root)
+
+    def test_gui_restart_verifies_ownership_then_stops_only_owned_app(self):
+        from scripts import setup_gui_dependency as dependency
+        ready = {"accessibility_trusted": True, "screen_capture_trusted": True}
+        calls = []
+        with patch.object(dependency.gui, "verify_owned", side_effect=lambda root: calls.append("verify") or True), \
+             patch.object(dependency, "_stop_owned_app", side_effect=lambda app: calls.append(app)) as stop, \
+             patch.object(guided_setup, "_gui_call", side_effect=lambda *args: calls.append("status") or ready):
+            self.assertEqual(guided_setup._restart_gui(self.root), ready)
+        app = Path.home() / "Applications" / dependency.gui.APP_NAME
+        stop.assert_called_once_with(app)
+        self.assertEqual(calls, ["verify", app, "status"])
+
+    def test_gui_restart_refuses_unowned_helper(self):
+        from scripts import setup_gui_dependency as dependency
+        with patch.object(dependency.gui, "verify_owned", return_value=False), \
+             patch.object(dependency, "_stop_owned_app") as stop, \
+             patch.object(guided_setup, "_gui_call") as gui:
+            with self.assertRaisesRegex(RuntimeError, "owned GUI helper"):
+                guided_setup._restart_gui(self.root)
+        stop.assert_not_called()
+        gui.assert_not_called()
 
     def test_gui_skip_does_not_request_later_permission_or_repeat_request(self):
         missing = {"accessibility_trusted": False, "screen_capture_trusted": False}
@@ -162,6 +230,7 @@ class GuidedSetupTests(unittest.TestCase):
             state[key] = True
             return ""
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
+             patch.object(guided_setup, "_restart_gui", side_effect=lambda root: gui(root, "status")), \
              patch.object(guided_setup.subprocess, "run"):
             self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
         self.assertEqual(calls[:3], ["status", "request_accessibility", "request_permissions"])
