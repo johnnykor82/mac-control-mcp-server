@@ -10,7 +10,7 @@ import argparse
 from fastmcp import FastMCP
 from mac_control.operations import system_info
 from mac_control.dev_enabled_operations import register_preview_operations
-from mac_control import background_browser_ops, background_native_ops, workspace_policy
+from mac_control import background_browser_ops, background_native_ops, workspace_policy, maintenance_ops
 from mac_control.audit_middleware import AuditMiddleware
 from mac_control.runtime_paths import DATA_ROOT
 import os
@@ -28,6 +28,7 @@ def make_server(*, include_mutations: bool = False, auth=None) -> FastMCP:
     register_preview_operations(mcp, include_mutations=include_mutations)
     if include_mutations:
         workspace_policy.register(mcp)
+        maintenance_ops.register(mcp)
     if include_mutations and background_browser_ops.enabled():
         background_browser_ops.register(mcp)
     if include_mutations and background_native_ops.enabled():

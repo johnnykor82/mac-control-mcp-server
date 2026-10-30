@@ -31,3 +31,11 @@ Mac Control MCP Server предоставляет авторизованному
 - **Открытые исходники:** MIT License, © 2026 Ivan Konstantinov.
 
 **Что ещё проверить перед Beta:** независимую установку на другом Mac, реальный вход через GitHub OAuth, внешний Funnel, разрешения Accessibility/Screen Recording и чистоту публичного Git-репозитория. Это пока не подтверждение промышленной готовности.
+
+## v0.1.0-beta.16 — production tool parity and portable Watcher
+
+- Port maintenance tools and the static compatibility dispatcher, retaining workspace and CAS restrictions.
+- Include current Watcher file reports, marker-based chat resolution, scheduled checks and browser-task followups through ChatBridge HTTP.
+- Provision the owned Watcher login service with default installation; stop/restart it safely on update, rollback and uninstall.
+- Preserve metadata-only audit logging and separate all runtime state from release code.
+- Live ChatGPT delivery on the upgraded Mac is a separate beta acceptance step; automated tests do not sign in or send real messages.

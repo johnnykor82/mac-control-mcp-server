@@ -8,7 +8,7 @@ class NativeFeatureFlagTests(unittest.TestCase):
    web=asyncio.run(make_server().list_tools())
    local=asyncio.run(make_server(include_mutations=True).list_tools())
   self.assertEqual(len(web),20)
-  self.assertEqual(len(local),117)
+  self.assertEqual(len(local),129)
   names={x.name:x for x in local}
   for name in ('background_app_list','background_app_create','background_app_windows',
        'background_app_elements','background_app_action','background_app_capture','background_app_close'):

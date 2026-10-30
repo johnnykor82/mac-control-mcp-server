@@ -12,7 +12,7 @@ class InstallLanguageTests(unittest.TestCase):
         def choose():
             steps.append('language')
             return 'ru'
-        def install(*args):
+        def install(*args, **kwargs):
             steps.append('install')
             return {'status': 'installed'}
         with patch.object(installer.sys, 'argv', ['installer', '--install']), \

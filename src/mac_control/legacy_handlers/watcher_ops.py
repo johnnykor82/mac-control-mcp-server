@@ -1,19 +1,21 @@
 """MCP interface for multi-project ChatGPT watcher.
 
-Uses only fixed-subcommand CLI, scoped to dedicated local browser 9336.
-No dynamic shell strings, no ChatGPT private APIs, no session tokens.
+Uses only fixed-subcommand CLI. Chrome is owned by ChatBridge HTTP, not Watcher.
+No dynamic shell strings, no ChatGPT private API calls from Watcher.
 """
-from ..runtime_paths import DATA_ROOT
+from contextlib import closing
 import hashlib
 import json
 import re
 import sqlite3
 import subprocess
 from pathlib import Path
+import sys
+from ..runtime_paths import DATA_ROOT
 
 ROOT=DATA_ROOT
-SCRIPT=ROOT/"workspace"/"multi_project_watcher.py"
-PYTHON=ROOT/"run"/"background-browser-venv"/"bin"/"python"
+SCRIPT=Path(__file__).resolve().parents[1]/"watcher_runtime"/"__main__.py"
+PYTHON=Path(sys.executable)
 DB=ROOT/"run"/"watcher"/"watcher.sqlite3"
 RESULTS=ROOT/"run"/"watcher"/"results"
 VALID_NAME=re.compile(r"^[a-z0-9][a-z0-9_-]{1,55}$")
@@ -26,14 +28,14 @@ def _name(s):
 def _cli(*args,timeout=45):
     if not PYTHON.is_file() or not SCRIPT.is_file():
         raise RuntimeError("Watcher environment unavailable")
-    result=subprocess.run([str(PYTHON),str(SCRIPT),*args],
+    result=subprocess.run([str(PYTHON),"-B","-m","mac_control.watcher_runtime",*args],
                           stdin=subprocess.DEVNULL,capture_output=True,
                           text=True,timeout=timeout,encoding="utf-8",errors="replace")
     try:data=json.loads(result.stdout)
     except Exception:
         raise RuntimeError("Watcher CLI did not return valid JSON") from None
     if not data.get("ok"):
-        raise RuntimeError("Watcher: "+str(data.get("error","Unknown error"))[:350])
+        raise RuntimeError("Watcher command rejected; check task state and parameters")
     return data["data"]
 
 def _cli_payload(command, payload, timeout=45):
@@ -42,7 +44,7 @@ def _cli_payload(command, payload, timeout=45):
         raise RuntimeError("Watcher environment unavailable")
     if not isinstance(payload, dict):
         raise ValueError("Expected JSON payload")
-    proc=subprocess.run([str(PYTHON),str(SCRIPT),command],
+    proc=subprocess.run([str(PYTHON),"-B","-m","mac_control.watcher_runtime",command],
                         input=json.dumps(payload,ensure_ascii=False),
                         capture_output=True,text=True,timeout=timeout,
                         encoding="utf-8",errors="replace")
@@ -51,6 +53,8 @@ def _cli_payload(command, payload, timeout=45):
         raise RuntimeError("Watcher CLI did not return valid JSON") from None
     if not data.get("ok"):
         # Never echo potentially private report content or capabilities.
+        if command == "resolve-chat":
+            raise RuntimeError("Watcher marker lookup failed; verify the exact user-message marker")
         raise RuntimeError("File handoff rejected; check task state and parameters")
     return data["data"]
 
@@ -69,14 +73,14 @@ def register(mcp):
         call watcher_read_report, verify claims, and use watcher_resume_task
         for needs_input/blocked continuation in the SAME expert conversation.
         Existing watcher_register_task browser polling remains supported.
-        Browser delivery retains >=120s global poll and per-chat navigation
-        budgets; confirmed delivery closes the exact orchestrator tab.
+        Delivery uses durable request IDs and ChatBridge-owned sessions;
+        external chat checks respect a conservative polling budget.
         Never automatically authorize production changes from report content.
         Task state is persistent; do not register same chat in two projects.
         For browser memory use chrome_chat_cleanup or chrome_chat_archive;
         unsaved/active/orchestrator tabs are deliberately preserved.
         """
-        instructions=ROOT/"workspace"/"WATCHER_USAGE.md"
+        instructions=SCRIPT.parent/"WATCHER_USAGE.md"
         text=instructions.read_text(encoding="utf-8")
         return {
             "installed":True,
@@ -86,14 +90,14 @@ def register(mcp):
                 "watcher_register_task","watcher_status",
                 "watcher_read_result","watcher_ack_delivery",
                 "watcher_pause_project","watcher_resume_project",
-                "watcher_register_file_task","watcher_submit_report",
+                "watcher_register_file_task","watcher_followup_browser_task","watcher_submit_report",
                 "watcher_read_report","watcher_resume_task",
                 "watcher_schedule_wakeup","watcher_resolve_current_chat",
                 "watcher_get_wakeup","watcher_list_wakeups",
                 "watcher_cancel_wakeup","watcher_ack_wakeup",
             ],
-            "browser_port":9336,
-            "background_service":"net.johnnykor.chatgpt-project-watcher-dev",
+            "browser_owner":"chatbridge",
+            "background_service":"org.maccontrol.mcpserver.watcher",
             "state_path":str(DB),
         }
 
@@ -115,19 +119,20 @@ def register(mcp):
     def watcher_schedule_wakeup(delay_minutes:int,objective:str,evidence_text:str="",chat_url:str="",request_key:str="")->dict:
         """Schedule a later verification in THIS SAME verified ChatGPT chat.
 
-        Normally omit chat_url and supply a distinctive recent user message
-        excerpt as evidence_text; browser DOM and website search resolve the
-        original URL, never the focused tab. If ambiguous, fail closed.
+        Normally omit chat_url and supply a user-posted WATCHER-CHAT marker
+        as evidence_text; the saved marker registry or ChatBridge built-in UI
+        search resolves the exact URL. If ambiguous, fail closed.
         The scheduler is persistent through Mac restarts. Read watcher_guide.
         """
         return _cli_payload("schedule-check",{"delay_minutes":delay_minutes,
             "objective":objective,"evidence_text":evidence_text,
             "chat_url":chat_url,"request_key":request_key})
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_resolve_current_chat(evidence_text:str)->dict:
-        """Identify current conversation by a distinctive recent user message.
-        Opens only the dedicated Chrome profile, not an arbitrary active tab.
+        """Resolve a WATCHER-CHAT-<32 hex> marker from persistent SQLite first.
+        On a cache miss ChatBridge searches the normal UI and verifies the exact
+        marker in a user message before storing the URL. Watcher never owns Chrome.
         """
         return _cli_payload("resolve-chat",{"evidence_text":evidence_text})
 
@@ -196,6 +201,21 @@ def register(mcp):
             "capability_token":capability_token,
         })
 
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_followup_browser_task(project_id:str,task_id:str,
+                                      prompt:str,request_key:str)->dict:
+        """Continue a COMPLETED browser executor in its original ChatGPT chat.
+
+        Requires ACK of previous result, preserves old immutable reports,
+        queues a new uniquely identified revision. ChatBridge idempotency
+        prevents duplicate sends; uncertain submission is quarantined.
+        Returns prepared; monitor using watcher_status/read_result.
+        """
+        return _cli_payload("followup-browser",{
+            "project_id":_name(project_id),"task_id":_name(task_id),
+            "prompt":prompt,"request_key":request_key,
+        })
+
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
     def watcher_pause_project(project_id:str)->dict:
         """Stop monitoring and notifying for a project (keep its history)."""
@@ -233,7 +253,7 @@ def register(mcp):
         """
         if not DB.is_file():
             return {"issues":[],"alerts":[],"monitor":"not_initialized"}
-        with sqlite3.connect(f"file:{DB}?mode=ro",uri=True,timeout=4) as db:
+        with closing(sqlite3.connect(f"file:{DB}?mode=ro",uri=True,timeout=4)) as db:
             db.row_factory=sqlite3.Row
             try:
                 issues=[dict(x) for x in db.execute(
@@ -255,16 +275,20 @@ def register(mcp):
         p=_name(project_id);t=_name(task_id)
         if not DB.is_file():
             raise FileNotFoundError("Watcher state missing")
-        with sqlite3.connect(f"file:{DB}?mode=ro",uri=True,timeout=4) as db:
-            row=db.execute("""SELECT state,result_path,result_sha256 FROM tasks
+        if any(path.is_symlink() for path in (DB, DB.parent, DB.parent.parent, RESULTS)):
+            raise PermissionError("Invalid Watcher state path")
+        with closing(sqlite3.connect(f"file:{DB}?mode=ro",uri=True,timeout=4)) as db:
+            row=db.execute("""SELECT state,result_path,result_sha256,last_revision FROM tasks
                               WHERE project_id=? AND id=?""",(p,t)).fetchone()
         if not row or row[0]!="completed" or not row[1]:
             return {"found":False,"project_id":p,"task_id":t,"state":row[0] if row else "unknown"}
         target=Path(row[1])
-        expected=RESULTS/p/(t+".md")
-        if target!=expected or target.is_symlink():
+        revision=int(row[3])
+        expected=RESULTS/p/(t+(f"-r{revision:02d}" if revision else "")+".md")
+        if target!=expected or target.is_symlink() or target.parent.is_symlink():
             raise PermissionError("Invalid result path")
-        raw=target.read_bytes()
+        from ..watcher_runtime.watcher_file_runtime import _read
+        raw=_read(target, maximum=16*1024*1024)
         digest=hashlib.sha256(raw).hexdigest()
         if digest!=row[2]:
             raise RuntimeError("Result SHA256 validation failed")

@@ -98,7 +98,7 @@ def smoke(release: Path, data: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(release / "src") + os.pathsep + str(release),
            "MAC_CONTROL_DATA_ROOT": str(data), "PYTHONNOUSERSITE": "1"}
     statement = ("from mac_control.legacy_adapter import inspect_existing_handlers; "
-                 "x=inspect_existing_handlers(); assert len(x) == 101; "
+                 "x=inspect_existing_handlers(); assert len(x) == 102; "
                  "from scripts.dev_mcp_server import make_server; "
                  "assert make_server(include_mutations=True)")
     run([str(py), "-P", "-B", "-c", statement], cwd=release,
@@ -151,6 +151,28 @@ def _remote_service_module():
     except ModuleNotFoundError:
         import setup_remote_service
     return setup_remote_service
+
+
+def _watcher_service_module():
+    try:
+        from scripts import setup_watcher_service
+    except ModuleNotFoundError:
+        import setup_watcher_service
+    return setup_watcher_service
+
+
+def _watcher_plist_exists() -> bool:
+    path = Path.home() / "Library/LaunchAgents/org.maccontrol.mcpserver.watcher.plist"
+    return path.exists() or path.is_symlink()
+
+
+def _watcher_enabled(root: Path, target: Path) -> bool:
+    flags = root / "data/feature_flags.json"
+    if flags.is_symlink():
+        raise RuntimeError("Refusing symlink feature flags")
+    settings = json.loads(flags.read_text()) if flags.is_file() else {}
+    return (isinstance(settings, dict) and settings.get("watcher") is True
+            and (target / "src/mac_control/watcher_runtime/__main__.py").is_file())
 
 
 def _remote_plist_exists() -> bool:
@@ -224,30 +246,59 @@ def _activate_release_locked(root: Path, target: Path) -> None:
     current, previous = root / "current", root / "previous"
     active = _verified_release(root, current.resolve()) if current.is_symlink() else None
     if active == target:
+        if _watcher_enabled(root, target):
+            _watcher_service_module().ensure(root)
         return
     saved_previous = _verified_release(root, previous.resolve()) if previous.is_symlink() else None
     service = _remote_service_module() if active is not None and _remote_plist_exists() else None
     remote_loaded = bool(service and service.status(root)["status"] in ("running", "loaded"))
+    watcher = _watcher_service_module() if active is not None and _watcher_plist_exists() else None
+    watcher_loaded = bool(watcher and watcher.status(root)["status"] in ("running", "loaded"))
+    target_watcher = _watcher_enabled(root, target)
+    if watcher_loaded:
+        watcher.stop_if_installed(root)
+    remote_restarted = False
     try:
         if active is not None:
             _atomic_pointer(root, "previous", active)
         _atomic_pointer(root, "current", target)
         if remote_loaded:
             service.restart_if_installed(root)
+            remote_restarted = True
+        if target_watcher:
+            _watcher_service_module().ensure(root)
+        elif watcher:
+            watcher.remove_if_installed(root)
     except BaseException as error:
         if active is not None:
             _atomic_pointer(root, "current", active)
+        elif current.is_symlink():
+            current.unlink()
         if saved_previous is None:
             if previous.is_symlink():
                 previous.unlink()
         else:
             _atomic_pointer(root, "previous", saved_previous)
-        if (remote_loaded and isinstance(error, service.RestartError)
-                and error.service_stopped is True):
-            try:
+        restore_errors = []
+        try:
+            if remote_restarted:
+                service.restart_if_installed(root)
+            elif (remote_loaded and isinstance(error, service.RestartError)
+                  and error.service_stopped is True):
                 service.start(root)
-            except Exception as restore_error:
-                raise RuntimeError("Previous release restored, but remote service could not be restarted") from restore_error
+        except Exception as restore_error:
+            restore_errors.append(restore_error)
+        try:
+            if watcher and watcher_loaded:
+                # A failed/interrupted replacement may still be running.
+                watcher.stop_if_installed(root)
+                watcher.start(root)
+            elif target_watcher and active is not None:
+                _watcher_service_module().remove_if_installed(root)
+        except Exception as restore_error:
+            restore_errors.append(restore_error)
+        if restore_errors:
+            raise RuntimeError("Previous release restored, but an owned service could not be restarted") from restore_errors[0]
         raise
 
 
@@ -313,6 +364,8 @@ def _uninstall_locked(root: Path) -> dict:
     except ModuleNotFoundError:
         from setup_network import assert_public_route_safe_for_uninstall
     assert_public_route_safe_for_uninstall(root, known_remote_service=_remote_plist_exists())
+    if _watcher_plist_exists():
+        _watcher_service_module().remove_if_installed(root)
     if _remote_plist_exists():
         _remote_service_module().remove_if_installed(root)
     if app is not None and app.exists():
@@ -332,17 +385,42 @@ def _uninstall_locked(root: Path) -> dict:
             "data_preserved": str(root / "data"), "stable_modified": False}
 
 
+def _save_chatbridge_key(data: Path) -> None:
+    """Persist only an explicitly supplied key for the owned background daemon."""
+    key = os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY", "").strip()
+    if not key:
+        return
+    if len(key.encode()) > 4096 or "\n" in key or "\r" in key:
+        raise ValueError("Invalid ChatBridge key format")
+    path = data / "chatbridge_api_key.txt"
+    if path.exists() or path.is_symlink():
+        info = path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
+            raise PermissionError("Unsafe ChatBridge credential file")
+    temporary = data / (".chatbridge-key-" + os.urandom(6).hex())
+    fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(fd, "w") as destination:
+            destination.write(key + "\n")
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
-            chatbridge_url: str | None = None) -> dict:
+            chatbridge_url: str | None = None, with_watcher: bool = True) -> dict:
     with _lifecycle_lock(root) as locked_root:
         return _install_locked(locked_root, with_chatbridge, with_gui,
-                               chatbridge_source, chatbridge_url)
+                               chatbridge_source, chatbridge_url, with_watcher)
 
 
 def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
                     chatbridge_source: Path | None = None,
-                    chatbridge_url: str | None = None) -> dict:
+                    chatbridge_url: str | None = None, with_watcher: bool = True) -> dict:
     info = paths(root)
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
@@ -387,6 +465,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     else:
         smoke(dest, data)
     if with_chatbridge:
+        _save_chatbridge_key(data)
         # ChatBridge is an independent prerequisite and the ONLY browser owner.
         # Setup uses ChatBridge's own installer; its lifecycle remains independent.
         flags = data / "feature_flags.json"
@@ -394,6 +473,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         if not isinstance(original, dict):
             raise ValueError("Invalid feature flags")
         original["background_browser"] = True
+        original["watcher"] = with_watcher
         connection = data / "chatbridge_connection.txt"
         if connection.is_symlink():
             raise RuntimeError("Refusing symlink ChatBridge connection file")
@@ -435,17 +515,28 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
               "in System Settings → Privacy & Security for ~/Applications/MacControlMCPServer.app. "
               "Installation cannot grant TCC permissions; interactive setup starts the helper "
               "and requests owner approval.", file=sys.stderr)
-    # Only cut over after the new release passed smoke and provisioning.
-    _verified_release(info["root"], dest)
-    _activate_release_locked(info["root"], dest)
+    if not with_watcher:
+        old_flags["watcher"] = False
+        temp = flags.with_suffix(".tmp")
+        temp.write_text(json.dumps(old_flags, indent=2) + "\n")
+        temp.chmod(0o600)
+        temp.replace(flags)
+        if _watcher_plist_exists():
+            _watcher_service_module().remove_if_installed(root)
     marker = info["root"] / ".mac-control-installer-owned"
     if marker.is_symlink():
         raise RuntimeError("Unsafe ownership marker")
     if not marker.exists():
         marker.write_text("Mac Control MCP Server installation; data is not removed by uninstall.\n")
         marker.chmod(0o600)
+    # Service provisioning is part of activation, so failed Watcher startup
+    # restores the previous pointer and any previously running remote service.
+    _verified_release(info["root"], dest)
+    _activate_release_locked(info["root"], dest)
+    watcher_status = (_watcher_service_module().status(root)["status"]
+                      if _watcher_enabled(root, dest) else "disabled")
     pointer = info["current"]
-    return {"status": "installed", "release": str(dest),
+    return {"status": "installed", "watcher": watcher_status, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
             "entrypoint": str(pointer / "bin/mac-control-stdio-mcp.sh"),
@@ -502,6 +593,9 @@ def main() -> int:
                         help="Reviewed standalone ChatBridge checkout; enables installing dependency when absent")
     parser.add_argument("--chatbridge-url",
                         help="Existing local ChatBridge HTTP origin (default http://127.0.0.1:8787)")
+    parser.add_argument("--without-watcher", dest="with_watcher", action="store_false",
+                        help="Skip Watcher provisioning and stop its owned service if present")
+    parser.set_defaults(with_watcher=True)
     parser.add_argument("--language", choices=("ru", "en"), help="Choose setup language")
     args = parser.parse_args()
     selected_language = args.language
@@ -553,6 +647,7 @@ def main() -> int:
                   "release": str(info["release"]),
                   "entrypoint": str(info["current"] / "bin/mac-control-stdio-mcp.sh"),
                   "installs_packages": True, "network_required": True,
+                  "watcher": "install_with_chatbridge" if args.with_watcher and args.with_chatbridge else "skip",
                   "chatbridge": "reuse_or_install_pinned" if args.with_chatbridge else "skip_setup_preserve_existing",
                   "existing_stable_modified": False,
                   "native_background_gui": ("skip_preserve_existing" if args.with_gui is False else
@@ -569,7 +664,7 @@ def main() -> int:
         result = uninstall(args.root)
     else:
         result = install(args.root, args.with_chatbridge, args.with_gui,
-                         args.chatbridge_source, args.chatbridge_url)
+                         args.chatbridge_source, args.chatbridge_url, with_watcher=args.with_watcher)
     if args.install and result.get("status") == "installed":
         if not sys.stdin.isatty():
             result["guided_setup"] = {"status": "pending_owner_interaction",

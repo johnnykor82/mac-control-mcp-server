@@ -98,6 +98,8 @@ LOCAL_MUTATION_OPERATIONS = frozenset({
     'terminal_open',
     'terminal_resize',
     'terminal_send',
+    'watcher_followup_browser_task',
+    'watcher_resolve_current_chat',
     'watcher_ack_delivery',
     'watcher_ack_wakeup',
     'watcher_cancel_wakeup',
@@ -129,31 +131,37 @@ LOCAL_COMPAT_READ_OPERATIONS = frozenset({
     'watcher_list_wakeups',
     'watcher_read_report',
     'watcher_read_result',
-    'watcher_resolve_current_chat',
     'watcher_status',
 })
 
+def operation_enabled(name: str) -> bool:
+    """Shared installed-feature gate for direct tools and compatibility wrappers."""
+    if not os.environ.get("MAC_CONTROL_DATA_ROOT"):
+        return True
+    flags = {}
+    feature_file = DATA_ROOT / "feature_flags.json"
+    if feature_file.is_file() and not feature_file.is_symlink():
+        try:
+            flags = json.loads(feature_file.read_text())
+            if not isinstance(flags, dict):
+                return False
+        except (OSError, ValueError):
+            return False
+    if name.startswith("watcher_"):
+        return (flags.get("watcher") is True
+                and (Path(__file__).parent / "watcher_runtime/__main__.py").is_file())
+    if name.startswith("gui_"):
+        return (flags.get("native_gui") is True and
+                (Path.home() / "Applications/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer").is_file())
+    if name.startswith(("chrome_chat_", "chrome_orchestrator_")):
+        return flags.get("background_browser") is True
+    return True
+
+
 def register_preview_operations(mcp, *, include_mutations: bool = False) -> None:
     registry = inspect_existing_handlers()
-    installed_product = bool(os.environ.get("MAC_CONTROL_DATA_ROOT"))
-    browser_enabled = False
-    gui_enabled = False
-    watcher_ready = False
-    if installed_product:
-        feature_file = DATA_ROOT / "feature_flags.json"
-        if feature_file.is_file() and not feature_file.is_symlink():
-            try:
-                feature_flags = json.loads(feature_file.read_text())
-                browser_enabled = feature_flags.get("background_browser") is True
-                gui_enabled = (feature_flags.get("native_gui") is True
-                               and (Path.home() / "Applications/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer").is_file())
-            except (OSError, ValueError, TypeError):
-                pass
-        watcher_ready = ((DATA_ROOT / "workspace/multi_project_watcher.py").is_file()
-                         and (DATA_ROOT / "run/browser-venv/bin/python").is_file()
-                         and (DATA_ROOT / "workspace/WATCHER_USAGE.md").is_file())
     for name in sorted(READ_ONLY_PREVIEW_OPERATIONS):
-        if installed_product and name.startswith("gui_") and not gui_enabled:
+        if not operation_enabled(name):
             continue
         found = registry[name]
         if not found.read_only:
@@ -163,12 +171,8 @@ def register_preview_operations(mcp, *, include_mutations: bool = False) -> None
         return
     exposed = set(READ_ONLY_PREVIEW_OPERATIONS)
     for name in sorted(set(registry) - exposed):
-        if installed_product and name.startswith("watcher_") and not watcher_ready:
-            continue  # Optional Watcher is not shipped on a clean Mac.
-        if installed_product and name.startswith("gui_") and not gui_enabled:
-            continue  # Native helper and TCC installation are owner-operated.
-        if installed_product and (name.startswith("chrome_chat_") or name.startswith("chrome_orchestrator_")) and not browser_enabled:
-            continue  # Optional ChatBridge adapter must be configured first.
+        if not operation_enabled(name):
+            continue
         found = registry[name]
         desc = (found.handler.__doc__ or name).strip()
         if not found.read_only:

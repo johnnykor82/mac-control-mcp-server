@@ -25,7 +25,9 @@ class StdioBoundaryTests(unittest.TestCase):
         self.assertEqual(set(web), {"system_info"}|READ_ONLY_PREVIEW_OPERATIONS)
         self.assertTrue(all(web.values()))
         self.assertEqual(set(local)-set(web),
-                         LOCAL_MUTATION_OPERATIONS | LOCAL_COMPAT_READ_OPERATIONS | LOCAL_GUI_READ_OPERATIONS | LOCAL_TERMINAL_READ_OPERATIONS | LOCAL_BRIDGE_READ_OPERATIONS | {"workspace_policy"})
+                         LOCAL_MUTATION_OPERATIONS | LOCAL_COMPAT_READ_OPERATIONS | LOCAL_GUI_READ_OPERATIONS | LOCAL_TERMINAL_READ_OPERATIONS | LOCAL_BRIDGE_READ_OPERATIONS | {"workspace_policy", "audit_tail", "audit_search", "list_workspace",
+                          "process_snapshot", "read_service_log", "mcp_diagnostics", "read_file",
+                          "write_file", "restart_server", "custom_query", "custom_command"})
         for name in LOCAL_GUI_READ_OPERATIONS:
             self.assertTrue(local[name])
             self.assertNotIn(name,web)
@@ -36,7 +38,7 @@ class StdioBoundaryTests(unittest.TestCase):
         for name in LOCAL_BRIDGE_READ_OPERATIONS:
             self.assertTrue(local[name])
             self.assertNotIn(name,web)
-        self.assertEqual(len(stdio),103)
+        self.assertEqual(len(stdio),115)
         legacy = inspect_existing_handlers()
         for n in LOCAL_MUTATION_OPERATIONS:
             self.assertIn(n,legacy)

@@ -185,3 +185,38 @@ See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCES
 An agent authorized to use shell, GUI and network tools can delete or disclose data and make consequential changes. It is not isolated by a security sandbox. See [SECURITY.md](SECURITY.md). ChatBridge is unofficial and depends on a changing web UI, not the official OpenAI API.
 
 **License: MIT.** Copyright © 2026 Ivan Konstantinov. See [LICENSE](LICENSE). A final source-provenance review and independent acceptance test remain prerequisites for public publication. See [release gates](docs/PUBLIC_RELEASE_GATES.md).
+
+## Watcher and maintenance tools (beta.16)
+
+Default installation with ChatBridge now provisions Watcher and its user login
+LaunchAgent `org.maccontrol.mcpserver.watcher`. It reuses the installed Mac Control
+Python; ChatBridge is the sole browser owner. Watcher does not contact ChatGPT
+while idle. Delivery requires signing in to ChatGPT in the ChatBridge profile.
+New installations start with no projects, tasks or migrated credentials.
+
+After connecting MCP, call `watcher_guide` and `watcher_status`. Use exact project
+and executor chat URLs; the guide explains file reports, continuation in the same
+chat, and scheduled checks. State remains under the private Mac Control data root.
+
+```bash
+# Existing standard installation
+git pull --ff-only
+python3 scripts/install_mac_control.py --update
+# Read-only service check
+python3 scripts/setup_watcher_service.py --status
+```
+
+`--without-watcher` skips provisioning and stops its owned service;
+`--without-chatbridge` preserves existing configuration without provisioning Watcher.
+Updates restart only owned services. Uninstall preserves state. Rolling back to
+pre-beta.16 stops Watcher because that release has no runtime.
+
+Maintenance tools include `audit_tail`, `audit_search`, `list_workspace`,
+`process_snapshot`, `read_service_log`, `mcp_diagnostics`, `read_file`, `write_file`,
+`restart_server`, `custom_query`, and `custom_command`. Dispatch is limited to
+shipped operations; workspace Python is never dynamically imported. File aliases
+are workspace-scoped; explicitly listed shipped sources are read-only. Replacing
+files requires their current SHA256. Audit logs retain metadata only.
+
+An older customized server requires a separate configuration migration. Never
+publish its secrets, Watcher database or browser profiles.

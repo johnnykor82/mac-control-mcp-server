@@ -47,7 +47,8 @@ public source export and provenance review remain prerequisites.
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
 | Public HTTPS route | Direct public domain with trusted TLS and TCP 443 reverse proxy to 127.0.0.1:3201, or Tailscale Funnel without public IP. Owner configures direct DNS/TLS/proxy/router and verifies inbound HTTPS. Never expose port 3201 externally. |
 | Tailscale GUI app, account and MagicDNS/Funnel approval | External; reuse an existing App Store or Standalone install, leave VPN/Exit Node unchanged |
-| Watcher, downstream SSH and other adapters | Owner-specific integration; not assumed to be installed in a clean Mac Control MCP Server environment |
+| Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
+| Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
 
 ## Interactive setup and owner responsibilities
 
