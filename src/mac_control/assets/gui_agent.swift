@@ -13,6 +13,41 @@ enum AgentError: Error, CustomStringConvertible {
     }
 }
 
+// Paths are selected on the destination Mac, never baked into the signed app.
+struct GUIRuntimePaths {
+    let dataRoot: String
+    var socket: String { dataRoot + "/run/maccontrol-gui.sock" }
+    var capturePrefix: String { dataRoot + "/run/gui-captures/" }
+
+    static func resolve(arguments: [String], environment: [String: String], home: String) throws -> GUIRuntimePaths {
+        let indices = arguments.indices.filter { arguments[$0] == "--data-root" }
+        guard indices.count <= 1 else { throw AgentError.invalid("Duplicate --data-root") }
+        let selected: String
+        if let index = indices.first {
+            guard index + 1 < arguments.count else { throw AgentError.invalid("Missing --data-root value") }
+            selected = arguments[index + 1]
+        } else {
+            let override = (environment["MAC_CONTROL_DATA_ROOT"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            selected = override.isEmpty ? home + "/Library/Application Support/MacControl/MCPServer/data" : override
+        }
+        let expanded = (selected as NSString).expandingTildeInPath
+        guard expanded.hasPrefix("/"), !expanded.utf8.contains(0) else {
+            throw AgentError.invalid("GUI data root must be an absolute path")
+        }
+        let paths = GUIRuntimePaths(dataRoot: URL(fileURLWithPath: expanded).standardizedFileURL.path)
+        guard paths.socket.utf8.count < 100 else {
+            throw AgentError.invalid("GUI Unix socket path exceeds 99 UTF-8 bytes; choose a shorter data root")
+        }
+        return paths
+    }
+}
+
+let GUI_RUNTIME_PATHS = Result {
+    try GUIRuntimePaths.resolve(arguments: CommandLine.arguments,
+        environment: ProcessInfo.processInfo.environment,
+        home: FileManager.default.homeDirectoryForCurrentUser.path)
+}
+
 func argument(_ req: [String: Any], _ key: String, _ fallback: String = "") -> String {
     return req[key] as? String ?? fallback
 }
@@ -173,7 +208,7 @@ func capture(_ req: [String:Any]) async throws -> [String:Any] {
         image = resized
     } else { image = shot }
     let destinationPath = argument(req, "destination")
-    guard destinationPath.hasPrefix("__MAC_CONTROL_CAPTURES__"),
+    guard destinationPath.hasPrefix(try GUI_RUNTIME_PATHS.get().capturePrefix),
           destinationPath.hasSuffix(".jpg"),
           !destinationPath.contains("..") else {
         throw AgentError.invalid("Invalid capture path")
@@ -281,6 +316,11 @@ func dispatch(_ req:[String:Any]) async throws -> [String:Any] {
                 "screen_capture_trusted":CGPreflightScreenCaptureAccess(),
                 "frontmost":focusedApp(), "displays":displayInfo(),
                 "gui_user":NSUserName()]
+    case "request_accessibility":
+        let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        return ["accessibility_trusted": AXIsProcessTrustedWithOptions(axOption as CFDictionary)]
+    case "request_screen_capture":
+        return ["screen_capture_trusted": CGRequestScreenCaptureAccess()]
     case "request_permissions":
         let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let ax = AXIsProcessTrustedWithOptions(axOption as CFDictionary)
@@ -347,8 +387,6 @@ func dispatch(_ req:[String:Any]) async throws -> [String:Any] {
     }
 }
 
-let GUI_SOCKET_PATH = "__MAC_CONTROL_SOCKET__"
-
 func encodedResponse(_ obj:[String:Any]) -> Data {
     return (try? JSONSerialization.data(withJSONObject: obj,options:[.sortedKeys])) ?? Data("{\"ok\":false,\"error\":\"Serialization failed\"}".utf8)
 }
@@ -369,6 +407,7 @@ func handleRequest(_ payload: Data) async -> Data {
 }
 
 func startGUIServer() async throws {
+    let GUI_SOCKET_PATH = try GUI_RUNTIME_PATHS.get().socket
     let parent=(GUI_SOCKET_PATH as NSString).deletingLastPathComponent
     try FileManager.default.createDirectory(atPath:parent,withIntermediateDirectories:true)
     if FileManager.default.fileExists(atPath:GUI_SOCKET_PATH) {
@@ -447,6 +486,7 @@ func startGUIServer() async throws {
 struct Program {
     static func main() async {
         do {
+            _ = try GUI_RUNTIME_PATHS.get()
             if CommandLine.arguments.contains("--serve") {
                 try await startGUIServer()
                 return

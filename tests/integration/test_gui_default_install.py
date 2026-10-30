@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from scripts import build_mac_control_gui as gui
+from scripts import setup_gui_dependency as dependency
 from scripts import install_mac_control as installer
 
 
@@ -110,10 +111,10 @@ class GuiInstallTests(unittest.TestCase):
         self.assertEqual(result["native_gui"], "reused")
         self.assertTrue(app.exists())
         self.assertTrue(json.loads((root / "data/feature_flags.json").read_text())["native_gui"])
-        clipboard = [c for c in commands if "build_dev_clipboard.py" in " ".join(c)]
+        clipboard = [c for c in commands if c[0] == "prebuilt_clipboard"]
         self.assertEqual(len(clipboard), 1)
         self.assertIn("next-release", clipboard[0][1])
-        self.assertFalse(any("build_mac_control_gui.py" in " ".join(c) for c in commands))
+        self.assertFalse(any(c[0] == "prebuilt_gui_replace" for c in commands))
 
     def test_missing_clt_gives_manual_install_instruction(self):
         with patch.object(gui.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "xcrun")) as run:
@@ -140,14 +141,21 @@ def provision(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0)
     monkeypatch.setattr(installer, "run", run)
     monkeypatch.setattr(gui.subprocess, "run", run)
+    def ensure_gui(root, release, *, replace=False):
+        exists = gui.verify_owned(root)
+        commands.append(["prebuilt_clipboard", str(release)])
+        if replace or not exists:
+            commands.append(["prebuilt_gui_replace", str(release)])
+        return {"native_gui": "installed" if replace or not exists else "reused"}
+    monkeypatch.setattr(dependency, "ensure", ensure_gui)
     return root, home, commands
 
 
 def check_default_installs_gui_and_clipboard_without_start(provision):
     root, home, commands = provision
     installer.install(root, with_chatbridge=False)
-    assert any("build_mac_control_gui.py" in " ".join(c) for c in commands)
-    assert any("build_dev_clipboard.py" in " ".join(c) for c in commands)
+    assert any(c[0] == "prebuilt_gui_replace" for c in commands)
+    assert any(c[0] == "prebuilt_clipboard" for c in commands)
     assert not any(c[0] in ("open", "/usr/bin/open", "launchctl") for c in commands)
 
 
@@ -158,8 +166,8 @@ def check_update_reuses_app_but_provisions_clipboard(provision):
     result = installer.install(root, with_chatbridge=False)
     assert result["native_gui"] == "reused"
     assert (app / "Contents/MacOS" / gui.EXEC_NAME).read_bytes() == before
-    assert not any("build_mac_control_gui.py" in " ".join(c) for c in commands)
-    assert any("build_dev_clipboard.py" in " ".join(c) for c in commands)
+    assert not any(c[0] == "prebuilt_gui_replace" for c in commands)
+    assert any(c[0] == "prebuilt_clipboard" for c in commands)
     assert any(c[0] == "/usr/bin/codesign" for c in commands)
 
 
@@ -167,11 +175,11 @@ def check_explicit_rebuild_and_opt_out(provision):
     root, home, commands = provision
     managed_app(root, home)
     installer.install(root, with_chatbridge=False, with_gui=True)
-    assert any("build_mac_control_gui.py" in " ".join(c) for c in commands)
+    assert any(c[0] == "prebuilt_gui_replace" for c in commands)
     commands.clear()
     installer.install(root, with_chatbridge=False, with_gui=False)
-    assert not any("build_mac_control_gui.py" in " ".join(c) for c in commands)
-    assert any("build_dev_clipboard.py" in " ".join(c) for c in commands)
+    assert not any(c[0] == "prebuilt_gui_replace" for c in commands)
+    assert any(c[0] == "prebuilt_clipboard" for c in commands)
 
 
 def unknown_or_damaged_app_refused(provision, damage):

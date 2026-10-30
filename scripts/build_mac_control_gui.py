@@ -9,7 +9,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import plistlib
 import shutil
@@ -22,8 +21,6 @@ CAPTURE = ROOT / "scripts/dev_gui_window_capture.swift.part"
 BUNDLE = "org.maccontrol.mcpserver.gui"
 APP_NAME = "MacControlMCPServer.app"
 EXEC_NAME = "MacControlMCPServer"
-SOURCE_SOCKET = "__MAC_CONTROL_SOCKET__"
-SOURCE_CAPTURE = "__MAC_CONTROL_CAPTURES__"
 SOURCE_ACTIVATE = "let success=app.activate(options:[])"
 
 
@@ -74,27 +71,19 @@ def build(install_root: Path) -> Path:
     install_root = install_root.expanduser().resolve()
     data = install_root / "data"
     socket_path = data / "run/maccontrol-gui.sock"
-    capture_path = str(data / "run/gui-captures") + "/"
     if len(str(socket_path).encode()) >= 100:
         raise RuntimeError("GUI Unix socket path exceeds 99 UTF-8 bytes; choose shorter --root")
     source = TEMPLATE.read_text()
-    for name, expected in ((SOURCE_SOCKET, 1), (SOURCE_CAPTURE, 1),
+    for name, expected in (("struct GUIRuntimePaths {", 1),
                            (SOURCE_ACTIVATE, 1), ('case "capture":', 1),
                            ("func postMouse(_ kind: CGEventType", 1)):
         if source.count(name) != expected:
             raise RuntimeError("GUI source template does not match expected original")
-    source = source.replace(SOURCE_SOCKET, str(socket_path))
-    source = source.replace(SOURCE_CAPTURE, capture_path)
     source = source.replace(SOURCE_ACTIVATE,
                             "let success=app.activate(options:[.activateIgnoringOtherApps])")
     fragment = CAPTURE.read_text()
-    fragment, changed = re.subn(r'let allowed="[^"]*gui-captures/"',
-                               'let allowed="' + capture_path + '"', fragment)
-    if changed == 0 and fragment.count('__MAC_CONTROL_CAPTURES__') == 1:
-        fragment = fragment.replace('__MAC_CONTROL_CAPTURES__', capture_path)
-        changed = 1
-    if changed != 1:
-        raise RuntimeError("GUI capture fragment lacks portable capture path anchor")
+    if fragment.count('let allowed=try GUI_RUNTIME_PATHS.get().capturePrefix') != 1:
+        raise RuntimeError("GUI capture fragment lacks runtime capture path anchor")
     source = source.replace(
         "func postMouse(_ kind: CGEventType",
         fragment + "\nfunc postMouse(_ kind: CGEventType")

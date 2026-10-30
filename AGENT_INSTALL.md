@@ -76,8 +76,9 @@ If system Python is too old to run the script, first inspect:
     command -v uv
     command -v brew
 
-Check free space, compatible macOS, Apple Silicon/Intel architecture, developer
-tools, Python 3.13, Homebrew/uv and existing installs. Do not overwrite an
+Check free space, compatible macOS, Apple Silicon/Intel architecture,
+Python 3.13, Homebrew/uv and existing installs. Native helpers require macOS 14+;
+their normal installation does not require Apple Command Line Tools. Do not overwrite an
 existing LaunchAgent, profile, TCC helper, OAuth client or agent configuration.
 
 ### Step 3 — Optional remote access through Tailscale Funnel
@@ -165,22 +166,28 @@ checkout and showing the owner its effects:
     python3 scripts/install_mac_control.py --install
     python3 scripts/install_mac_control.py --status
 
-Default installation installs the separate signed GUI helper, or reuses the
-verified helper owned by this installation. Apple Command Line Tools are needed
-for Swift and Unicode clipboard compilation. If unavailable, tell the owner to
-run `xcode-select --install`, manually approve Apple's dialog, wait and retry;
-do not download tools automatically.
+Default installation installs the separate GUI helper, or reuses the verified
+helper owned by this installation. It downloads prebuilt universal GUI and
+Unicode clipboard helpers for Apple Silicon and Intel, verifying the pinned
+SHA256 before extraction. Normal installation does not compile helpers or
+require Apple Command Line Tools. These binaries are ad hoc signed, without a
+Developer ID signature or Apple notarization; signature verification checks
+integrity, not publisher identity. Manual developer builds with
+`scripts/build_mac_control_gui.py` or `scripts/package_gui_release.py` still
+require Apple developer tools and Swift.
 
 After `--install`, an interactive Terminal runs `guided_setup.py`: the helper
-starts and requests TCC, then status is checked. The owner must grant
-Accessibility and Screen Recording in macOS Settings; never claim a grant
-because the dialog opened. A skipped/denied step stays pending. Without an
+starts and requests missing Accessibility and Screen Recording permissions
+sequentially, checking each grant before proceeding. A system popup is not
+guaranteed. Guide the owner to the corresponding macOS Settings pane if needed;
+only the owner can grant access. Never claim a grant because a request was sent
+or a dialog opened. A skipped/denied step stays pending. Without an
 interactive Terminal, local installation reports `pending_owner_interaction`.
 Resume with `python3 scripts/install_mac_control.py --setup`.
 
-`--update` preserves the verified GUI app without rebuilding and does not
-restart the wizard. `--with-gui` explicitly rebuilds/replaces only an owned
-helper and may require fresh TCC approval. `--without-gui` skips new GUI
+`--update` preserves the verified GUI app without replacement and does not
+restart the wizard. `--with-gui` explicitly replaces only an owned helper from
+the pinned prebuilt release and may require fresh TCC approval. `--without-gui` skips new GUI
 installation and the wizard TCC request; previously enabled GUI is preserved,
 including clipboard provisioning for the new release. Resume this option with `--setup --without-gui`. `--rollback` and
 `--uninstall` preserve user data and backups.

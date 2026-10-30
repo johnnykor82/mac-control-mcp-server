@@ -415,24 +415,17 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     preserve_gui = with_gui is False and old_flags.get("native_gui") is True
     if with_gui is not False or preserve_gui:
         try:
-            from scripts.build_mac_control_gui import verify_owned, require_build_tools
+            from scripts.build_mac_control_gui import verify_owned
+            from scripts.setup_gui_dependency import ensure as ensure_gui
         except ModuleNotFoundError:
-            from build_mac_control_gui import verify_owned, require_build_tools
+            from build_mac_control_gui import verify_owned
+            from setup_gui_dependency import ensure as ensure_gui
         existing_gui = verify_owned(info["root"])
         if preserve_gui and not existing_gui:
             raise RuntimeError("Enabled GUI helper is missing; retry with --with-gui to restore it")
-        require_build_tools()
-        # Independent Mac Control MCP Server .app: never overwrite Stable/DEV GUI helper.
-        if with_gui is True or not existing_gui:
-            run([str(dest / ".venv/bin/python"), str(dest / "scripts/build_mac_control_gui.py"),
-                 "--root", str(info["root"]), "--install"], timeout=180)
-            gui_status = "installed"
-        else:
-            gui_status = "reused"
-        # Clipboard helper is required for Unicode gui_type() and must be in
-        # the installed release, not the developer checkout's build folder.
-        run([str(dest / ".venv/bin/python"), str(dest / "scripts/build_dev_clipboard.py")],
-            timeout=110)
+        # Reuse the app by default; pinned clipboard binaries belong to every
+        # release, including updates preserving a previously enabled helper.
+        gui_status = ensure_gui(info["root"], dest, replace=with_gui is True)["native_gui"]
         old_flags["native_gui"] = True
         temp = flags.with_suffix(".tmp")
         temp.write_text(json.dumps(old_flags, indent=2) + "\n")
@@ -495,7 +488,7 @@ def main() -> int:
     parser.add_argument("--github-login", help="GitHub username to authorize (or auto-detect logged-in gh CLI)")
     gui = parser.add_mutually_exclusive_group()
     gui.add_argument("--with-gui", dest="with_gui", action="store_true",
-                     help="Explicitly build/install or replace the owner-managed GUI helper")
+                     help="Explicitly install or replace the owner-managed GUI helper from the pinned release")
     gui.add_argument("--without-gui", dest="with_gui", action="store_false",
                      help="Skip GUI provisioning; preserve any existing helper")
     parser.set_defaults(with_gui=None)
@@ -549,7 +542,7 @@ def main() -> int:
                   "chatbridge": "reuse_or_install_pinned" if args.with_chatbridge else "skip_setup_preserve_existing",
                   "existing_stable_modified": False,
                   "native_background_gui": ("skip_preserve_existing" if args.with_gui is False else
-                                            "explicit_build_install" if args.with_gui is True else
+                                            "explicit_prebuilt_install" if args.with_gui is True else
                                             "install_if_missing_reuse_owned"),
                   "gui_tcc": "interactive setup requests Accessibility and Screen Recording; owner grants them",
                   "guided_setup": "interactive_after_install; noninteractive installation reports pending steps",

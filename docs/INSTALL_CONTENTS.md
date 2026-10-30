@@ -21,13 +21,17 @@ The portable second Mac is the intended independent acceptance-test host.
 | Read-only public IP and transport capability diagnosis | setup_network.py | Tests; not external connectivity proof |
 | Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Unit-tested, public E2E pending |
 | Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Guarded tests, external validation pending |
-| Default signed native GUI helper | ~/Applications/MacControlMCPServer.app | Install if absent, reuse verified owner-managed app; TCC owner approval required |
+| Prebuilt universal native GUI helper (macOS 14+, Apple Silicon/Intel) | ~/Applications/MacControlMCPServer.app | Pinned SHA256 download; install if absent, reuse verified owner-managed app; TCC owner approval required |
+| Prebuilt universal Unicode clipboard helper | releases/<version>/build/gui_clipboard_paste | Provisioned from the same pinned native archive without compilation |
 | Interactive connection wizard | guided_setup.py | TCC, network selection, OAuth, service and public checks; ChatGPT manual |
 | Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Configured after OAuth by setup; live remote E2E pending |
 | Smoke test for installed MCP file ops and optional browser | mac_control_smoke.py | Tested |
 
-The installer copies only files listed in `scripts/install_manifest.txt`; local
-untracked files and symlinks are excluded or rejected.
+The source release copies only files listed in `scripts/install_manifest.txt`;
+local untracked files and symlinks are excluded or rejected. Native binaries are
+downloaded separately from a pinned release and verified by SHA256 before extraction.
+They are ad hoc signed, without a Developer ID signature or Apple notarization;
+signature verification checks integrity, not publisher identity.
 
 The package does **not** copy the developer's private source tree or
 active user credentials by design. The MIT LICENSE has been added; a final
@@ -37,7 +41,8 @@ public source export and provenance review remain prerequisites.
 
 | Component | Scope / owner action |
 | --- | --- |
-| GUI permissions and build tools | Apple Command Line Tools for Swift/clipboard compilation; if absent run xcode-select --install and approve Apple installation manually. Setup starts the helper and requests TCC; owner grants Accessibility/Screen Recording. |
+| GUI permissions | Normal native helper installation needs no Apple Command Line Tools. Setup requests missing Accessibility/Screen Recording grants sequentially; a system popup is not guaranteed, and only the owner grants access in Settings. |
+| Manual developer builds | scripts/build_mac_control_gui.py and scripts/package_gui_release.py still require Apple developer tools and Swift. |
 | ChatBridge HTTP Browser API | **Independent external product**. Default setup reuses a compatible service or installs the checksum-pinned published release using ChatBridge's own installer. --without-chatbridge skips setup; --chatbridge-source selects owner-reviewed sources. ChatBridge is not bundled or removed by Mac Control. |
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
 | Public HTTPS route | Direct public domain with trusted TLS and TCP 443 reverse proxy to 127.0.0.1:3201, or Tailscale Funnel without public IP. Owner configures direct DNS/TLS/proxy/router and verifies inbound HTTPS. Never expose port 3201 externally. |
@@ -47,14 +52,14 @@ public source export and provenance review remain prerequisites.
 ## Interactive setup and owner responsibilities
 
 Default `--install` installs/reuses the GUI helper, then runs interactive setup:
-TCC request and status checks, public-IP question, direct HTTPS or Tailscale,
+Sequential requests and status checks for missing TCC grants, public-IP question, direct HTTPS or Tailscale,
 GitHub OAuth, owner-scoped remote MCP LaunchAgent, local 401/issuer checks,
 explicit Funnel `PUBLISH` when needed, and public discovery/authentication probe.
 The owner manually adds the server in ChatGPT and completes OAuth. Public probes
 do not establish real OAuth or ChatGPT E2E; those release checks remain pending.
 
 `--update` reuses the verified app without replacement; `--with-gui` explicitly
-rebuilds it and can require new TCC approval. `--without-gui` skips a new app and
+replaces it from the pinned prebuilt release and can require new TCC approval. `--without-gui` skips a new app and
 the wizard TCC step; an already enabled GUI is preserved and its clipboard
 helper is provisioned in the active release. Unknown apps are not overwritten.
 `--setup` resumes pending setup; after `--without-gui`, use `--setup --without-gui`. Noninteractive installation reports

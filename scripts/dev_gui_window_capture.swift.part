@@ -26,7 +26,7 @@ func captureOwnedWindow(_ req: [String:Any]) async throws -> [String:Any] {
     let filter=SCContentFilter(desktopIndependentWindow:selected)
     let image=try await SCScreenshotManager.captureImage(contentFilter:filter,configuration:config)
     let destination=argument(req,"destination")
-    let allowed="__MAC_CONTROL_CAPTURES__"
+    let allowed=try GUI_RUNTIME_PATHS.get().capturePrefix
     guard destination.hasPrefix(allowed),destination.hasSuffix(".jpg"),
           !destination.contains("..") else { throw AgentError.invalid("INVALID_CAPTURE_PATH") }
     let url=URL(fileURLWithPath:destination)

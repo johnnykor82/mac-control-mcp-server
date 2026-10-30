@@ -126,9 +126,13 @@ def connect(endpoint, helper, timeout=20):
                 _discard_stale_socket(endpoint)
                 if not helper.is_file() or helper.is_symlink():
                     raise GUIIPCError("helper_not_running", "GUI app executable missing", endpoint=endpoint)
+                # LaunchServices does not reliably inherit the server environment.
+                arguments = ['/usr/bin/open', '-a', str(helper.parents[2]), '--args', '--serve']
+                if helper.name == "MacControlMCPServer":
+                    arguments.extend(['--data-root', str(endpoint.parent.parent)])
                 try:
                     result = subprocess.run(
-                        ['/usr/bin/open', '-a', str(helper.parents[2]), '--args', '--serve'],
+                        arguments,
                         capture_output=True, text=True, timeout=10, check=False)
                 except (OSError, subprocess.SubprocessError) as exc:
                     raise GUIIPCError("helper_not_running", str(exc), endpoint=endpoint) from exc

@@ -56,39 +56,61 @@ def _gui_call(root, operation):
     data = root / "data"
     env = {**os.environ, "MAC_CONTROL_DATA_ROOT": str(data),
            "PYTHONPATH": str(current / "src"), "PYTHONNOUSERSITE": "1"}
-    code = ("import json; from mac_control.legacy_handlers.gui_ops import _call; "
-            "v=_call(" + repr(operation) + ", timeout=90); "
-            "print(json.dumps({k:bool(v.get(k)) for k in "
+    code = ("import json\nfrom mac_control.legacy_handlers.gui_ops import _call\n"
+            "try:\n    v=_call(" + repr(operation) + ", timeout=90)\n"
+            "except RuntimeError as error:\n    print(json.dumps({'error':str(error)}))\n"
+            "else:\n    print(json.dumps({k:bool(v.get(k)) for k in "
             "('accessibility_trusted','screen_capture_trusted')}))")
     result = subprocess.run([str(python), "-c", code], env=env, text=True,
                             capture_output=True, check=True, timeout=100)
-    return json.loads(result.stdout)
+    response = json.loads(result.stdout)
+    if "error" in response:
+        raise RuntimeError(response["error"])
+    return response
 
 
 def gui_permissions(root, *, input_fn=input):
-    """Ask macOS to present prompts; only the owner can grant TCC access."""
+    """Request missing grants in order; only the owner can grant TCC access."""
     state = _gui_call(root, "status")
-    if state.get("accessibility_trusted") and state.get("screen_capture_trusted"):
-        return True
-    print("Mac Control запросит разрешения macOS для своего GUI helper.")
-    print("Подтвердите Accessibility и Screen Recording в настройках macOS.")
-    _gui_call(root, "request_permissions")
+    permissions = (
+        ("accessibility_trusted", "request_accessibility", "Accessibility", "Privacy_Accessibility"),
+        ("screen_capture_trusted", "request_screen_capture", "Screen Recording / Screen & System Audio Recording", "Privacy_ScreenCapture"),
+    )
+    requested = set()
+    legacy_helper = False
     while True:
-        state = _gui_call(root, "status")
         if state.get("accessibility_trusted") and state.get("screen_capture_trusted"):
             return True
-        pane = ("Privacy_Accessibility" if not state.get("accessibility_trusted")
-                else "Privacy_ScreenCapture")
+        key, operation, label, pane = next(item for item in permissions if not state.get(item[0]))
+        if key not in requested and not legacy_helper:
+            print("Mac Control отправит macOS запрос на " + label + ". Системное окно может не появиться.")
+            try:
+                _gui_call(root, operation)
+            except RuntimeError as error:
+                if str(error) != "Unknown GUI operation":
+                    raise
+                # Older deployed helpers only support the combined request.
+                print("Установлен прежний GUI helper: он поддерживает только общий запрос двух разрешений.")
+                _gui_call(root, "request_permissions")
+                legacy_helper = True
+            requested.add(key)
+            state = _gui_call(root, "status")
+            if state.get(key):
+                continue
+        print("Разрешение " + label + " пока не подтверждено для MacControlMCPServer.app.")
+        print("Включите Mac Control MCP Server в System Settings → Privacy & Security → " + label + ".")
+        print("Если приложения нет в списке, нажмите + и выберите ~/Applications/MacControlMCPServer.app.")
         try:
             opened = subprocess.run(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?" + pane],
                                     check=False, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if opened.returncode:
-                print("Откройте вручную System Settings → Privacy & Security → " + pane)
+                print("Откройте вручную System Settings → Privacy & Security → " + label)
         except (OSError, subprocess.SubprocessError):
-            print("Откройте вручную System Settings → Privacy & Security → " + pane)
+            print("Откройте вручную System Settings → Privacy & Security → " + label)
         answer = input_fn("После выдачи прав нажмите Enter для проверки; S — отложить: ").strip().lower()
         if answer in ("s", "skip", "q"):
             return False
+        state = _gui_call(root, "status")
 
 
 def _validate_setup_install(root):

@@ -56,6 +56,21 @@ class GUIIPCReliabilityTests(unittest.TestCase):
         listeners[0].accept()[0].close()
         listeners[0].close()
 
+    def test_portable_product_launch_receives_the_endpoint_data_root(self):
+        helper = self.helper.with_name("MacControlMCPServer")
+        helper.write_text("portable fixture")
+        endpoint = self.base / "run/maccontrol-gui.sock"
+        endpoint.parent.mkdir()
+        missing = FileNotFoundError(errno.ENOENT, "not started")
+        connection = mock.Mock()
+        with mock.patch.object(ipc, "_once", side_effect=[missing, missing, connection]), \
+             mock.patch.object(ipc, "_stop_broken_helper"), \
+             mock.patch.object(ipc, "_discard_stale_socket"), \
+             mock.patch.object(ipc.subprocess, "run", return_value=mock.Mock(returncode=0)) as launch:
+            self.assertIs(ipc.connect(endpoint, helper, 2), connection)
+        self.assertEqual(launch.call_args.args[0][-4:],
+                         ["--args", "--serve", "--data-root", str(self.base)])
+
     def test_unsafe_regular_file_never_deleted(self):
         self.socket_path.write_text("private data")
         with mock.patch.object(ipc, "_stop_broken_helper"):

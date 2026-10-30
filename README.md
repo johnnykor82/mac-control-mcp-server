@@ -14,7 +14,7 @@ Mac Control MCP Server is an experimental Model Context Protocol (MCP) server de
 ## Capabilities
 
 - **Files, terminal and Git:** manage projects, shell commands, services, processes and approved SSH targets.
-- **Native macOS GUI:** separate signed helper installed by default using Accessibility and Screen Recording permissions, with background window operations where supported.
+- **Native macOS GUI:** separate native helper installed by default using Accessibility and Screen Recording permissions, with background window operations where supported.
 - **Browser through ChatBridge:** navigate, click, fill forms, inspect the DOM and take screenshots using ChatBridge HTTP; Mac Control never owns Chrome.
 - **Agent workspace:** store generated projects, tests, downloads, logs and artifacts under one default working directory.
 - **Experimental remote access:** each owner configures a GitHub OAuth App and optionally publishes the authenticated MCP endpoint using Tailscale Funnel.
@@ -35,7 +35,7 @@ Use a reviewed published release of ChatBridge.
 
 ## Installation (macOS)
 
-Requires macOS, Python 3.9+ for bootstrap, Google Chrome and a compatible MCP client. The installer provisions isolated Python 3.13 using [uv](https://docs.astral.sh/uv/). Review the source first.
+Requires macOS, Python 3.9+ for bootstrap, Google Chrome and a compatible MCP client. Native helpers require macOS 14+ on Apple Silicon or Intel. The installer provisions isolated Python 3.13 using [uv](https://docs.astral.sh/uv/). Review the source first.
 
 ```sh
 git clone https://github.com/johnnykor82/mac-control-mcp-server.git
@@ -88,16 +88,21 @@ During idle, `/ready` returns HTTP 503 with `reason=browser_idle` without waking
 Chrome. If API authentication is enabled, use an authenticated client for wake
 and status checks.
 
-Default `--install` installs the signed GUI helper under
+Default `--install` installs the GUI helper under
 `~/Applications/MacControlMCPServer.app`, or reuses the verified helper owned by
-this installation. GUI and Unicode clipboard compilation require Apple Command
-Line Tools. If missing, run `xcode-select --install`, confirm Apple's dialog,
-wait for installation and retry. Mac Control does not download these tools
-automatically.
+this installation. It downloads prebuilt universal GUI and Unicode clipboard
+helpers from the pinned release and verifies SHA256 before extraction. Normal
+installation does not compile helpers or require Apple Command Line Tools.
+The binaries are ad hoc signed, without a Developer ID signature or Apple
+notarization; the signature verifies integrity, not publisher identity.
+Manual developer builds with `scripts/build_mac_control_gui.py` or
+`scripts/package_gui_release.py` still require Apple developer tools and Swift.
 
-After local installation, the interactive setup starts the helper to request
-TCC, then checks Accessibility and Screen Recording. Only the owner grants
-these macOS permissions. It continues through public HTTPS selection, GitHub
+After local installation, the interactive setup starts the helper and requests
+missing Accessibility and Screen Recording permissions in order, checking each
+grant before proceeding. A system popup is not guaranteed; use the Settings
+instructions if it does not appear. Only the owner grants these macOS permissions.
+It continues through public HTTPS selection, GitHub
 OAuth, owner login autostart and public endpoint checks. The owner manually
 adds the plugin in ChatGPT and completes real OAuth login. Noninteractive
 installation reports `pending_owner_interaction`.
@@ -108,10 +113,10 @@ Resume setup in Terminal:
 python3 scripts/install_mac_control.py --setup
 ```
 
-`--update` reuses the verified GUI app without rebuilding, preserving its TCC
+`--update` reuses the verified GUI app without replacing it, preserving its TCC
 identity; it does not rerun the wizard. Resume with `--setup` as needed.
-`--with-gui` explicitly rebuilds/replaces the verified owner-managed app and
-may require new TCC approval. `--without-gui` skips new GUI installation and
+`--with-gui` explicitly replaces the verified owner-managed app from the pinned
+prebuilt release and may require new TCC approval. `--without-gui` skips new GUI installation and
 the wizard's TCC step; an already enabled GUI remains configured and its
 clipboard helper is prepared in the new release. After choosing this option, resume with `--setup --without-gui`. Unknown apps are never
 replaced. `--rollback` and `--uninstall` preserve user data. A local MCP client

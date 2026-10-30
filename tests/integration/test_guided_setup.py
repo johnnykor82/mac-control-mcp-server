@@ -102,18 +102,93 @@ class GuidedSetupTests(unittest.TestCase):
         self.assertIn("--without-gui", run.call_args.args[0])
         self.assertIsNone(run.call_args.kwargs["timeout"])
 
-    def test_gui_prompts_only_when_needed_and_checks_both_grants(self):
-        missing = {"accessibility_trusted": False, "screen_capture_trusted": False}
-        both = {"accessibility_trusted": True, "screen_capture_trusted": True}
+    def test_gui_requests_missing_grants_sequentially_and_waits_for_owner(self):
+        state = {"accessibility_trusted": False, "screen_capture_trusted": False}
         calls = []
         def gui(root, operation):
             calls.append(operation)
-            return both if calls.count("status") >= 3 else missing
+            return dict(state)
+        def owner(prompt):
+            calls.append("owner")
+            key = ("accessibility_trusted" if not state["accessibility_trusted"]
+                   else "screen_capture_trusted")
+            state[key] = True
+            return ""
         with patch.object(guided_setup, "_gui_call", side_effect=gui), \
              patch.object(guided_setup.subprocess, "run") as opener:
-            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: ""))
-        self.assertEqual(calls, ["status", "request_permissions", "status", "status"])
-        self.assertIn("Privacy_Accessibility", opener.call_args.args[0][1])
+            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
+        self.assertEqual(calls, ["status", "request_accessibility", "status", "owner", "status",
+                                 "request_screen_capture", "status", "owner", "status"])
+        self.assertIn("Privacy_Accessibility", opener.call_args_list[0].args[0][1])
+        self.assertIn("Privacy_ScreenCapture", opener.call_args_list[1].args[0][1])
+
+    def test_gui_requests_only_missing_screen_permission(self):
+        state = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        calls = []
+        def gui(root, operation):
+            calls.append(operation)
+            if operation == "request_screen_capture":
+                state["screen_capture_trusted"] = True
+            return dict(state)
+        with patch.object(guided_setup, "_gui_call", side_effect=gui), \
+             patch.object(guided_setup.subprocess, "run") as opener:
+            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected wait")))
+        self.assertEqual(calls, ["status", "request_screen_capture", "status"])
+        opener.assert_not_called()
+
+    def test_gui_skip_does_not_request_later_permission_or_repeat_request(self):
+        missing = {"accessibility_trusted": False, "screen_capture_trusted": False}
+        output = io.StringIO()
+        answers = iter(("", "s"))
+        with patch.object(guided_setup, "_gui_call", return_value=missing) as gui, \
+             patch.object(guided_setup.subprocess, "run"), redirect_stdout(output):
+            self.assertFalse(guided_setup.gui_permissions(self.root, input_fn=lambda _: next(answers)))
+        self.assertEqual([call.args[1] for call in gui.call_args_list],
+                         ["status", "request_accessibility", "status", "status"])
+        self.assertIn("MacControlMCPServer.app", output.getvalue())
+        self.assertIn("+", output.getvalue())
+
+    def test_gui_legacy_unknown_operation_falls_back_only_once(self):
+        state = {"accessibility_trusted": False, "screen_capture_trusted": False}
+        calls = []
+        def gui(root, operation):
+            calls.append(operation)
+            if operation == "request_accessibility":
+                raise RuntimeError("Unknown GUI operation")
+            return dict(state)
+        def owner(prompt):
+            key = ("accessibility_trusted" if not state["accessibility_trusted"]
+                   else "screen_capture_trusted")
+            state[key] = True
+            return ""
+        with patch.object(guided_setup, "_gui_call", side_effect=gui), \
+             patch.object(guided_setup.subprocess, "run"):
+            self.assertTrue(guided_setup.gui_permissions(self.root, input_fn=owner))
+        self.assertEqual(calls[:3], ["status", "request_accessibility", "request_permissions"])
+        self.assertEqual(calls.count("request_permissions"), 1)
+        self.assertNotIn("request_screen_capture", calls)
+
+    def test_gui_permission_request_failure_does_not_use_legacy_fallback(self):
+        missing = {"accessibility_trusted": False, "screen_capture_trusted": False}
+        with patch.object(guided_setup, "_gui_call", side_effect=[missing, RuntimeError("IPC disconnected")]) as gui:
+            with self.assertRaisesRegex(RuntimeError, "IPC disconnected"):
+                guided_setup.gui_permissions(self.root, input_fn=lambda _: self.fail("unexpected wait"))
+        self.assertEqual([call.args[1] for call in gui.call_args_list], ["status", "request_accessibility"])
+
+    def test_gui_call_preserves_unknown_operation_from_helper(self):
+        current = self.root / "current"
+        python = current / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        package = current / "src/mac_control"
+        handlers = package / "legacy_handlers"
+        handlers.mkdir(parents=True)
+        (package / "__init__.py").touch()
+        (handlers / "__init__.py").touch()
+        (handlers / "gui_ops.py").write_text(
+            'def _call(*args, **kwargs):\n    raise RuntimeError("Unknown GUI operation")\n')
+        with self.assertRaisesRegex(RuntimeError, "^Unknown GUI operation$"):
+            guided_setup._gui_call(self.root, "request_accessibility")
 
     def test_existing_gui_permissions_do_not_prompt_or_open_settings(self):
         with patch.object(guided_setup, "_gui_call", return_value={"accessibility_trusted": True, "screen_capture_trusted": True}) as gui, \

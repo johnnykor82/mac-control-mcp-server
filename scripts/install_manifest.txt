@@ -34,6 +34,7 @@ scripts/release_preflight.py
 scripts/runtime_tools.py
 scripts/setup_chatbridge_dependency.py
 scripts/setup_github_oauth.py
+scripts/setup_gui_dependency.py
 scripts/setup_network.py
 scripts/setup_remote_service.py
 scripts/test_github_oauth_login.py
