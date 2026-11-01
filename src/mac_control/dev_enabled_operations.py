@@ -23,7 +23,6 @@ READ_ONLY_PREVIEW_OPERATIONS = frozenset({
     "git_diff",
     "git_history",
     "git_branches",
-    "approved_commands",
     "machine_health",
     "network_listeners",
     "package_capabilities",
@@ -52,7 +51,7 @@ LOCAL_BRIDGE_READ_OPERATIONS = frozenset({
 })
 
 # All current Stable operations are available over LOCAL, explicitly configured Dev stdio.
-# The 19 read-only HTTP preview operations are unchanged and not widened.
+# HTTP preview remains strictly read-only; removed legacy commands are excluded.
 LOCAL_MUTATION_OPERATIONS = frozenset({
     'chrome_chat_adopt',
     'chrome_chat_archive',
@@ -63,7 +62,6 @@ LOCAL_MUTATION_OPERATIONS = frozenset({
     'chrome_chat_send',
     'chrome_chat_switch',
     'chrome_orchestrator_launch',
-    'execute_approved',
     'fs_mkdir',
     'fs_move',
     'fs_replace',
@@ -99,7 +97,6 @@ LOCAL_MUTATION_OPERATIONS = frozenset({
     'ssh_profile_approve_alias',
     'ssh_profile_register',
     'ssh_pty_open',
-    'terminal_access_configure',
     'terminal_close',
     'terminal_exec',
     'terminal_open',

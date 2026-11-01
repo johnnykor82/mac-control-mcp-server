@@ -105,9 +105,8 @@ Arbitrary Git commands remain possible through an explicitly enabled terminal.
 
 ## Terminal: one command or an ongoing session
 
-Terminal access starts disabled unless its private policy explicitly enables it.
-`terminal_capabilities` reports that state. `terminal_access_configure` changes the
-opt-in setting; enabling it authorizes shell execution as the Mac service account.
+Terminal access is available to authenticated Mac Control without an extra local
+policy file. `terminal_capabilities` reports shell and tmux readiness.
 A working directory restricts where a command starts, not what the shell can read.
 
 `terminal_exec` runs a bounded noninteractive zsh command and returns captured
@@ -121,12 +120,10 @@ terminal, retain the session and report its current output and exit status.”
 A terminal that still exists is not proof that its task is finished. Commands,
 including those launched from project scripts, run with the account's privileges.
 
-## Approved commands, test runners, and Homebrew
+## Test runners and Homebrew
 
-For narrower automation, `approved_commands` and `execute_approved` use exact
-owner-configured argument lists from `allowed_commands.json`, without a caller
-supplying a shell string. `project_task` provides specific runners for Python
-compilation, pytest, npm tests, and npm builds in an approved project.
+`project_task` provides runners for Python compilation, pytest, npm tests, and
+npm builds. `terminal_exec` handles arbitrary commands.
 Project tests and build scripts can themselves execute code and contact networks.
 
 The package tools report Homebrew availability and installed formulae, start a

@@ -1,4 +1,4 @@
-"""Homebrew package management and terminal-access controls.
+"""Homebrew package management.
 
 Installed formula names are restricted to simple Homebrew/core-style identifiers.
 No shell command strings, sudo, casks, taps, or arbitrary installer URLs.
@@ -18,7 +18,6 @@ from pathlib import Path
 
 ROOT = DATA_ROOT
 STATE = ROOT / "run" / "package-jobs"
-POLICY = ROOT / "terminal_policy.json"
 FORMULA = re.compile(r"[a-z][a-z0-9+._@-]{0,63}\Z")
 JOB_ID = re.compile(r"[a-f0-9]{16}\Z")
 
@@ -172,35 +171,6 @@ def register(mcp):
         """Get current or completed Homebrew install log and exit code."""
         return _status(job_id)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
-    def terminal_access_configure(enabled: bool) -> dict:
-        """Explicitly enable/disable interactive and noninteractive Mac shell access.
-
-        WARNING: Any command can read or modify files accessible to the
-        Mac Control service account. This is not a sandbox.
-        """
-        if not isinstance(enabled, bool):
-            raise ValueError("enabled must be boolean")
-        if POLICY.is_symlink():
-            raise PermissionError("Refusing symlinked terminal policy")
-        if POLICY.exists():
-            st = POLICY.stat()
-            if st.st_uid != os.getuid() or st.st_mode & 0o077:
-                raise PermissionError("Policy must be owned by current user, chmod 600")
-        temp = ROOT / (".terminal-policy-" + secrets.token_hex(6))
-        fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump({"enabled": enabled}, stream)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temp, POLICY)
-        finally:
-            if temp.exists():
-                temp.unlink()
-        return {"terminal_enabled": enabled, "policy": str(POLICY),
-                "effective_user": os.getuid(),
-                "note": "Shell commands run with all privileges of the service user"}
 
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--install":

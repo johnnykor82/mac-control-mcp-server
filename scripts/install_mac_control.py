@@ -535,6 +535,12 @@ def _save_chatbridge_key(data: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+
+def _ensure_required_tmux(provision) -> dict:
+    """Provision required PTY support as part of the standard installer."""
+    return provision(approved=True, interactive=False)
+
+
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None, with_watcher: bool = True,
@@ -680,14 +686,14 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     elif cli_commands.get("path") == "added_to_zprofile":
         print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
               file=sys.stderr)
-    # PTY needs tmux; install through Homebrew only after owner approval.
+    # PTY needs tmux; the standard install automatically provisions it.
     try:
         from scripts.setup_tmux_dependency import ensure as ensure_tmux
     except ModuleNotFoundError as exc:
         if exc.name != "scripts":
             raise
         from setup_tmux_dependency import ensure as ensure_tmux
-    tmux_status = ensure_tmux(approved=install_tmux,interactive=sys.stdin.isatty())
+    tmux_status = _ensure_required_tmux(ensure_tmux)
     if not tmux_status["available"]:
         print("Interactive terminal unavailable: " + tmux_status["remedy"],
               file=sys.stderr)
@@ -706,7 +712,8 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         cleanup = {"status": "skipped", "reason": type(exc).__name__}
         print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
-    return {"status": "installed", "watcher": watcher_status,
+    return {"status": "installed" if tmux_status["available"] else "setup_incomplete",
+            "watcher": watcher_status,
             "release_cleanup": cleanup,
             "tmux": tmux_status,
             "workspace": workspace_info, "release": str(dest),

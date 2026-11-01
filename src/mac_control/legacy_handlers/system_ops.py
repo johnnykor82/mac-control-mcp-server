@@ -48,39 +48,6 @@ def _launchd_labels():
 
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
-    def approved_commands() -> dict:
-        """Show command IDs explicitly allowed in a local owner-managed config."""
-        cfg = DATA_ROOT / "allowed_commands.json"
-        if not cfg.is_file() or cfg.is_symlink():
-            return {"commands": [], "config": str(cfg)}
-        config = __import__("json").loads(cfg.read_text())
-        return {"commands": sorted(config.get("commands", {})), "config": str(cfg)}
-
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
-    def execute_approved(project: str, command_id: str) -> dict:
-        """Execute an exact owner-approved argv without shell or caller-selected parameters."""
-        cfg = DATA_ROOT / "allowed_commands.json"
-        if not cfg.is_file() or cfg.is_symlink():
-            raise PermissionError("No commands approved by local owner")
-        import json
-        commands = json.loads(cfg.read_text()).get("commands", {})
-        if command_id not in commands:
-            raise PermissionError("Command ID is not approved")
-        spec = commands[command_id]
-        argv = spec.get("argv")
-        if not isinstance(argv, list) or not 1 <= len(argv) <= 25:
-            raise ValueError("Invalid command specification")
-        if not all(isinstance(arg, str) and len(arg) <= 512 and "\x00" not in arg
-                   for arg in argv):
-            raise ValueError("Invalid arguments")
-        if not Path(argv[0]).is_absolute() or not Path(argv[0]).is_file():
-            raise PermissionError("Executable must be an absolute existing path")
-        allowed = roots()
-        if project not in allowed:
-            raise PermissionError("Project root not approved")
-        return execute(argv, str(allowed[project]), spec.get("timeout", 30))
-
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def machine_health() -> dict:
         """Read disk capacity, uptime, and memory pressure summary."""
         output = {}
@@ -206,7 +173,7 @@ def register(mcp):
             python = allowed[project] / ".venv/bin/python"
             if not python.is_file() or not os.access(python, os.X_OK):
                 raise ValueError("pytest requires the project's .venv/bin/python; "
-                                 "use execute_approved for another environment")
+                                 "use the terminal_exec tool for another environment")
             command = [str(python), "-m", "pytest", "-q", "--disable-warnings"]
         elif task == "npm_test":
             command = [shutil.which("npm") or "/opt/homebrew/bin/npm", "test", "--", "--runInBand"]

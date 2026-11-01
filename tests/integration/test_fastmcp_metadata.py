@@ -17,6 +17,9 @@ EXPECTED = {
     )["operations"].items()
 }
 
+for _retired in ("approved_commands", "execute_approved", "terminal_access_configure"):
+    EXPECTED.pop(_retired, None)
+
 EXPECTED["watcher_followup_browser_task"] = False
 EXPECTED["watcher_resolve_current_chat"] = False
 
@@ -26,7 +29,7 @@ for _name in ("ssh_upload","ssh_download","ssh_write_text","ssh_transfer_begin",
 
 
 class FastMCPRegistrationTests(unittest.TestCase):
-    def test_frozen_handlers_register_exactly_same_109_tools(self):
+    def test_frozen_handlers_register_exactly_106_tools(self):
         async def probe():
             server = FastMCP("Mac Control offline metadata test")
             for source in (fs_ops, git_ops, system_ops, command_plugins):
@@ -34,7 +37,7 @@ class FastMCPRegistrationTests(unittest.TestCase):
             return await server.list_tools()
 
         tools = asyncio.run(probe())
-        self.assertEqual(len(tools), 109)
+        self.assertEqual(len(tools), 106)
         self.assertEqual(
             {tool.name: tool.annotations.read_only_hint for tool in tools},
             EXPECTED,

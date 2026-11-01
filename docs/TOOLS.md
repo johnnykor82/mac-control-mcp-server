@@ -2,7 +2,7 @@
 
 [Русская версия](TOOLS.ru.md) · [Installation](../README.md) · [Agent workspace convention](../AGENT_WORKSPACE_POLICY.md)
 
-Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **129 tool names** in the full supported configuration: 109 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
+Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **126 tool names** in the full supported configuration: 106 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
 
 The catalog describes the available product surface, not a promise that every tool works immediately after installation. Installed feature flags, local configuration, dependency availability, macOS permissions, and the selected MCP connection determine which tools are advertised and usable. The experimental background-native module is excluded from this count.
 
@@ -67,29 +67,26 @@ The selected project alias must point to the repository root itself. For example
 | `git_pull_ff` | W | Pull the current branch from `origin` only when a fast-forward is possible. | `project="repo"` |
 | `git_push` | W | Push the current branch to the corresponding branch on `origin`. | `project="repo"`; use only when the owner requested publication. |
 
-## Machine diagnostics and approved jobs — 8 tools
+## Machine diagnostics and project jobs — 6 tools
 
-Machine diagnostics need no ChatGPT browser login. Approved commands come from owner-managed `allowed_commands.json`; an empty list means no such commands are configured. `project_task` may execute repository test/build code. Service inspection/restart uses a separate local label allowlist; the legacy default label may not describe this installation, so use `mcp_diagnostics` for Mac Control itself.
+Machine diagnostics need no ChatGPT browser login. `project_task` may execute repository test/build code. Service inspection/restart uses a separate local label allowlist; the legacy default label may not describe this installation, so use `mcp_diagnostics` for Mac Control itself.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
 | `machine_health` | R | Report disk capacity, uptime and memory pressure. | No arguments. |
 | `network_listeners` | R | List listening TCP processes and ports without making network requests. | `limit=50` |
 | `local_http_probe` | R | Probe an approved loopback HTTP port with GET/HEAD, without credentials or redirects. | `port=8000, path="/health", method="GET"` |
-| `approved_commands` | R | List IDs for exact command argument lists configured locally by the owner. | No arguments. |
-| `execute_approved` | W | Run one configured command ID in an approved project; no caller-supplied shell or extra arguments. | `project="repo", command_id="lint"` after that ID is configured. |
 | `project_task` | W | Run `python_compile`, `pytest`, `npm_test` or `npm_build`; pytest uses the project's `.venv/bin/python`. | `project="workspace", task="python_compile", path="projects/demo/main.py"` |
 | `launchd_status` | R | Inspect a locally permitted user LaunchAgent label. | `label=owner_approved_label` |
 | `launchd_restart` | W | Restart an explicitly allowlisted user LaunchAgent. Use the dedicated maintenance restart for Mac Control. | `label=owner_approved_label` |
 
-## Local shell and persistent terminals — 9 tools
+## Local shell and persistent terminals — 8 tools
 
-Shell access is disabled until explicitly enabled through the terminal policy. Noninteractive commands run as the service user; choosing a project is a working-directory choice, not a sandbox. Interactive sessions require `tmux`. Commands and keystrokes can have broad effects, so supply them only for the owner's authorized task.
+Shell access is available through authenticated Mac Control without additional local policy. Noninteractive commands run as the service user; choosing a project is a working-directory choice, not a sandbox. Interactive sessions require `tmux`. Commands and keystrokes can have broad effects, so supply them only for the owner's authorized task.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `terminal_capabilities` | R | Inspect shell availability, terminal policy and interactive-session prerequisites. | No arguments. |
-| `terminal_access_configure` | W | Explicitly enable or disable shell/interactive terminal access. | `enabled=true` only when the owner requests shell access. |
+| `terminal_capabilities` | R | Inspect shell availability and interactive-session prerequisites. | No arguments. |
 | `terminal_exec` | W | Run a bounded noninteractive zsh command in an approved project. | `command="pwd", project="workspace", timeout_seconds=25` |
 | `terminal_open` | W | Create a persistent tmux terminal and return its session ID. | `project="workspace", width=120, height=36` |
 | `terminal_list` | R | List active managed terminal sessions. | No arguments. |

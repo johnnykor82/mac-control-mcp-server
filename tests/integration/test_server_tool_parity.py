@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # AST snapshot of server/admin/extensions registration closure, including
 # dispatcher wrappers, nested command plugins and gui_tool decorator aliases.
 STABLE_TOOLS = frozenset({
-    'approved_commands',
     'audit_search',
     'audit_tail',
     'chrome_chat_adopt',
@@ -29,7 +28,6 @@ STABLE_TOOLS = frozenset({
     'chrome_orchestrator_status',
     'custom_command',
     'custom_query',
-    'execute_approved',
     'fs_list',
     'fs_mkdir',
     'fs_move',
@@ -102,7 +100,6 @@ STABLE_TOOLS = frozenset({
     'ssh_pty_open',
     'ssh_targets',
     'system_info',
-    'terminal_access_configure',
     'terminal_capabilities',
     'terminal_close',
     'terminal_exec',
@@ -190,8 +187,8 @@ print(json.dumps({'full': full, 'disabled': disabled}))
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             report = json.loads(result.stdout)
             full = set(report['full'])
-            self.assertEqual(len(STABLE_TOOLS), 121)
-            self.assertEqual(len(full), 129)
+            self.assertEqual(len(STABLE_TOOLS), 118)
+            self.assertEqual(len(full), 126)
             self.assertFalse(STABLE_TOOLS - full, sorted(STABLE_TOOLS - full))
             self.assertIn('watcher_followup_browser_task', full)
             self.assertIn('custom_query', full)
