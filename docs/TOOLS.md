@@ -2,7 +2,7 @@
 
 [Русская версия](TOOLS.ru.md) · [Installation](../README.md) · [Agent workspace convention](../AGENT_WORKSPACE_POLICY.md)
 
-Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **122 tool names** in the full supported configuration: 102 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
+Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **129 tool names** in the full supported configuration: 109 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
 
 The catalog describes the available product surface, not a promise that every tool works immediately after installation. Installed feature flags, local configuration, dependency availability, macOS permissions, and the selected MCP connection determine which tools are advertised and usable. The experimental background-native module is excluded from this count.
 
@@ -102,7 +102,7 @@ These tools use an existing Homebrew installation. Installing a formula can exec
 | `package_install` | W | Start installation of one validated Homebrew formula. | `formula="tmux"`; retain the returned job ID. |
 | `package_job_status` | R | Read a package job's state, bounded log tail and available exit code. | `job_id=returned_job_id` |
 
-## SSH hosts and remote work — 10 tools
+## SSH hosts and remote work — 17 tools
 
 SSH requires an approved host/profile, existing key or agent authentication, and established `known_hosts` trust. No tool returns private-key contents. Fixed diagnostics are separate from arbitrary remote shell execution. Interactive SSH additionally requires local terminal opt-in and tmux; a local Mac workspace convention does not restrict the remote shell's filesystem.
 
@@ -118,6 +118,17 @@ SSH requires an approved host/profile, existing key or agent authentication, and
 | `ssh_exec` | W | Execute a bounded arbitrary remote shell command on a registered host. | `host="demo", command="pwd", timeout_seconds=30` |
 | `ssh_open` | W | Open an interactive SSH terminal using a host from the diagnostic allowlist. | `host="demo"`; then use the terminal tools. |
 | `ssh_pty_open` | W | Open persistent interactive SSH using an approved profile. | `host="demo"`; retain the returned terminal session ID. |
+
+| `ssh_upload` | W | Upload a Mac workspace file using SFTP, verify SHA-256 and publish without partial destination. | `host="demo", local_path="projects/app.py", remote_path="/home/user/app.py"` |
+| `ssh_download` | W | Download from remote host to approved Mac project/workspace, with SHA-256 verification. | `host="demo", remote_path="/home/user/result.csv", local_path="downloads/result.csv"` |
+| `ssh_write_text` | W | Send MCP-supplied UTF-8 text (up to 512 KiB) through SFTP with no heredoc/ssh_exec. | `host="demo", remote_path="/home/user/script.py", content="print(42)\n"` |
+| `ssh_transfer_begin` | W | Begin or resume streaming upload/download; get transfer ID and offset. | `direction="upload", host="demo", remote_path="/home/user/large.bin", total_size=104857600` |
+| `ssh_transfer_chunk` | W | Send up to 64 KiB base64-encoded MCP JSON blocks (with SHA-256) or read download blocks. | `transfer_id=returned_transfer_id, offset=0, chunk_index=0, data_base64="...", chunk_sha256="..."` |
+| `ssh_transfer_finish` | W | Verify final SHA-256 and atomically publish. | `transfer_id=returned_transfer_id, expected_sha256=full_sha256` |
+| `ssh_transfer_cancel` | W | Cancel and clean owned staging files. | `transfer_id=returned_transfer_id` |
+
+
+SFTP accepts both owner-approved `ssh_managed_hosts.json` profiles (including SSH config aliases) and the older `ssh_targets.json` diagnostic profiles, without rewriting either file. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` uses a cooperative Mac Control lock: unrelated remote writers that do not honor the lock can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Native macOS app and desktop control — 13 tools
 

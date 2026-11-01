@@ -67,3 +67,24 @@ Mac Control MCP Server предоставляет авторизованному
 - On Macs without `~/.local/bin` in PATH, add an idempotent PATH block in `~/.zprofile`; open a new Terminal or source it.
 - Existing user executables and symlinks are preserved without overwrite. Both commands and the exact PATH block are removed during uninstall.
 - Regression tests cover PATH invocation, idempotence, cleanup, foreign commands, unsafe symlinks and spaces in installation paths.
+
+
+## Unreleased SSH/SFTP transfers (draft PR #2; not in beta.20)
+
+- Seven new MCP tools: `ssh_upload`, `ssh_download`, `ssh_write_text`,
+  `ssh_transfer_begin`, `ssh_transfer_chunk`, `ssh_transfer_finish`,
+  `ssh_transfer_cancel`. File contents travel through authenticated SFTP,
+  not `ssh_exec` shell strings; MCP-supplied text and base64 JSON chunks work
+  without a pre-existing file on the Mac.
+- SHA-256 verification, atomic staging, resumable upload chunks, offsets and
+  idempotent retry; transfer TTL, size and chunk bounds configurable through
+  owner-only `ssh_transfer_policy.json`.
+- Supports the managed SSH profile store and existing legacy diagnostic hosts.
+  Strict SSH known-host checking and existing keys remain unchanged.
+- Localhost SFTP E2E: Python script generated via MCP tools, uploaded, compiled
+  with the unchanged `ssh_exec`, downloaded and hash-verified; 100 MiB
+  streaming test also passed.
+- **Release gate:** SHA-256 CAS is coordinated by advisory lock between Mac
+  Control operations. Standard SFTP cannot guarantee strict CAS against
+  unrelated processes that do not honor this lock. Keep PR in review until
+  the limitation is explicitly accepted or an alternative is implemented.

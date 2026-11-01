@@ -113,3 +113,15 @@ data directory. Test local stdio, filesystem, terminal opt-in, native GUI
 permissions, external GitHub OAuth, ChatBridge integration when ChatBridge
 is present and a tunnel that does not disrupt the user's existing VPN.
 Keep the primary server Mac's Stable/DEV and ChatBridge unchanged.
+
+
+### SSH/SFTP file transfers (unreleased development branch)
+
+The Python source includes `ssh_file_transfer.py` and the fixed
+`ssh_file_remote.py` helper. No Paramiko/AsyncSSH environment is added:
+SFTP uses macOS system OpenSSH and authenticates with the existing SSH profile
+and known_hosts trust. The remote host needs Python 3 for SHA-256 verification
+and atomic commit. Temporary transfer state is private under
+`~/MacControlMCP/data/transfers/ssh/`; owner-only limits live in
+`ssh_transfer_policy.json` if explicitly configured. No Tailscale or
+ChatBridge services are modified by this feature.

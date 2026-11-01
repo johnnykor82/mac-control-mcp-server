@@ -1,6 +1,6 @@
 # SSH/SFTP file transfer — architecture and delivery specification (S1)
 
-Status: **proposed; implementation not started**  
+Status: **implementation in review; real localhost-SSH MCP E2E passed; strict external-writer CAS unresolved**
 Tracking: [#1](https://github.com/johnnykor82/mac-control-mcp-server/issues/1)  
 Priority: high
 
@@ -59,8 +59,22 @@ All errors are structured with `code`, `message`, `transfer_id?`, `retryable`, `
 ## Gates before merge
 
 - [ ] Confirm semantics of no-clobber rename and strict CAS on supported remote servers.
-- [ ] Review alias vs direct vs legacy-profile selection and server key trust.
-- [ ] Validate MCP input limits for a 100-KiB text call; set and document chunk size on clients that reject larger requests.
-- [ ] Verify no remote temporary files or locally staged content leak after expiration/cancellation.
-- [ ] Verify full tool catalog parity, unit tests and live test-server acceptance.
-- [ ] Preserve production configuration and existing SSH/terminal behavior throughout migration.
+- [x] Review alias vs direct vs legacy-profile selection and server key trust.
+- [x] Validate MCP input limits for a 100-KiB text call; default chunk 64 KiB decoded, with owner-only policy for limits.
+- [x] Verify temporary files are removed on cancellation and opportunistically on expiration; offline host cleanup remains deferred.
+- [x] Verify full tool catalog parity, unit tests and live test-server acceptance.
+- [x] Preserve production configuration and existing SSH/terminal behavior throughout migration.
+
+## Implementation notes (feature branch)
+
+Current implementation uses `/usr/bin/sftp -b -` for file bytes and a fixed Python 3 remote helper (sent via authenticated SSH) for SHA-256 inspection, cooperative per-target locking and commit. The remote helper never receives file bytes as an SSH command. Remote no-clobber uses atomic hard-link publication; overwrite uses SHA validation followed by replace under an advisory lock. **Strict CAS against independent writers who do not participate in this lock remains an explicit limitation and release gate.**
+
+`DATA_ROOT/ssh_transfer_policy.json`, when provided by the owner with mode 0600, can configure:
+`max_total_bytes` (1 MiB to 1 GiB; default 512 MiB),
+`max_chunk_bytes` (1 KiB to 256 KiB; default 64 KiB),
+and `ttl_seconds` (300 s to 7 d; default 24 h).
+Expired uploads are removed opportunistically when a new transfer starts; if the remote host is unreachable, cleanup is deferred so resumable metadata is retained. `ssh_transfer_begin` can be called with `resume_transfer_id` to recover the saved offset after a reconnect. Repeated identical chunks are idempotent; conflicting offsets/hashes are rejected.
+
+Local file downloads are restricted to approved Mac project roots. Remote paths retain the filesystem permissions of the authorized SSH user. The `ssh_targets.json` diagnostic profile registry is not modified; file-transfer tools use a reviewed adapter to accept both this registry and `ssh_managed_hosts.json`, preserving existing diagnostics. Secrets and contents are never placed in `ssh-transfers.jsonl` audit metadata.
+
+**Observed tests:** 11 dedicated offline transfer tests (15 KiB text, 100 KiB Python, 10 MiB binary, 100 MiB streaming, hash integrity, Unicode, interruption, retry, non-clobber, CAS conflict and download), plus a real localhost SSH/SFTP test through MCP tool registration including `ssh_write_text`, `ssh_exec` Python compilation and `ssh_download`. Full-suite confirmation and GitHub CI gate are recorded in the PR separately.

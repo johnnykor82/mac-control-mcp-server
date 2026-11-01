@@ -86,6 +86,13 @@ STABLE_TOOLS = frozenset({
     'restart_server',
     'ssh_auth_diagnostics',
     'ssh_diagnostic',
+    'ssh_download',
+    'ssh_upload',
+    'ssh_write_text',
+    'ssh_transfer_begin',
+    'ssh_transfer_chunk',
+    'ssh_transfer_finish',
+    'ssh_transfer_cancel',
     'ssh_exec',
     'ssh_identity_inspect',
     'ssh_open',
@@ -183,8 +190,8 @@ print(json.dumps({'full': full, 'disabled': disabled}))
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             report = json.loads(result.stdout)
             full = set(report['full'])
-            self.assertEqual(len(STABLE_TOOLS), 114)
-            self.assertEqual(len(full), 122)
+            self.assertEqual(len(STABLE_TOOLS), 121)
+            self.assertEqual(len(full), 129)
             self.assertFalse(STABLE_TOOLS - full, sorted(STABLE_TOOLS - full))
             self.assertIn('watcher_followup_browser_task', full)
             self.assertIn('custom_query', full)

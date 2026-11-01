@@ -5,7 +5,7 @@
 Mac Control MCP Server connects an authorized AI assistant to the owner's Mac.
 It combines project files, Git, terminal sessions, SSH, native macOS GUI tools,
 browser automation through ChatBridge, and persistent Watcher coordination.
-This guide describes the beta.17 product, including the conditions under which
+This guide describes the development branch product, including the conditions under which
 its modules become usable. Tool availability does not prove that a dependency,
 account login, permission, or external connection has been configured.
 
@@ -25,6 +25,7 @@ executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 | Watcher | Provisioned with default ChatBridge setup | Sign in to ChatGPT; register projects and tasks. |
 | Remote MCP | Setup tools are included | Owner GitHub OAuth App, trusted public HTTPS, and real client authorization. |
 | SSH and downstream MCP connections | Client tools are included | Owner-specific hosts, identities, known hosts, and target configuration. |
+| SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Approved managed SSH profile, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
 
 The experimental `background_native` module is not enabled by the normal product
 installation. Historical DEV documents describe additional experiments; they do
@@ -282,3 +283,7 @@ Versioned releases and `current`/`previous` pointers support rollback; user data
 preserved. Updates reuse a verified GUI helper by default to preserve its TCC
 identity. ChatBridge is automatically installed under ~/MacControlMCP/deps/ when missing; full removal also uninstalls this owned dependency. The software is experimental;
 check actual results, account access, and permissions before depending on a workflow.
+
+## SSH/SFTP transfer support
+
+The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites with SHA-256 CAS coordinate through remote Mac Control advisory locks; third-party writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).

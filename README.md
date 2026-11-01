@@ -40,7 +40,7 @@ Example requests after configuring the relevant modules:
 - **Delayed checks:** “In 15 minutes, check the result and report in this conversation using Watcher.”
 - **Diagnostics:** “Show recent tool failures and Mac Control service status.”
 
-The full configuration with GUI, ChatBridge and Watcher exposes **122 MCP tools**.
+The full configuration with GUI, ChatBridge and Watcher exposes **129 MCP tools**.
 Registration does not replace setup: SSH needs profiles, terminal requires opt-in,
 GUI needs macOS permissions and Watcher needs registered tasks.
 [Full English tool catalog](docs/TOOLS.md) · [Каталог на русском](docs/TOOLS.ru.md).
@@ -52,7 +52,7 @@ GUI needs macOS permissions and Watcher needs registered tasks.
 | **Files and projects** | Directory listing, search, reads, writes, SHA256 checks, backups and recovery. | Workspace or explicitly approved project roots. |
 | **Git** | Status, history, diffs, branches, staging, commits, fetch/pull/push. | An approved project repository and owner credentials for remote Git. |
 | **Terminal** | Persistent PTY sessions, input/output, resize and close. | Explicit local terminal policy opt-in and tmux. |
-| **SSH** | Host profiles, authentication diagnostics, fixed checks, managed remote commands and PTYs. | Approved profiles, owner keys, known_hosts and applicable policy. |
+| **SSH** | Approved SSH profiles, remote commands, PTYs, SFTP upload/download, UTF-8 write and resumable 100-MiB+ transfers. | Approved profiles, owner keys, known_hosts and applicable policy. |
 | **GUI helper** | Windows/displays, Accessibility tree, screenshots, mouse, keyboard and Unicode input. | Installed app and owner-approved Accessibility/Screen Recording. |
 | **ChatBridge browser** | Background sessions, navigation, element actions, DOM snapshots, screenshots and session lifecycle. | Separate ChatBridge and Google Chrome; the owner signs in to sites. |
 | **ChatGPT conversations** | Create, switch, read, send and wait for responses through the browser adapter. | ChatGPT login in ChatBridge's profile and a working web integration. |
@@ -64,6 +64,18 @@ GUI needs macOS permissions and Watcher needs registered tasks.
 
 [Detailed module behavior, limitations and examples](docs/CAPABILITIES.md).
 Experimental `background_app_*` tools are not part of the standard beta.16 set.
+
+### Files through SSH/SFTP
+
+Use `ssh_write_text(host="demo", remote_path="/home/user/script.py", content="print(42)\n")`
+for a generated script, or `ssh_upload`/`ssh_download` for already existing files.
+Large files can be transferred with `ssh_transfer_begin/chunk/finish/cancel`.
+There is **no heredoc or shell payload size limit** on the file contents.
+The MCP JSON text operation is bounded at 512 KiB; stream larger content
+in base64-encoded MCP chunks of 64 KiB (not base64 through SSH shell).
+Files are published only after SHA-256 verification. Remote Python 3 and an owner-approved SSH profile (managed or legacy diagnostic) are required.
+Cooperative SHA-256 CAS uses a remote advisory lock; unrelated writers
+can race. See [SFTP architecture](docs/SSH_SFTP_TRANSFER_SPEC.md).
 
 ## How Mac Control, ChatBridge and Watcher fit together
 

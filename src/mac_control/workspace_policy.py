@@ -45,6 +45,10 @@ def instructions() -> str:
         "permission to use arbitrary write paths. Do not treat this policy "
         "as a hard filesystem sandbox; it is the operating convention for "
         "agents, and owner-approved exceptions preserve full capabilities. "
+        "For remote files over SSH, use ssh_write_text for generated UTF-8 "
+        "content, ssh_upload for existing Mac files and ssh_transfer_* "
+        "for large binary or streaming data. Never send large file contents "
+        "through ssh_exec with heredoc, cat or printf. "
         "At task completion, report created files and any off-workspace writes."
     )
 
