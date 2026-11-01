@@ -128,7 +128,7 @@ SSH requires an approved host/profile, existing key or agent authentication, and
 | `ssh_transfer_cancel` | W | Cancel and clean owned staging files. | `transfer_id=returned_transfer_id` |
 
 
-SFTP accepts both owner-approved `ssh_managed_hosts.json` profiles (including SSH config aliases) and the older `ssh_targets.json` diagnostic profiles, without rewriting either file. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` uses a cooperative Mac Control lock: unrelated remote writers that do not honor the lock can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
+SFTP accepts both owner-approved `ssh_managed_hosts.json` profiles (including SSH config aliases) and the older `ssh_targets.json` diagnostic profiles, without rewriting either file. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Native macOS app and desktop control — 13 tools
 

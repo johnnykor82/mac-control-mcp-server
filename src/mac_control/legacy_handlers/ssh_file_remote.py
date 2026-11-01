@@ -1,11 +1,9 @@
 """Fixed, source-controlled remote commit helper. No file bytes in SSH commands.
 
 Executed as python3 -c SCRIPT <action> <path> [args] under the SSH account.
-Locking coordinates Mac Control operations, not arbitrary third-party writers.
+Overwrites verify the previous SHA-256 immediately before atomic rename.
 """
 REMOTE_HELPER = r'''
-import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -44,40 +42,31 @@ def info(path):
         raise ValueError("unsafe_symlink_or_nonregular")
     return {"exists":True, "size":os.stat(path).st_size, "sha256":digest(path)}
 
-def lock(path):
-    base = os.path.join(os.path.expanduser("~"), ".cache", "mac-control-mcp", "ssh-locks")
-    os.makedirs(base, mode=0o700, exist_ok=True)
-    if not stat.S_ISDIR(os.lstat(base).st_mode):
-        raise ValueError("invalid_lock_directory")
-    lockfile = os.path.join(base, hashlib.sha256(path.encode()).hexdigest() + ".lock")
-    fd = os.open(lockfile, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    fcntl.flock(fd, fcntl.LOCK_EX)
-    return fd
-
 def commit(stage, dest, expected, overwrite, mode, content_sha):
     if os.path.dirname(stage) != os.path.dirname(dest) or stage == dest:
         raise ValueError("stage_not_sibling")
-    locked = lock(dest)
-    try:
-        original = info(dest)
-        if not overwrite and original["exists"]:
-            raise ValueError("file_exists")
-        if expected and (not original["exists"] or original["sha256"] != expected):
-            raise ValueError("cas_conflict")
-        staged = info(stage)
-        if not staged["exists"] or staged["sha256"] != content_sha:
-            raise ValueError("hash_mismatch")
-        if mode != "-":
-            os.chmod(stage, int(mode, 8))
-        if overwrite:
-            os.replace(stage, dest)
-        else:
-            os.link(stage, dest, follow_symlinks=False)
-            os.unlink(stage)
-        return {"status":"published", "sha256":content_sha,
-                "bytes":staged["size"], "cas_consistency":"cooperative_lock"}
-    finally:
-        os.close(locked)
+    # Validate the fully transferred data before checking the destination.
+    staged = info(stage)
+    if not staged["exists"] or staged["sha256"] != content_sha:
+        raise ValueError("hash_mismatch")
+    if mode != "-":
+        os.chmod(stage, int(mode, 8))
+    # Recheck the current SHA-256 immediately before publish: no remote
+    # lock service, no inter-process coordination, and no strict CAS claim.
+    original = info(dest)
+    if not overwrite and original["exists"]:
+        raise ValueError("file_exists")
+    if expected and (not original["exists"] or original["sha256"] != expected):
+        raise ValueError("cas_conflict")
+    if overwrite:
+        os.replace(stage, dest)
+    else:
+        # Atomic no-clobber on the same filesystem; a concurrent create
+        # cannot be silently overwritten.
+        os.link(stage, dest, follow_symlinks=False)
+        os.unlink(stage)
+    return {"status":"published", "sha256":content_sha,
+            "bytes":staged["size"], "cas_consistency":"pre_rename_sha256_check"}
 
 def main():
     action = sys.argv[1]

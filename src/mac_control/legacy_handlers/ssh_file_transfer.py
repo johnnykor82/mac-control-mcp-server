@@ -244,7 +244,7 @@ def upload(host, local_path, remote_path, overwrite=False, mode=None,
                     "remote_path":remote, "size_bytes":local.stat().st_size,
                     "transferred_bytes":local.stat().st_size, "sha256":sha,
                     "remote_sha256":sha, "verified":True,
-                    "cas_consistency":"cooperative_lock"}
+                    "cas_consistency":"pre_rename_sha256_check"}
     if remote_before["exists"] and not overwrite:
         raise TransferError("file_exists")
     if target_hash and remote_before["sha256"] != target_hash:

@@ -157,6 +157,42 @@ class SftpTransferTests(unittest.TestCase):
         self.assertTrue(r["verified"])
         self.assertEqual(dest.read_text(),"new")
 
+    def test_external_change_during_upload_refuses_stale_sha(self):
+        """An external process changes the target after initial inspection."""
+        destination = self.remote / "race.py"
+        destination.write_text("before", encoding="utf-8")
+        old_sha = tf._sha(destination)
+        def inject_change(host, action, path, *arguments):
+            if action == "commit":
+                destination.write_text("external change", encoding="utf-8")
+            return self.remote_helper(host, action, path, *arguments)
+        with patch.object(tf, "_remote", side_effect=inject_change):
+            with self.assertRaisesRegex(tf.TransferError, "cas_conflict"):
+                tf.write_text("test", str(destination), "agent update",
+                              overwrite=True, expected_remote_sha256=old_sha)
+        self.assertEqual(destination.read_text(encoding="utf-8"), "external change")
+        self.assertEqual(list(self.remote.glob("*.part")), [])
+
+    def test_external_create_during_upload_never_overwrites(self):
+        """No-clobber remains atomic if a different writer creates the file."""
+        destination = self.remote / "new-race.py"
+        def inject_create(host, action, path, *arguments):
+            if action == "commit":
+                destination.write_text("created externally", encoding="utf-8")
+            return self.remote_helper(host, action, path, *arguments)
+        with patch.object(tf, "_remote", side_effect=inject_create):
+            with self.assertRaisesRegex(tf.TransferError, "file_exists"):
+                tf.write_text("test", str(destination), "agent update")
+        self.assertEqual(destination.read_text(encoding="utf-8"), "created externally")
+        self.assertEqual(list(self.remote.glob("*.part")), [])
+
+    def test_no_remote_advisory_lock_files_created(self):
+        destination = self.remote / "simple.py"
+        result = tf.write_text("test", str(destination), "print(3)\n")
+        self.assertEqual(result["cas_consistency"], "pre_rename_sha256_check")
+        self.assertEqual(result["sha256"], tf._sha(destination))
+        self.assertFalse((self.home / ".cache/mac-control-mcp/ssh-locks").exists())
+
     def test_remote_symlink_rejected(self):
         target=self.remote/"real.txt"
         target.write_text("protected")

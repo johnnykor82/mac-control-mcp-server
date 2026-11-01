@@ -84,7 +84,8 @@ Mac Control MCP Server предоставляет авторизованному
 - Localhost SFTP E2E: Python script generated via MCP tools, uploaded, compiled
   with the unchanged `ssh_exec`, downloaded and hash-verified; 100 MiB
   streaming test also passed.
-- **Release gate:** SHA-256 CAS is coordinated by advisory lock between Mac
-  Control operations. Standard SFTP cannot guarantee strict CAS against
-  unrelated processes that do not honor this lock. Keep PR in review until
-  the limitation is explicitly accepted or an alternative is implemented.
+- **Accepted concurrency trade-off (2026-11-01):** overwrite rechecks the
+  destination SHA-256 immediately before atomic rename, without remote locks,
+  services, backups or strict CAS. An unrelated writer in the tiny check-to-rename
+  interval may still lose an update; the owner has accepted this risk. The
+  default no-overwrite path remains atomically no-clobber.

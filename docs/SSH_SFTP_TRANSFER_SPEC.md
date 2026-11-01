@@ -1,6 +1,6 @@
 # SSH/SFTP file transfer — architecture and delivery specification (S1)
 
-Status: **implementation in review; real localhost-SSH MCP E2E passed; strict external-writer CAS unresolved**
+Status: **implementation tested; owner accepted best-effort pre-rename SHA-256 checking**
 Tracking: [#1](https://github.com/johnnykor82/mac-control-mcp-server/issues/1)  
 Priority: high
 
@@ -41,8 +41,8 @@ All errors are structured with `code`, `message`, `transfer_id?`, `retryable`, `
 1. Resolve the registered host before opening local or remote paths. The OpenSSH argv builder must preserve `-F ~/.ssh/config` alias behavior, key selection, strict host verification and batch/no-forwarding constraints.
 2. For upload, create a random remote temporary file **in the target directory**, via SFTP. Stream to that path; never expose partially written bytes under the final name. Check complete remote hash before publishing. Remote paths are data, not shell fragments.
 3. For download, stream to a private temporary local file and verify before publishing. `overwrite=false` must use an atomic **no-clobber** commit rather than check-then-overwrite. Preserve existing user files on every error.
-4. For remote publish, document the protocol and server capabilities required. SFTP `rename` alone does **not** implement strict SHA-256 CAS or universal no-clobber semantics. Implement a short, reviewed server-side commit helper under the existing SSH identity where required. Helper code and file content must be kept distinct. Do not claim strict CAS while only doing `stat → rename` in two uncoordinated requests.
-5. Locking via a per-target lock handles competing **Mac Control** transfers. External writers not honoring that lock can still race; strict atomic compare-and-replace against arbitrary third-party writers is not guaranteed by standard SFTP. Treat this as an acceptance gate: either prove adequate server-side semantics or return a documented unsupported/error status for strict CAS; never silently weaken it.
+4. For remote publish, use the fixed server-side commit helper under the existing SSH identity. Verify staged SHA-256 first, then re-read the destination SHA-256 **immediately before** `os.replace`. File contents never enter a shell command. This is a best-effort conflict check, not strict atomic CAS.
+5. **Owner's accepted trade-off:** do not create remote per-file lock files, services, backups or coordinated writer protocols. A separate writer may modify the file in the small interval after the last SHA-256 check and before `os.replace`. The owner explicitly accepts this residual risk because concurrent editing of the same remote file is atypical. Preserve atomic file publication and no-clobber by default.
 6. Private local session state is stored under `DATA_ROOT/transfers/ssh/` (`0700` dirs, `0600` files). Include host, direction, stage paths, offset, expected hashes, TTL and owner identity; no secrets or contents in JSON metadata. On restart, validate and recover sessions, expire orphan staging files and verify prefix before attempting SFTP resume.
 7. Cap total bytes per transfer (configurable, tested with 100 MiB), concurrent sessions, idle TTL, and maximum decoded chunk size. Stream directly from disk; do not buffer 100 MiB in RAM.
 8. Audit only metadata. Paths may themselves contain sensitive names and must remain in owner-private audit logs. No credentials, file data, transfer payloads or authentication tokens are ever logged.
@@ -58,7 +58,7 @@ All errors are structured with `code`, `message`, `transfer_id?`, `retryable`, `
 
 ## Gates before merge
 
-- [ ] Confirm semantics of no-clobber rename and strict CAS on supported remote servers.
+- [x] Confirm no-clobber publication and explicitly accept the residual best-effort CAS race (owner decision, 2026-11-01).
 - [x] Review alias vs direct vs legacy-profile selection and server key trust.
 - [x] Validate MCP input limits for a 100-KiB text call; default chunk 64 KiB decoded, with owner-only policy for limits.
 - [x] Verify temporary files are removed on cancellation and opportunistically on expiration; offline host cleanup remains deferred.
@@ -67,7 +67,7 @@ All errors are structured with `code`, `message`, `transfer_id?`, `retryable`, `
 
 ## Implementation notes (feature branch)
 
-Current implementation uses `/usr/bin/sftp -b -` for file bytes and a fixed Python 3 remote helper (sent via authenticated SSH) for SHA-256 inspection, cooperative per-target locking and commit. The remote helper never receives file bytes as an SSH command. Remote no-clobber uses atomic hard-link publication; overwrite uses SHA validation followed by replace under an advisory lock. **Strict CAS against independent writers who do not participate in this lock remains an explicit limitation and release gate.**
+Implementation uses `/usr/bin/sftp -b -` for file bytes and a fixed Python 3 remote helper (sent via authenticated SSH) for SHA-256 inspection and commit. The remote helper never receives file bytes as an SSH command. Remote no-clobber uses atomic hard-link publication; overwrite verifies the staged SHA-256, then checks the existing destination SHA-256 **directly before** `os.replace`. There is no remote locking subsystem. **Strict CAS is not guaranteed; the owner has explicitly accepted this trade-off.**
 
 `DATA_ROOT/ssh_transfer_policy.json`, when provided by the owner with mode 0600, can configure:
 `max_total_bytes` (1 MiB to 1 GiB; default 512 MiB),
@@ -78,3 +78,23 @@ Expired uploads are removed opportunistically when a new transfer starts; if the
 Local file downloads are restricted to approved Mac project roots. Remote paths retain the filesystem permissions of the authorized SSH user. The `ssh_targets.json` diagnostic profile registry is not modified; file-transfer tools use a reviewed adapter to accept both this registry and `ssh_managed_hosts.json`, preserving existing diagnostics. Secrets and contents are never placed in `ssh-transfers.jsonl` audit metadata.
 
 **Observed tests:** 11 dedicated offline transfer tests (15 KiB text, 100 KiB Python, 10 MiB binary, 100 MiB streaming, hash integrity, Unicode, interruption, retry, non-clobber, CAS conflict and download), plus a real localhost SSH/SFTP test through MCP tool registration including `ssh_write_text`, `ssh_exec` Python compilation and `ssh_download`. Full-suite confirmation and GitHub CI gate are recorded in the PR separately.
+
+
+## Decision record: simplified CAS (2026-11-01)
+
+The owner selected **option 1 — recheck SHA-256 immediately before replacing**.
+This supersedes the earlier proposed cooperative remote lock and strict-CAS
+release gate. No per-file `flock`, versioned backups, transaction coordinator,
+new daemon or remote service is required. Existing transfer-session locking on
+the **Mac** is retained solely to keep chunk offsets and local state consistent.
+
+For `overwrite=true`, `expected_remote_sha256` remains an optional guard.
+If the remote file changed before the final check, return `cas_conflict`
+without replacing the destination. If an unrelated process changes the file
+*after* that check but *before* the atomic rename, its changes may be lost.
+This is a documented and explicitly accepted residual risk, not a strict
+compare-and-swap guarantee.
+
+For `overwrite=false`, atomic hard-link publication still prevents clobbering
+an existing destination. The previous filename is never exposed with partial
+content, and transfers are still SHA-256-verified.

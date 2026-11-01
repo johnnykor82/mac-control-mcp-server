@@ -74,8 +74,8 @@ There is **no heredoc or shell payload size limit** on the file contents.
 The MCP JSON text operation is bounded at 512 KiB; stream larger content
 in base64-encoded MCP chunks of 64 KiB (not base64 through SSH shell).
 Files are published only after SHA-256 verification. Remote Python 3 and an owner-approved SSH profile (managed or legacy diagnostic) are required.
-Cooperative SHA-256 CAS uses a remote advisory lock; unrelated writers
-can race. See [SFTP architecture](docs/SSH_SFTP_TRANSFER_SPEC.md).
+Overwrites recheck the destination SHA-256 immediately before atomic
+rename, without a remote lock. Unrelated writers can still race. See [SFTP architecture](docs/SSH_SFTP_TRANSFER_SPEC.md).
 
 ## How Mac Control, ChatBridge and Watcher fit together
 

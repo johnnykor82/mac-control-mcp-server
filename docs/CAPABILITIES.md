@@ -286,4 +286,4 @@ check actual results, account access, and permissions before depending on a work
 
 ## SSH/SFTP transfer support
 
-The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites with SHA-256 CAS coordinate through remote Mac Control advisory locks; third-party writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
+The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
