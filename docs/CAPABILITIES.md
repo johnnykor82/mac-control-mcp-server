@@ -25,7 +25,7 @@ executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 | Watcher | Provisioned with default ChatBridge setup | Sign in to ChatGPT; register projects and tasks. |
 | Remote MCP | Setup tools are included | Owner GitHub OAuth App, trusted public HTTPS, and real client authorization. |
 | SSH and downstream MCP connections | Client tools are included | Owner-specific hosts, identities, known hosts, and target configuration. |
-| SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Approved managed SSH profile, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
+| SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Working OpenSSH alias/host, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
 
 The experimental `background_native` module is not enabled by the normal product
 installation. Historical DEV documents describe additional experiments; they do
@@ -136,25 +136,19 @@ Installing a formula can execute package installation scripts as the Mac user.
 install the formula, wait for the package job result, and recheck availability.”
 A queued package job is a starting state; inspect `package_job_status` for its end.
 
-## SSH profiles, remote commands, and authentication checks
+## Native OpenSSH, remote commands, and authentication checks
 
-There are two SSH use patterns: fixed diagnostics for locally configured targets,
-and managed SSH profiles for remote shell commands and persistent PTY sessions.
-`ssh_targets` and `ssh_diagnostic` use `ssh_targets.json` and named diagnostic
-commands. Managed profile tools inventory SSH aliases and register/approve profiles;
-`ssh_exec` runs a remote command and `ssh_pty_open` opens an interactive session.
-Interactive SSH shares the terminal session tools and requires terminal opt-in.
+All SSH diagnostics, shell commands, PTY sessions and SFTP operations share
+OpenSSH configuration. Existing aliases in `~/.ssh/config`, `Include` files,
+SSH Agent identities, `ProxyJump` and `known_hosts` work without registering
+the host inside Mac Control. Previously saved profiles are optional and still
+supported; they are never necessary to invoke an SSH alias.
 
-SSH uses the owner's identities and strict host-key checking. A new server must
-have a trusted known-host entry; the tools do not make an unknown host trusted
-just because its address appears in a prompt. Remote commands have the remote
-login user's permissions, which may be extensive.
-`ssh_auth_diagnostics` and `ssh_identity_inspect` inspect authentication metadata,
-file names/permissions, and agent/configuration state without reading private keys.
-
-**Example request:** “Use the already approved staging profile to check disk
-space and the service status. Report findings before changing anything.”
-No SSH credentials or production host inventory is supplied by installation.
+`ssh_exec` runs the remote command, `ssh_diagnostic` runs a named read-only
+diagnostic, and `ssh_pty_open` creates a persistent tmux session. SSH uses
+strict host-key verification and the remote user's effective permissions.
+`ssh_auth_diagnostics` and `ssh_identity_inspect` expose metadata, not keys.
+No credentials or host inventory are copied into the installer.
 
 ## Native macOS GUI and screenshots
 
@@ -283,7 +277,7 @@ check actual results, account access, and permissions before depending on a work
 
 ## SSH/SFTP transfer support
 
-The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
+Native OpenSSH hosts and aliases support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Independent user workspace (beta.22)
 

@@ -132,7 +132,7 @@ SSH requires an approved host/profile, existing key or agent authentication, and
 | `ssh_transfer_cancel` | W | Cancel and clean owned staging files. | `transfer_id=returned_transfer_id` |
 
 
-SFTP accepts both owner-approved `ssh_managed_hosts.json` profiles (including SSH config aliases) and the older `ssh_targets.json` diagnostic profiles, without rewriting either file. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
+SFTP uses the standard OpenSSH configuration and aliases directly, like `ssh_exec`; no Mac Control host registration is needed. Previously saved profiles remain optional. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Native macOS app and desktop control — 13 tools
 
@@ -252,7 +252,7 @@ Approved source reads are `scripts/dev_mcp_server.py`, `scripts/setup_remote_ser
 
 ## Choosing the right workflow
 
-For document/code work, use the filesystem and Git families, then a project test/build when requested. Use a terminal only when structured tools do not cover the task and shell access is authorized. For another machine, inspect SSH profiles and diagnostics before remote commands.
+For document/code work, use the filesystem and Git families, then a project test/build when requested. Use a terminal only when structured tools do not cover the task and shell access is authorized. For another machine, inspect OpenSSH aliases and diagnostics before remote commands.
 
 For native application work, check GUI status and inspect the actual window/tree before input. For ordinary websites, use an independent background-browser session. For ChatGPT conversations, use the ChatBridge compatibility family; for persistent handoffs, use Watcher projects and reports. These are distinct session types and their IDs/capabilities are not interchangeable.
 

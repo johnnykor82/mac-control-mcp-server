@@ -342,22 +342,22 @@ class SftpTransferTests(unittest.TestCase):
         self.assertFalse(list(self.remote.glob("*.part")))
         self.assertFalse(dest.exists())
 
-    def test_legacy_owner_approved_ssh_profile_adapter(self):
-        legacy=["/usr/bin/ssh","-F","/dev/null","-T","-p","23827",
-                "-o","BatchMode=yes","-o","StrictHostKeyChecking=yes",
-                "--","example@127.0.0.1"]
-        with patch.object(tf.ssh,"_command",side_effect=PermissionError("Host is not approved")), \
-             patch.object(tf.legacy_ssh,"_argv",return_value=legacy+["id -un"]) as legacy_builder:
-            args=tf._sftp_argv("registered-legacy")
-            self.assertEqual(args[-1],"example@127.0.0.1")
-            self.assertIn("StrictHostKeyChecking=yes",args)
-            self.assertIn("-P",args)
-            self.assertNotIn("-T",args)
-            legacy_builder.assert_called_once_with("registered-legacy","identity")
-        with patch.object(tf.ssh,"_command",side_effect=PermissionError("SSH host config unsafe")), \
-             patch.object(tf.legacy_ssh,"_argv") as legacy_builder:
-            with self.assertRaisesRegex(PermissionError,"config unsafe"):
-                tf._ssh_command("registered-legacy")
+    def test_sftp_uses_native_ssh_transport_without_legacy_fallback(self):
+        native = ["/usr/bin/ssh", "-T", "-o", "StrictHostKeyChecking=yes",
+                  "--", "production"]
+        with patch.object(tf.ssh, "_command", return_value=native) as builder, \
+             patch.object(tf.legacy_ssh, "_argv") as legacy_builder:
+            args = tf._sftp_argv("production")
+            self.assertEqual(args[-1], "production")
+            self.assertIn("StrictHostKeyChecking=yes", args)
+            self.assertNotIn("-T", args)
+            builder.assert_called_once_with("production", None)
+            legacy_builder.assert_not_called()
+        with patch.object(tf.ssh, "_command",
+                          side_effect=ValueError("Invalid host label")), \
+             patch.object(tf.legacy_ssh, "_argv") as legacy_builder:
+            with self.assertRaisesRegex(ValueError, "Invalid host label"):
+                tf._ssh_command("not valid;")
             legacy_builder.assert_not_called()
 
     def test_sftp_options_reuse_profile_with_host_key_check(self):

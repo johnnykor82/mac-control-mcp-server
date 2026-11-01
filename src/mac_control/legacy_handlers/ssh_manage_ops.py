@@ -1,4 +1,4 @@
-"""SSH management for explicitly registered hosts, without exposing credentials."""
+"""OpenSSH transport: existing aliases work without duplicate host registration."""
 from ..runtime_paths import DATA_ROOT
 import json
 import os
@@ -66,8 +66,22 @@ def _spec(name):
     if not isinstance(name, str) or not NAME.fullmatch(name):
         raise ValueError("Invalid host label")
     cfg = _read_config().get(name)
+    if cfg is None:
+        # OpenSSH itself resolves the alias via ~/.ssh/config, Include,
+        # ProxyJump, SSH Agent, known_hosts and system-wide configuration.
+        return {"kind": "alias", "alias": name}
     if not isinstance(cfg, dict):
-        raise PermissionError("Host is not approved")
+        raise ValueError("Invalid saved SSH profile")
+    if cfg.get("kind") == "direct":
+        if (not isinstance(cfg.get("host"), str) or not HOST.fullmatch(cfg["host"])
+                or not isinstance(cfg.get("user"), str) or not USER.fullmatch(cfg["user"])
+                or type(cfg.get("port")) is not int or not 1 <= cfg["port"] <= 65535):
+            raise ValueError("Invalid saved SSH host settings")
+    elif cfg.get("kind") == "alias":
+        if not isinstance(cfg.get("alias"), str) or not NAME.fullmatch(cfg["alias"]):
+            raise ValueError("Invalid saved SSH alias")
+    else:
+        raise ValueError("Invalid saved SSH profile kind")
     return cfg
 
 def _command(name, remote_cmd=None, interactive=False):
@@ -86,12 +100,8 @@ def _command(name, remote_cmd=None, interactive=False):
     ]
     if cfg["kind"] == "alias":
         # Owner's ~/.ssh/config can supply ProxyJump and identity configuration.
-        if not SSH_CONFIG.exists():
-            raise FileNotFoundError("SSH config is not present")
-        argv += ["-F", str(SSH_CONFIG)]
         dest = cfg["alias"]
     elif cfg["kind"] == "direct":
-        argv += ["-F", "/dev/null"]
         argv += ["-p", str(cfg["port"])]
         identity = cfg.get("identity_file")
         if identity:
@@ -110,7 +120,7 @@ def _command(name, remote_cmd=None, interactive=False):
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def ssh_profile_inventory() -> dict:
-        """List SSH aliases from ~/.ssh/config (not credentials) and approved profiles."""
+        """List OpenSSH aliases and optional saved host shortcuts (not credentials)."""
         profiles = _read_config()
         return {"existing_ssh_aliases": _inventory(),
                 "approved": [{"name": name, "kind": cfg.get("kind")}
@@ -182,10 +192,9 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def ssh_pty_open(host: str) -> dict:
-        """Open interactive SSH session in a persistent tmux PTY using approved profile."""
+        """Open interactive SSH in a persistent tmux PTY using OpenSSH config."""
         from . import command_plugins
-        command_plugins._require()
-        if command_plugins.TMUX is None:
+        if command_plugins._tmux_available() is None:
             raise RuntimeError("tmux required for interactive SSH")
         argv = _command(host, interactive=True)
         name = "mc-" + secrets.token_hex(8)
