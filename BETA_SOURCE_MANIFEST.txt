@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 152
+Included files: 157
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -30,6 +30,7 @@ docs/MCLOG.md
 docs/PUBLIC_RELEASE_GATES.md
 docs/RELEASE_NOTES_BETA.md
 docs/REMOTE_ACCESS_GUIDE.md
+docs/SSH_SFTP_TRANSFER_SPEC.md
 docs/TOOLS.md
 docs/TOOLS.ru.md
 docs/WATCHER_GUIDE.md
@@ -83,6 +84,8 @@ src/mac_control/legacy_handlers/mcp_bridge_ops.py
 src/mac_control/legacy_handlers/package_ops.py
 src/mac_control/legacy_handlers/ssh_auth_diag.py
 src/mac_control/legacy_handlers/ssh_bridge_ops.py
+src/mac_control/legacy_handlers/ssh_file_remote.py
+src/mac_control/legacy_handlers/ssh_file_transfer.py
 src/mac_control/legacy_handlers/ssh_manage_ops.py
 src/mac_control/legacy_handlers/system_ops.py
 src/mac_control/legacy_handlers/watcher_ops.py
@@ -146,6 +149,8 @@ tests/integration/test_server_tool_parity.py
 tests/integration/test_setup_language.py
 tests/integration/test_setup_network.py
 tests/integration/test_ssh_portability.py
+tests/integration/test_ssh_sftp_live.py
+tests/integration/test_ssh_sftp_transfer.py
 tests/integration/test_stdio_boundary.py
 tests/integration/test_uv_discovery.py
 tests/integration/test_watcher_credentials.py

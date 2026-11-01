@@ -264,6 +264,8 @@ def register(mcp):
 
     from .ssh_manage_ops import register as register_ssh_manage
     register_ssh_manage(mcp)
+    from .ssh_file_transfer import register as register_ssh_file_transfer
+    register_ssh_file_transfer(mcp)
 
     from .ssh_auth_diag import register as register_ssh_auth_diag
     register_ssh_auth_diag(mcp)

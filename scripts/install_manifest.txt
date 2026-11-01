@@ -70,6 +70,8 @@ src/mac_control/legacy_handlers/package_ops.py
 src/mac_control/legacy_handlers/ssh_auth_diag.py
 src/mac_control/legacy_handlers/ssh_bridge_ops.py
 src/mac_control/legacy_handlers/ssh_manage_ops.py
+src/mac_control/legacy_handlers/ssh_file_remote.py
+src/mac_control/legacy_handlers/ssh_file_transfer.py
 src/mac_control/legacy_handlers/system_ops.py
 src/mac_control/legacy_handlers/watcher_ops.py
 src/mac_control/maintenance_ops.py
