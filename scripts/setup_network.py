@@ -22,10 +22,12 @@ try:
     from .setup_language import detect_language, text
     from .release_preflight import inspect
     from .setup_github_oauth import check as check_oauth, public_origin
+    from .shared_funnel_routes import choose, analyze, backend_for, compare_preserved
 except ImportError:  # Allow direct execution: python scripts/setup_network.py
     from setup_language import detect_language, text
     from release_preflight import inspect
     from setup_github_oauth import check as check_oauth, public_origin
+    from shared_funnel_routes import choose, analyze, backend_for, compare_preserved
 
 DEFAULT_ROOT = Path.home() / "MacControlMCP"
 PORT = 3201
@@ -169,10 +171,6 @@ def publication_state(executable: str, hostname: str, *, language: str = "ru",
                     "public_url": "https://" + hostname}
     # Shared host: allow ONLY additive namespace-specific handlers. Unrelated
     # handlers are fingerprinted and must remain identical during publication.
-    try:
-        from scripts.shared_funnel_routes import choose, analyze
-    except ModuleNotFoundError:
-        from shared_funnel_routes import choose, analyze
     shared = (analyze(configs[0], hostname, prefix)
               if prefix else choose(configs[0], hostname))
     if shared["status"] == "conflict":
@@ -532,7 +530,6 @@ def _enable_shared_funnel(executable: str, hostname: str, prefix: str,
     A conservative transactional rollback disables only paths attempted by
     this call, after reconfirming they're still owned by Mac Control.
     """
-    from scripts.shared_funnel_routes import backend_for, compare_preserved
     desired = "https://" + hostname + prefix
     if configured["public_url"].rstrip("/") != desired:
         raise RuntimeError("Configured OAuth URL does not match the selected Funnel path")

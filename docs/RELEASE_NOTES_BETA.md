@@ -234,3 +234,17 @@ Mac Control MCP Server предоставляет авторизованному
 - Added regression tests for default update, old updater compatibility,
   first install, explicit opt-in/opt-out and a foreign HTTP 404.
 - This release has no automatic Funnel or service changes at publication time.
+
+## v0.1.0-beta.28 — direct-installed wizard imports
+
+- Fixed a `ModuleNotFoundError: No module named 'scripts'` after GitHub OAuth
+  onboarding when `guided_setup.py` calls `_enable_shared_funnel`.
+- Both `setup_network` and `shared_funnel_routes` now import consistently
+  in Python package mode and standalone installed-script mode, without
+  requiring a special `PYTHONPATH`, editable checkout or source edits.
+- Added subprocess regression test that simulates the installed script:
+  run from an unrelated directory with no inherited `PYTHONPATH`;
+  detect existing shared routes and reuse an existing `/maccontrol` route.
+- No OAuth secrets, live Funnel routes or active Mac services changed as
+  part of developing this fix. Existing owner OAuth configuration is retained
+  by the installer and is read when setup resumes.
