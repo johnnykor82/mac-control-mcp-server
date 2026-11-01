@@ -580,7 +580,12 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
               file=sys.stderr)
     # PTY needs tmux; install through Homebrew only after owner approval.
-    from scripts.setup_tmux_dependency import ensure as ensure_tmux
+    try:
+        from scripts.setup_tmux_dependency import ensure as ensure_tmux
+    except ModuleNotFoundError as exc:
+        if exc.name != "scripts":
+            raise
+        from setup_tmux_dependency import ensure as ensure_tmux
     tmux_status = ensure_tmux(approved=install_tmux,interactive=sys.stdin.isatty())
     if not tmux_status["available"]:
         print("Interactive terminal unavailable: " + tmux_status["remedy"],
