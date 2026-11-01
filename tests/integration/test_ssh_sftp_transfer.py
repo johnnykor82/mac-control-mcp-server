@@ -34,7 +34,11 @@ class SftpTransferTests(unittest.TestCase):
         self.session_root = self.home / "transfers"
         self.logs = self.home / "data"
         self.logs.mkdir()
+        # The unit tests must not rely on ~/.ssh/config on the CI runner.
+        self.ssh_config = self.home / "ssh_config"
+        self.ssh_config.write_text("Host test\n    HostName 127.0.0.1\n")
         self.patches = [
+            patch.object(tf.ssh, "SSH_CONFIG", self.ssh_config),
             patch.object(tf, "STAGING", self.session_root),
             patch.object(tf, "DATA_ROOT", self.logs),
             patch.object(tf, "_safe_local", side_effect=lambda path,require_existing=False:Path(path)),
