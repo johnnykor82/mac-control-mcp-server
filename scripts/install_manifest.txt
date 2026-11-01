@@ -98,3 +98,4 @@ src/mac_control/watcher_runtime/watcher_telemetry.py
 src/mac_control/workspace_config.py
 src/mac_control/workspace_policy.py
 docs/WORKSPACE_MIGRATION.ru.md
+docs/WORKSPACE_MIGRATION.md
