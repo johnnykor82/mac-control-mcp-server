@@ -85,3 +85,12 @@ maccontrol workspace migrate --from ~/chatgpt-mcp/workspace --name old-server --
 
 В beta.22 не запускаются операции над production, Tailscale,
 существующими VPS/SSH-серверами и сторонними сервисами.
+
+### Отчёты Watcher
+
+Новые пользовательские отчёты Watcher сохраняются во внешних каталогах
+`workspace_root/artifacts/watcher-results/` и
+`workspace_root/artifacts/watcher-reports/`. Служебная SQLite-база,
+блокировки и настройки Watcher остаются внутри каталога Mac Control.
+Старые отчёты продолжают читаться по прежним путям — обновление и
+смена workspace_root не перемещают их автоматически.

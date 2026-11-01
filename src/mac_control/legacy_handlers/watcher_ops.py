@@ -284,8 +284,13 @@ def register(mcp):
             return {"found":False,"project_id":p,"task_id":t,"state":row[0] if row else "unknown"}
         target=Path(row[1])
         revision=int(row[3])
-        expected=RESULTS/p/(t+(f"-r{revision:02d}" if revision else "")+".md")
-        if target!=expected or target.is_symlink() or target.parent.is_symlink():
+        expected_name=t+(f"-r{revision:02d}" if revision else "")+".md"
+        legacy=RESULTS/p/expected_name
+        is_external=(target.name==expected_name and target.parent.name==p and
+                     target.parent.parent.name=="watcher-results" and
+                     target.parent.parent.parent.name=="artifacts")
+        if not (target==legacy or is_external) or any(
+                part.is_symlink() for part in (target,*target.parents)):
             raise PermissionError("Invalid result path")
         from ..watcher_runtime.watcher_file_runtime import _read
         raw=_read(target, maximum=16*1024*1024)

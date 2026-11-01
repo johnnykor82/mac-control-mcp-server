@@ -44,6 +44,10 @@ class WatcherResultMonitorTests(unittest.TestCase):
             patcher = patch.object(module, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        workspace_results=self.root/"AgentWorkspace/artifacts/watcher-results"
+        results_patch=patch.object(core,"_results_root",return_value=workspace_results)
+        results_patch.start()
+        self.addCleanup(results_patch.stop)
         self.db = core.connect()
         self.addCleanup(self.db.close)
         core.register_project(self.db, 'project-one', ORCHESTRATOR)
@@ -61,11 +65,29 @@ class WatcherResultMonitorTests(unittest.TestCase):
     def test_initial_result_preserves_sha256(self):
         path, digest = self.completed_result(0)
         self.assertEqual(path.name, 'task-one.md')
+        self.assertIn("AgentWorkspace",str(path))
+        self.assertFalse((self.runtime/"results/project-one/task-one.md").exists())
         result = self.read_result('project-one', 'task-one')
         self.assertTrue(result['found'])
         self.assertEqual(result['text'], 'Verified executor report')
         self.assertEqual(result['sha256'], digest)
         self.assertEqual(hashlib.sha256(result['text'].encode()).hexdigest(), digest)
+
+    def test_preupgrade_browser_result_remains_readable(self):
+        self.db.execute('UPDATE tasks SET state="completed",last_revision=0')
+        old=self.results/"project-one"
+        old.mkdir(parents=True)
+        content=b"Old browser result"
+        result=old/"task-one.md"
+        result.write_bytes(content)
+        result.chmod(0o600)
+        digest=hashlib.sha256(content).hexdigest()
+        self.db.execute('UPDATE tasks SET result_path=?,result_sha256=?',
+                        (str(result),digest))
+        received=self.read_result("project-one","task-one")
+        self.assertTrue(received["found"])
+        self.assertEqual(received["text"],content.decode())
+        self.assertTrue(result.is_file())
 
     def test_followup_result_reads_exact_revision_and_preserves_sha256(self):
         path, digest = self.completed_result(1, 'Followup revision report')

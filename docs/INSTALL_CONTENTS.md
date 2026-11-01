@@ -138,3 +138,8 @@ For populated legacy `data/workspace`, preserve the old path until a
 separately authorized migration. No existing third-party project/service is
 moved or stopped during this release. Development uses a separate workspace
 by default. See [migration](WORKSPACE_MIGRATION.md).
+
+Watcher browser result and file report artifacts are written beneath the
+external `workspace_root/artifacts/`; only Watcher private operational state
+(SQLite, service locks and credentials) stays under the installation's
+`data/run/watcher/`. Existing reports remain readable at their original paths.

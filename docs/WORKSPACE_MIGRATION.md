@@ -46,3 +46,13 @@ their populated legacy workspace until migration is explicitly requested.
 
 This is a **default location and data-lifecycle separation**, not a
 sandbox or restriction on authorized operations outside that location.
+
+### Watcher reports and backward compatibility
+
+New Watcher human-readable browser results and file-task reports are saved
+under `workspace_root/artifacts/watcher-results/` and
+`workspace_root/artifacts/watcher-reports/`. Its internal task database,
+locks and service configuration remain under the product data directory.
+Historical indexed reports at their original paths remain readable, and
+install/update will not move or overwrite them. Changing the user workspace
+path does not relocate existing reports.

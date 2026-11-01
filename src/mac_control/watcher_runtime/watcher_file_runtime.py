@@ -68,16 +68,32 @@ def register(db,project,task,chat_url):
             "next_revision":1,
             "warning":"Copy submission_token only into this executor's task prompt. Keep orchestrator_token private."}
 
+def _reports_root():
+    from ..workspace_config import resolve as workspace_status
+    active=workspace_status()
+    if active["configured"] and not active["exists"]:
+        raise FileNotFoundError("Configured external user workspace unavailable")
+    return Path(active["workspace_root"])/"artifacts"/"watcher-reports"
+
+
 def _directory(project,task):
-    root=_watcher().RUNTIME
-    if root.is_symlink() or not root.is_dir():raise PermissionError("Unsafe runtime root")
-    for part in ("inbox",project,task):
+    # Human-readable executor reports are user data, not product runtime state.
+    root=_reports_root()
+    for path in (root,*root.parents):
+        if path.is_symlink():
+            raise PermissionError("Symlink in user report directory")
+    for part in (project,task):
         root=root/part
-        if root.is_symlink():raise PermissionError("Symlink folder")
-        root.mkdir(mode=0o700,exist_ok=True)
-        if root.stat().st_uid!=os.getuid():raise PermissionError("Unexpected owner")
-        root.chmod(0o700)
+    if any(part.is_symlink() for part in (root,root.parent,root.parent.parent)):
+        raise PermissionError("Symlink folder")
+    root.mkdir(mode=0o700,parents=True,exist_ok=True)
+    if root.stat().st_uid!=os.getuid():
+        raise PermissionError("Unexpected owner")
     return root
+
+
+def _legacy_directory(project,task):
+    return _watcher().RUNTIME/"inbox"/project/task
 
 def _read(path,maximum=MAX_BYTES):
     # Nonblocking open ensures a malicious FIFO cannot stall this reader.
@@ -139,7 +155,15 @@ def submit(db,project,task,revision,status,content,capability_token):
 def _read_ready(project,task,revision):
     base=_directory(project,task)
     path=base/f"{revision:06d}.ready.json"
-    if not path.exists():return None
+    if not path.exists():
+        old=_legacy_directory(project,task)
+        legacy_marker=old/f"{revision:06d}.ready.json"
+        if not legacy_marker.exists():
+            return None
+        if any(part.is_symlink() for part in (old,old.parent,old.parent.parent)):
+            raise PermissionError("Symlink in legacy report directory")
+        base=old
+        path=legacy_marker
     m=json.loads(_read(path,4096))
     if set(m)!={"schema","project","task","revision","status","sha256","bytes"}:
         raise ValueError("Invalid ready marker")
@@ -152,6 +176,7 @@ def _read_ready(project,task,revision):
     if len(body)!=m["bytes"] or hashlib.sha256(body).hexdigest()!=m["sha256"]:
         raise ValueError("Report checksum mismatch")
     body.decode("utf8")
+    m["_report_path"]=str(base/f"{revision:06d}.md")
     return m
 
 
@@ -179,7 +204,7 @@ def reconcile(db,project_filter=None):
             status=metadata["status"]
             state={"checkpoint":"watching","needs_input":"needs_input",
                    "blocked":"blocked","completed":"completed"}[status]
-            report=str(_directory(p,t)/f"{rev:06d}.md")
+            report=metadata["_report_path"]
             digest=metadata["sha256"]
             event_id=hashlib.sha256(f"file/{p}/{t}/{rev}/{digest}".encode()).hexdigest()[:32]
             notification=(f"[MC-WATCH:{event_id}]\n"
@@ -225,12 +250,22 @@ def read_report(db,project,task,revision=0,max_chars=65000):
         r=db.execute("""SELECT * FROM task_reports WHERE project_id=? AND
                          task_id=? ORDER BY revision DESC LIMIT 1""",(p,t)).fetchone()
     if not r:return {"found":False,"project_id":p,"task_id":t}
-    # Read-only API must not create inbox directories as a side effect.
-    base=_watcher().RUNTIME/"inbox"/p/t
-    if any(x.is_symlink() for x in (base.parent.parent,base.parent,base)):
+    # The stored canonical report path may reference an earlier workspace
+    # after a user changes workspace_root without relocating existing files.
+    expected=Path(r["path"])
+    if not expected.is_absolute() or expected.name!=f"{r['revision']:06d}.md":
+        raise PermissionError("Invalid indexed report path")
+    parent=expected.parent
+    if parent.name!=t or parent.parent.name!=p:
+        raise PermissionError("Invalid indexed report identity")
+    legacy=_legacy_directory(p,t)
+    if parent!=legacy and (parent.parent.parent.name!="watcher-reports" or
+                           parent.parent.parent.parent.name!="artifacts"):
+        raise PermissionError("Report path is not a watcher report location")
+    # Inspect user-controlled report components, not system parents such as
+    # macOS /var -> /private/var or /tmp -> /private/tmp.
+    if any(x.is_symlink() for x in (expected,parent,parent.parent,parent.parent.parent)):
         raise PermissionError("Symlink in report path")
-    expected=base/f"{r['revision']:06d}.md"
-    if str(expected)!=r["path"]:raise PermissionError("Invalid indexed report path")
     body=_read(expected)
     digest=hashlib.sha256(body).hexdigest()
     if digest!=r["sha256"] or len(body)!=r["bytes"]:

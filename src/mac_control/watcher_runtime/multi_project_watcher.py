@@ -36,7 +36,16 @@ RUNTIME = ROOT / "run" / "watcher"
 
 DBFILE = RUNTIME / "watcher.sqlite3"
 
-RESULTS = RUNTIME / "results"
+RESULTS = RUNTIME / "results"  # Legacy report location; kept for existing records.
+
+
+def _results_root():
+    """New human-readable watcher results live outside the installation."""
+    from ..workspace_config import resolve as workspace_status
+    active=workspace_status()
+    if active["configured"] and not active["exists"]:
+        raise FileNotFoundError("Configured external user workspace unavailable")
+    return Path(active["workspace_root"])/"artifacts"/"watcher-results"
 
 PERIOD = 120
 
@@ -104,7 +113,7 @@ def ensure_dir():
     if ROOT.is_symlink() or RUNTIME.parent.is_symlink():
         raise PermissionError("Symlink in Watcher state ancestors")
     private_directory(RUNTIME)
-    private_directory(RESULTS)
+    private_directory(_results_root())
 
 
 def connect():
@@ -279,7 +288,7 @@ def prepare_delivery(db, row, text):
     project=row["project_id"];task=row["id"];url=row["chat_url"]
     p=db.execute("SELECT orchestrator_url FROM projects WHERE id=?",(project,)).fetchone()
     if not p:raise ValueError("Unregistered project")
-    outdir=RESULTS / project
+    outdir=_results_root() / project
     private_directory(outdir)
     revision=int(row["last_revision"])
     target=outdir / (task + (f"-r{revision:02d}" if revision else "") + ".md")

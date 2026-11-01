@@ -102,8 +102,11 @@ Mac Control MCP Server предоставляет авторизованному
   moving existing files; external drives are supported and disconnection
   fails closed.
 - File, Git, terminal temp/cache, SFTP local file transfer and user-originated
-  streaming staging resolve the active user workspace dynamically. Agent
-  instructions and workspace tool metadata expose the current path.
+  streaming staging resolve the active user workspace dynamically. Watcher
+  user-facing reports and browser results now go under `artifacts/watcher-reports`
+  and `artifacts/watcher-results`; Watcher service SQLite stays product-owned.
+  Historical indexed reports remain readable at their original locations.
+  Agent instructions and workspace tool metadata expose the current path.
 - Install, update, rollback and uninstall do not move/delete user projects.
   Full removal never touches the external workspace and refuses to purge a
   populated legacy `data/workspace`. Downgrading to a release that cannot

@@ -27,6 +27,14 @@ class WatcherRuntimeTest(unittest.TestCase):
             patcher = patch.object(self.core, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        user_reports=Path(self.temp.name).resolve()/"AgentWorkspace/artifacts/watcher-reports"
+        report_patch=patch.object(self.files,"_reports_root",return_value=user_reports)
+        report_patch.start()
+        self.addCleanup(report_patch.stop)
+        browser_reports=Path(self.temp.name).resolve()/"AgentWorkspace/artifacts/watcher-results"
+        browser_patch=patch.object(self.core,"_results_root",return_value=browser_reports)
+        browser_patch.start()
+        self.addCleanup(browser_patch.stop)
         self.db = self.core.connect()
         self.addCleanup(self.db.close)
         self.adapter.setup(self.db)
@@ -40,9 +48,31 @@ class WatcherRuntimeTest(unittest.TestCase):
         self.files.reconcile(self.db)
         read = self.files.read_report(self.db, 'project-one', 'task-one', 1)
         self.assertEqual(read['text'], 'Report')
+        self.assertTrue(self.files._reports_root().joinpath(
+            'project-one','task-one','000001.md').is_file())
+        self.assertFalse((self.core.RUNTIME/'inbox').exists())
         with self.assertRaises(ValueError):
             self.files.submit(self.db, 'project-one', 'task-one', 1, 'completed', 'Changed', result['submission_token'])
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM deliveries').fetchone()[0], 1)
+
+    def test_legacy_file_report_is_read_after_upgrade_without_moving(self):
+        import hashlib,json
+        result=self.files.register(self.db,"project-one","old-task",EXECUTOR)
+        old=self.core.RUNTIME/"inbox/project-one/old-task"
+        old.mkdir(parents=True)
+        content=b"Legacy report preserved"
+        digest=hashlib.sha256(content).hexdigest()
+        (old/"000001.md").write_bytes(content)
+        (old/"000001.md").chmod(0o600)
+        (old/"000001.ready.json").write_text(json.dumps({
+            "schema":1,"project":"project-one","task":"old-task","revision":1,
+            "status":"completed","sha256":digest,"bytes":len(content)}))
+        (old/"000001.ready.json").chmod(0o600)
+        self.files.reconcile(self.db)
+        read=self.files.read_report(self.db,"project-one","old-task",1)
+        self.assertEqual(read["text"],content.decode())
+        self.assertEqual(read["sha256"],digest)
+        self.assertTrue((old/"000001.md").exists())
 
     def test_schedule_is_durable_and_idempotent(self):
         first = self.schedule.schedule(self.db, URL, 1, 'Verify result', 'request-one')
@@ -231,6 +261,8 @@ class WatcherRuntimeTest(unittest.TestCase):
                 self.assertEqual(self.db.execute('SELECT COUNT(*) FROM deliveries').fetchone()[0], 0)
 
     def test_cli_works_without_playwright_and_uses_isolated_root(self):
+        from mac_control.workspace_config import set_root
+        set_root(Path(self.temp.name), Path(self.temp.name) / "AgentWorkspace")
         env = {**os.environ, 'MAC_CONTROL_DATA_ROOT': self.temp.name, 'PYTHONPATH': str(SOURCE)}
         code = "import sys; sys.modules['playwright']=None; import runpy; sys.argv=['watcher','status']; runpy.run_module('mac_control.watcher_runtime',run_name='__main__')"
         proc = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True)
