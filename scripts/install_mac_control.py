@@ -842,10 +842,10 @@ def main() -> int:
     parser.set_defaults(with_gui=None)
     browser = parser.add_mutually_exclusive_group()
     browser.add_argument("--with-chatbridge", dest="with_chatbridge", action="store_true",
-                         help="Use ChatBridge (default); reuse or install pinned release")
+                         help="Provision/verify ChatBridge explicitly; default on fresh --install only")
     browser.add_argument("--without-chatbridge", dest="with_chatbridge", action="store_false",
                          help="Skip ChatBridge setup; preserve any existing browser configuration")
-    parser.set_defaults(with_chatbridge=True)
+    parser.set_defaults(with_chatbridge=None)
     parser.add_argument("--chatbridge-source", type=Path,
                         help="Reviewed standalone ChatBridge checkout; enables installing dependency when absent")
     parser.add_argument("--chatbridge-url",
@@ -859,6 +859,11 @@ def main() -> int:
                         help="Owner authorizes installing tmux with Homebrew if missing")
     parser.add_argument("--language", choices=("ru", "en"), help="Choose setup language")
     args = parser.parse_args()
+    # Updating an installed Mac Control does not imply replacing, adopting,
+    # reconfiguring or even probing an independent browser service. On fresh
+    # install, preserve the existing opt-out-based setup contract.
+    with_chatbridge = (args.with_chatbridge if args.with_chatbridge is not None
+                       else not args.update)
     selected_language = args.language
     if args.install and sys.stdin.isatty() and selected_language is None:
         try:
@@ -909,8 +914,8 @@ def main() -> int:
                    "workspace_root": str(args.workspace_root or (info["root"].parent / "AgentWorkspace")),
                   "entrypoint": str(info["current"] / "bin/mac-control-stdio-mcp.sh"),
                   "installs_packages": True, "network_required": True,
-                  "watcher": "install_with_chatbridge" if args.with_watcher and args.with_chatbridge else "skip",
-                  "chatbridge": "reuse_or_install_pinned" if args.with_chatbridge else "skip_setup_preserve_existing",
+                  "watcher": "install_with_chatbridge" if args.with_watcher and with_chatbridge else "skip",
+                  "chatbridge": "reuse_or_install_pinned" if with_chatbridge else "skip_setup_preserve_existing",
                   "existing_stable_modified": False,
                   "native_background_gui": ("skip_preserve_existing" if args.with_gui is False else
                                             "explicit_prebuilt_install" if args.with_gui is True else
@@ -931,7 +936,7 @@ def main() -> int:
             raise RuntimeError("Use --yes only after explicit full-removal confirmation")
         result = purge(args.root)
     else:
-        result = install(args.root, args.with_chatbridge, args.with_gui,
+        result = install(args.root, with_chatbridge, args.with_gui,
                          args.chatbridge_source, args.chatbridge_url,
                          with_watcher=args.with_watcher, workspace_requested=args.workspace_root,
                          install_tmux=args.install_tmux)

@@ -262,7 +262,13 @@ def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Pat
     except urllib.error.HTTPError as error:
         if error.code == 401:
             raise RuntimeError("ChatBridge requires a matching MACCONTROL_CHATBRIDGE_API_KEY; existing service preserved") from None
-        raise RuntimeError("Existing HTTP service rejected ChatBridge API probe; preserved") from None
+        raise RuntimeError(
+            "Local port " + str(local_origin(url).port) +
+            " serves a different/incompatible HTTP API (HTTP " + str(error.code) +
+            "); existing service preserved. For Mac Control updates, "
+            "omit ChatBridge provisioning (default), or use "
+            "--without-chatbridge with an older installer."
+        ) from None
     except urllib.error.URLError as error:
         if not isinstance(error.reason, ConnectionRefusedError) or error.reason.errno != errno.ECONNREFUSED:
             raise RuntimeError("ChatBridge probe failed; inspect the endpoint before installation") from None

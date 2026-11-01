@@ -213,3 +213,24 @@ Mac Control MCP Server предоставляет авторизованному
 - Tailscale strips --set-path. The proxy backend target includes the same mount path, preserving the expected FastMCP URL. Never runs tailscale funnel reset, deletes foreign handlers or replaces the root route.
 - Previously installed root URLs and saved OAuth configurations remain unchanged on routine updates. Existing /maccontrol-N installations keep their chosen prefix.
 - No production Funnel modification by publishing this source beta: owner must run the guided setup and explicitly confirm publication.
+
+## v0.1.0-beta.27 — updates must preserve independent browser services
+
+- Fixed `maccontrol update` failing when another application owns port 8787.
+  In the reported case, Hermes WebUI was listening on 127.0.0.1:8787
+  and correctly responded HTTP 404 to the unrelated ChatBridge API probe.
+- **Updates now skip ChatBridge provisioning by default**, leaving an existing
+  ChatBridge, Hermes WebUI, browser credentials, service process, port,
+  database and Mac Control browser configuration untouched. The standalone
+  `--update` entrypoint also defaults to skip, including when invoked by
+  a previous version's updater without any explicit ChatBridge option.
+- **Fresh `--install` behavior is unchanged**: the ChatBridge dependency
+  is installed or verified unless `--without-chatbridge` was selected.
+- Explicit opt-in: `maccontrol update --with-chatbridge`, or invoke the
+  installer with `--update --with-chatbridge`. The existing strict
+  ownership and API guards still prevent adopting or replacing other services.
+- HTTP API conflicts now identify the local port and response status without
+  exposing secrets or silently changing the existing service.
+- Added regression tests for default update, old updater compatibility,
+  first install, explicit opt-in/opt-out and a foreign HTTP 404.
+- This release has no automatic Funnel or service changes at publication time.

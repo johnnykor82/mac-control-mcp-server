@@ -446,3 +446,12 @@ The installer checks both Funnel/Serve views, requires a verified local
 OAuth challenge and PUBLISH owner approval, changes only its own handler
 paths, and checks all unrelated routes after each update. It never calls
 tailscale funnel reset. Existing installations retain their public URL.
+
+### Preserve independent browser services on updates (beta.27)
+
+`maccontrol update` now preserves the currently configured browser provider
+without re-probing or installing ChatBridge by default. This is important
+on systems where an unrelated service (such as Hermes WebUI) already owns
+port 8787. Use `maccontrol update --with-chatbridge` only for an explicit
+ChatBridge provisioning/verification operation. Fresh installations retain
+their prior default and strict ownership safeguards.
