@@ -89,3 +89,33 @@ Mac Control MCP Server предоставляет авторизованному
   services, backups or strict CAS. An unrelated writer in the tiny check-to-rename
   interval may still lose an update; the owner has accepted this risk. The
   default no-overwrite path remains atomically no-clobber.
+
+## v0.1.0-beta.22 — independent AgentWorkspace (P0)
+
+- Projects, agent-created sources and user artifacts default to `~/AgentWorkspace/`
+  (projects/shared/artifacts/downloads/scratch), **outside** `~/MacControlMCP/`.
+  Development uses a distinct workspace. Custom installation prefixes use a
+  sibling workspace rather than their internal data folder.
+- One owner-owned `workspace_root` configuration at
+  `data/config/workspace.json`. `maccontrol workspace status` and
+  `maccontrol workspace set /absolute/path` update the location without
+  moving existing files; external drives are supported and disconnection
+  fails closed.
+- File, Git, terminal temp/cache, SFTP local file transfer and user-originated
+  streaming staging resolve the active user workspace dynamically. Agent
+  instructions and workspace tool metadata expose the current path.
+- Install, update, rollback and uninstall do not move/delete user projects.
+  Full removal never touches the external workspace and refuses to purge a
+  populated legacy `data/workspace`. Downgrading to a release that cannot
+  understand external workspaces is blocked, avoiding hidden user projects.
+- Existing populated legacy workspace remains in place until the user
+  explicitly migrates; no automatic migration or service rewrites.
+- `maccontrol workspace inventory --from OLD` and
+  `maccontrol workspace migrate --from OLD --name NAME` (dry-run) inspect
+  sources without changes. `--execute --yes` creates a separately located,
+  verified copy while preserving source files, modes and symlinks; live SQLite
+  databases use SQLite backup and integrity checks. Old processes and
+  LaunchAgents are **never** modified by migration.
+- Documentation: [English](WORKSPACE_MIGRATION.md) and
+  [Russian](WORKSPACE_MIGRATION.ru.md). No production projects or services
+  were changed to prepare this release.

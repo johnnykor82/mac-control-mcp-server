@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 157
+Included files: 162
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -35,6 +35,8 @@ docs/TOOLS.md
 docs/TOOLS.ru.md
 docs/WATCHER_GUIDE.md
 docs/WATCHER_GUIDE.ru.md
+docs/WORKSPACE_MIGRATION.md
+docs/WORKSPACE_MIGRATION.ru.md
 docs/install-permissions.md
 docs/side-by-side-mac.md
 requirements/dev-frozen.txt
@@ -64,6 +66,7 @@ scripts/setup_network.py
 scripts/setup_remote_service.py
 scripts/setup_watcher_service.py
 scripts/test_github_oauth_login.py
+scripts/workspace_migration.py
 src/mac_control/__init__.py
 src/mac_control/__main__.py
 src/mac_control/assets/gui_agent.swift
@@ -109,6 +112,7 @@ src/mac_control/watcher_runtime/watcher_http_adapter.py
 src/mac_control/watcher_runtime/watcher_schedule_store.py
 src/mac_control/watcher_runtime/watcher_tab_lifecycle.py
 src/mac_control/watcher_runtime/watcher_telemetry.py
+src/mac_control/workspace_config.py
 src/mac_control/workspace_policy.py
 tests/__init__.py
 tests/integration/__init__.py
@@ -118,6 +122,7 @@ tests/integration/test_chatbridge_browser_adapter.py
 tests/integration/test_chatbridge_dependency.py
 tests/integration/test_cli_registration.py
 tests/integration/test_consolidated_install.py
+tests/integration/test_external_workspace.py
 tests/integration/test_fastmcp_metadata.py
 tests/integration/test_github_oauth_onboarding.py
 tests/integration/test_gui_default_install.py

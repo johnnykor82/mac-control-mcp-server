@@ -39,7 +39,7 @@ class SftpTransferTests(unittest.TestCase):
         self.ssh_config.write_text("Host test\n    HostName 127.0.0.1\n")
         self.patches = [
             patch.object(tf.ssh, "SSH_CONFIG", self.ssh_config),
-            patch.object(tf, "STAGING", self.session_root),
+            patch.object(tf, "_staging_root", return_value=self.session_root),
             patch.object(tf, "DATA_ROOT", self.logs),
             patch.object(tf, "_safe_local", side_effect=lambda path,require_existing=False:Path(path)),
             patch.object(tf.ssh, "_spec", return_value={"kind":"alias","alias":"test"}),

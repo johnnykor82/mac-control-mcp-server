@@ -12,9 +12,16 @@ The catalog describes the available product surface, not a promise that every to
 
 The input column gives representative named arguments, not a complete JSON schema. Omitted optional arguments use their defaults; the connected server supplies the authoritative schema. Names such as `returned_session_token`, `current_sha256`, `event_id`, and `submission_token` mean values returned by earlier calls. Never paste real credentials or task capabilities into documentation or logs.
 
-Agent-created projects, downloads, scratch work and exports belong under the designated workspace by default. The installed workspace is normally `~/MacControlMCP/data/workspace`; an owner-selected data root can change it. This convention is not an operating-system sandbox. Additional project roots require local owner configuration.
+Agent-created projects, downloads, scratch work and exports belong under the designated workspace by default. The independent workspace defaults to `~/AgentWorkspace` and can be changed with `maccontrol workspace set`. Existing populated legacy workspaces remain until migrated. This convention is not an operating-system sandbox. Additional project roots require local owner configuration.
 
 A practical first pass is `workspace_policy` → `project_roots` → the relevant capability/status tool. Inspect the current file before replacing it, inspect a proposed Git diff before committing it, and read a Watcher report before acknowledging its notification.
+
+**Workspace management (CLI, not an MCP tool):** `maccontrol workspace status`,
+`maccontrol workspace set /path`, `maccontrol workspace inventory --from OLD`,
+`maccontrol workspace migrate --from OLD --name old-server` (dry-run), and
+`--execute --yes` for an explicitly authorized non-destructive copy. These
+commands never relocate user projects as part of an update/rollback/uninstall.
+See [migration](WORKSPACE_MIGRATION.md).
 
 ## Workspace orientation — 2 tools
 

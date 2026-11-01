@@ -41,6 +41,8 @@ class MaintenanceTests(unittest.TestCase):
         patch.object(maintenance, 'DATA_ROOT', self.data).start()
         patch.object(fs_ops, 'ROOT', self.data).start()
         patch.object(fs_ops, 'WORKSPACE', self.workspace).start()
+        from mac_control.workspace_config import set_root
+        set_root(self.data, self.workspace)
         patch.object(fs_ops, 'TRUSTED_CONFIG', self.data / 'allowed_projects.json').start()
         patch.object(fs_ops, 'RECOVERY', self.data / 'backups/fs_recovery').start()
         registry = Registry()
@@ -98,7 +100,7 @@ class MaintenanceTests(unittest.TestCase):
         (self.workspace / '.env').write_text('secret')
         (self.workspace / 'id_rsa').write_text('secret')
         (self.workspace / 'link').symlink_to(self.root)
-        self.assertEqual([x['name'] for x in self.tools['list_workspace']()['entries']], ['normal.txt'])
+        self.assertEqual([x['name'] for x in self.tools['list_workspace']()['entries']], ['artifacts', 'downloads', 'normal.txt', 'projects', 'scratch', 'shared'])
         for path in ('workspace/../logs', 'other', '/tmp'):
             with self.assertRaises((ValueError, PermissionError)):
                 self.tools['list_workspace'](path)

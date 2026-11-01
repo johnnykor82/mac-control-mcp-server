@@ -143,10 +143,11 @@ class ManagedChatBridgeTests(unittest.TestCase):
             (root / "data/workspace/file").write_text("secret")
             with patch.object(installer, "DEFAULT_ROOT", root), \
                  patch.object(installer, "_remove_managed_chatbridge", return_value=True) as uninstall_cb:
-                result = installer.purge(root)
-            self.assertEqual(result["managed_chatbridge_removed"], True)
-            self.assertFalse(root.exists())
-            uninstall_cb.assert_called_once()
+                with self.assertRaisesRegex(RuntimeError, "Legacy user workspace"):
+                    installer.purge(root)
+            self.assertTrue(root.exists())
+            self.assertEqual((root / "data/workspace/file").read_text(), "secret")
+            uninstall_cb.assert_not_called()
 
     def test_full_purge_stops_before_deleting_if_public_route_exists(self):
         with tempfile.TemporaryDirectory() as directory:

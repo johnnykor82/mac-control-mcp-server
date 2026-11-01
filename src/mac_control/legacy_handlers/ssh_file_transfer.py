@@ -20,6 +20,7 @@ import tempfile
 import time
 
 from ..runtime_paths import DATA_ROOT
+from ..workspace_config import resolve as workspace_status
 from .ssh_file_remote import REMOTE_HELPER
 from . import ssh_manage_ops as ssh
 from . import ssh_bridge_ops as legacy_ssh
@@ -29,7 +30,13 @@ CHUNK_LIMIT = 64 * 1024
 TEXT_LIMIT = 512 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
 SESSION_TTL = 24 * 3600
-STAGING = DATA_ROOT / "transfers" / "ssh"
+def _staging_root():
+    # User-originated source data belongs outside the Mac Control installation.
+    active = workspace_status()
+    if active["configured"] and not active["exists"]:
+        raise FileNotFoundError("Configured workspace or external volume is unavailable")
+    return Path(active["workspace_root"]) / "scratch" / "ssh-transfers"
+
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 TOKEN = re.compile(r"[0-9a-f]{32}\Z")
 REMOTE_PATTERN = re.compile(r"[^\x00\r\n]+\Z")
@@ -327,7 +334,7 @@ def write_text(host, remote_path, content, encoding="utf-8", overwrite=False,
     if len(data) > TEXT_LIMIT:
         raise TransferError("text_too_large", "Use streaming interface instead")
     _prepare_staging()
-    fd, path = tempfile.mkstemp(prefix=".maccontrol-text-", dir=STAGING)
+    fd, path = tempfile.mkstemp(prefix=".maccontrol-text-", dir=_staging_root())
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
@@ -340,11 +347,12 @@ def write_text(host, remote_path, content, encoding="utf-8", overwrite=False,
 
 
 def _prepare_staging():
-    if STAGING.is_symlink():
+    staging = _staging_root()
+    if staging.is_symlink():
         raise TransferError("unsafe_staging_root")
-    STAGING.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if (STAGING.is_symlink() or STAGING.stat().st_uid != os.getuid()
-            or STAGING.stat().st_mode & 0o077):
+    staging.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if (staging.is_symlink() or staging.stat().st_uid != os.getuid()
+            or staging.stat().st_mode & 0o077):
         raise TransferError("unsafe_staging_root")
 
 
@@ -357,7 +365,7 @@ def _cleanup_expired():
     now = time.time()
     ttl = _limits()["ttl_seconds"]
     cleaned = 0
-    for folder in STAGING.iterdir():
+    for folder in _staging_root().iterdir():
         if cleaned >= 8:
             break
         if folder.is_symlink() or not folder.is_dir() or not TOKEN.fullmatch(folder.name):
@@ -396,7 +404,7 @@ def _meta_file(transfer_id):
     if not isinstance(transfer_id, str) or not TOKEN.fullmatch(transfer_id):
         raise TransferError("invalid_transfer_id")
     _prepare_staging()
-    return STAGING / transfer_id / "meta.json"
+    return _staging_root() / transfer_id / "meta.json"
 
 
 def _save_meta(path, meta):
@@ -485,7 +493,7 @@ def begin(direction, host, remote_path, local_path=None, total_size=None,
     _prepare_staging()
     _cleanup_expired()
     transfer_id = secrets.token_hex(16)
-    path = STAGING / transfer_id
+    path = _staging_root() / transfer_id
     path.mkdir(mode=0o700)
     blob = path / "blob"
     fd = os.open(blob, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -632,7 +640,7 @@ def finish(transfer_id, expected_sha256=None):
                       "sha256":digest,"remote_sha256":digest,"verified":True}
         meta["status"] = "completed"
         _save_meta(path,meta)
-    _remove_session(STAGING/transfer_id)
+    _remove_session(_staging_root()/transfer_id)
     return {"transfer_id":transfer_id, **result}
 
 
@@ -649,7 +657,7 @@ def cancel(transfer_id):
                     return {"status":"cancel_pending","transfer_id":transfer_id,
                             "retryable":True}
                 raise
-    _remove_session(STAGING/transfer_id)
+    _remove_session(_staging_root()/transfer_id)
     return {"status":"cancelled","transfer_id":transfer_id}
 
 

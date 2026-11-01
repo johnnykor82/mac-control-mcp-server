@@ -34,10 +34,10 @@ the separately installed native helper.
 
 ## One place for agent-created work
 
-The default workspace is:
+The default independent user workspace (not owned by the installer) is:
 
 ```text
-~/MacControlMCP/data/workspace
+~/AgentWorkspace
 ```
 
 It contains `projects`, `scratch`, `scratch/tmp`, `artifacts`, `downloads`, and
@@ -287,3 +287,16 @@ check actual results, account access, and permissions before depending on a work
 ## SSH/SFTP transfer support
 
 The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
+
+## Independent user workspace (beta.22)
+
+User projects now default to `~/AgentWorkspace/`, separate from installation
+and product service data. The location is owner-configurable and applies to
+filesystem, Git, terminal, SFTP local paths and agent instructions. Development
+uses its own workspace unless configured explicitly. Existing populated legacy
+workspace paths are preserved until an approved migration.
+
+Uninstall, full uninstall, update and rollback never delete the external user
+workspace. Rollback into a release without workspace awareness is refused.
+A dry-run inventory and a non-destructive, SQLite-aware copy tool are provided
+for a separately authorized migration. See [migration](WORKSPACE_MIGRATION.md).

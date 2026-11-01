@@ -34,6 +34,7 @@ scripts/guided_setup.py
 scripts/install_mac_control.py
 scripts/setup_cli_commands.py
 scripts/maccontrol_manager.py
+scripts/workspace_migration.py
 scripts/install_manifest.txt
 scripts/mac_control_smoke.py
 scripts/mclog.py
@@ -94,4 +95,6 @@ src/mac_control/watcher_runtime/watcher_http_adapter.py
 src/mac_control/watcher_runtime/watcher_schedule_store.py
 src/mac_control/watcher_runtime/watcher_tab_lifecycle.py
 src/mac_control/watcher_runtime/watcher_telemetry.py
+src/mac_control/workspace_config.py
 src/mac_control/workspace_policy.py
+docs/WORKSPACE_MIGRATION.ru.md

@@ -233,13 +233,28 @@ runs the installed `bin/mac-control-stdio-mcp.sh` launcher.
 
 ## Dedicated agent workspace
 
-Agent-created files, clones, temporary outputs, downloads and artifacts belong in:
+Agent-created projects, temporary outputs, downloads and artifacts belong
+outside the Mac Control installation, by default in:
 
-`~/MacControlMCP/data/workspace`
+`~/AgentWorkspace`
 
 This is conveyed by MCP server instructions and the `workspace_policy` tool. Writing elsewhere requires an explicit owner instruction or necessary OS-specific service setup. **It is a behavioral convention, not an OS-enforced sandbox.**
 
 See [workspace rules](AGENT_WORKSPACE_POLICY.md) and [installation contents](docs/INSTALL_CONTENTS.md).
+
+
+
+**Project data is not part of the Mac Control installation.** The installer
+creates `~/AgentWorkspace/projects`, `shared`, `artifacts`, `downloads`
+and `scratch`. Choose another absolute location (including an external disk)
+with `maccontrol workspace set /path/to/workspace`; use
+`maccontrol workspace status` to inspect the current path. Updating,
+rolling back, or uninstalling Mac Control never moves or deletes this
+directory. A populated legacy `data/workspace` remains in place until
+a separately authorized migration. Full removal refuses to erase it.
+
+See [workspace migration](docs/WORKSPACE_MIGRATION.md) for dry-run and
+non-destructive SQLite-aware copying.
 
 ## mclog — live audit monitor
 
@@ -386,7 +401,7 @@ an independent cloud service nor an additional AI model.
 ### Where are projects and state stored?
 
 By default under `~/MacControlMCP/data/`.
-Agent projects use `data/workspace/`; Watcher state uses `data/run/watcher/`.
+Agent projects use the external `~/AgentWorkspace/` (or configured path); Watcher service state stays in `data/run/watcher/`.
 Updates retain data. Older customized servers require a separate configuration
 migration. Never publish credentials or browser profiles in a public repository.
 

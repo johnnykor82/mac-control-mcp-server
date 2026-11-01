@@ -7,15 +7,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .runtime_paths import DATA_ROOT
+from .workspace_config import workspace_root
 
-WORKSPACE = DATA_ROOT / "workspace"
-AGENT_DIRS = ("projects", "scratch", "artifacts", "downloads", "logs")
+WORKSPACE = workspace_root()
+
+def current_workspace() -> Path:
+    return workspace_root()
+AGENT_DIRS = ("projects", "shared", "artifacts", "downloads", "scratch")
 
 
 def short_instruction() -> str:
     return (
-        "Agent work directory: " + str(WORKSPACE) + ". Write projects, scratch, "
+        "Agent work directory: " + str(current_workspace()) + ". Write projects, scratch, "
         "downloads and artifacts there by default (project='workspace'). "
         "External writes require a specific owner instruction or a necessary "
         "OS service/application integration. See workspace_policy tool."
@@ -25,7 +28,7 @@ def short_instruction() -> str:
 def instructions() -> str:
     return (
         "MAC CONTROL AGENT WORKSPACE RULE (DEFAULT): "
-        f"Use {WORKSPACE} as the single home for every agent-created project, "
+        f"Use {current_workspace()} as the single home for every agent-created project, "
         "clone, draft, test fixture, generated output, download, log, and "
         "temporary working file. Prefer project='workspace' in filesystem, "
         "Git and terminal tools. Put repositories under workspace/projects, "
@@ -56,12 +59,13 @@ def instructions() -> str:
 def details() -> dict:
     return {
         "default_write_project": "workspace",
-        "workspace": str(WORKSPACE),
-        "project_directory": str(WORKSPACE / "projects"),
-        "temporary_directory": str(WORKSPACE / "scratch"),
-        "download_directory": str(WORKSPACE / "downloads"),
-        "artifact_directory": str(WORKSPACE / "artifacts"),
-        "log_directory": str(WORKSPACE / "logs"),
+        "workspace": str(current_workspace()),
+        "project_directory": str(current_workspace() / "projects"),
+        "temporary_directory": str(current_workspace() / "scratch"),
+        "download_directory": str(current_workspace() / "downloads"),
+        "artifact_directory": str(current_workspace() / "artifacts"),
+        "log_directory": str(current_workspace() / "scratch/logs"),
+        "shared_directory": str(current_workspace() / "shared"),
         "external_read": "allowed by owner-granted tools",
         "external_write": "only owner-specified destination, or necessary OS service/config integration",
         "note": "Agent instruction, not a sandbox or restriction on owner-authorized shell.",

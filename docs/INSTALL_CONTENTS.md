@@ -10,8 +10,8 @@ The portable second Mac is the intended independent acceptance-test host.
 | Pinned Python 3.13 runtime and dependencies | MCPServer/~/MacControlMCP/releases/<version>/.venv | Tested on developer's Mac |
 | Mac Control MCP local stdio server, tools and library | MCPServer/~/MacControlMCP/releases/<version> | Tested |
 | MCPServer/current and previous pointers | Mac Control MCP Server root | Tested update/rollback |
-| Agent workspace | ~/MacControlMCP/data/workspace | Created at install |
-| Workspace subdirectories: projects, scratch, scratch/tmp, artifacts, downloads, logs | ~/MacControlMCP/data/workspace | Created at install |
+| User workspace (independent) | ~/AgentWorkspace, configurable via workspace_root | Created once, never purged by Mac Control |
+| Workspace subdirectories: projects, shared, artifacts, downloads, scratch | ~/AgentWorkspace | Created at install, retained on uninstall |
 | mclog read-only terminal audit viewer and launcher | ~/MacControlMCP/releases/<version>/scripts/mclog.py and bin/mclog | Tested |
 | Owner-only metadata audit JSONL (7 daily backups) | ~/MacControlMCP/data/logs/audit.jsonl* | Tested |
 | MCP server instructions and workspace_policy tool | MCP initialization/tool catalogue | Source and test verified |
@@ -121,7 +121,20 @@ The Python source includes `ssh_file_transfer.py` and the fixed
 `ssh_file_remote.py` helper. No Paramiko/AsyncSSH environment is added:
 SFTP uses macOS system OpenSSH and authenticates with the existing SSH profile
 and known_hosts trust. The remote host needs Python 3 for SHA-256 verification
-and atomic commit. Temporary transfer state is private under
-`~/MacControlMCP/data/transfers/ssh/`; owner-only limits live in
+and atomic commit. Temporary user-file transfer state is private under
+`workspace_root/scratch/ssh-transfers/`; owner-only limits live in
 `ssh_transfer_policy.json` if explicitly configured. No Tailscale or
 ChatBridge services are modified by this feature.
+
+## Independent user workspace (beta.22)
+
+`workspace_root` is stored in `data/config/workspace.json`, outside immutable
+release versions. The installer creates the external directory
+`~/AgentWorkspace/` with projects, shared, artifacts, downloads and scratch.
+Project files are never included in release archives and are not removed by
+update, rollback or uninstall (including `--all`).
+
+For populated legacy `data/workspace`, preserve the old path until a
+separately authorized migration. No existing third-party project/service is
+moved or stopped during this release. Development uses a separate workspace
+by default. See [migration](WORKSPACE_MIGRATION.md).

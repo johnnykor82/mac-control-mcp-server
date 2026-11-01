@@ -30,6 +30,8 @@ except ModuleNotFoundError:
     from runtime_tools import find_uv
 
 SOURCE = Path(__file__).resolve().parents[1]
+if str(SOURCE / "src") not in sys.path:
+    sys.path.insert(0, str(SOURCE / "src"))
 DEFAULT_ROOT = Path.home() / "MacControlMCP"
 COPY_DIRS = ("src", "scripts", "bin", "requirements")
 COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
@@ -39,7 +41,8 @@ COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "docs/RELEASE_NOTES_BETA.md", "docs/CHATBRIDGE_BROWSER_MIGRATION.md",
               "docs/CHATGPT_SETUP.ru.md", "docs/CAPABILITIES.md", "docs/CAPABILITIES.ru.md",
               "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/WATCHER_GUIDE.md",
-              "docs/WATCHER_GUIDE.ru.md")
+              "docs/WATCHER_GUIDE.ru.md", "docs/WORKSPACE_MIGRATION.md",
+              "docs/WORKSPACE_MIGRATION.ru.md")
 
 
 def run(argv: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -100,7 +103,7 @@ def smoke(release: Path, data: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(release / "src") + os.pathsep + str(release),
            "MAC_CONTROL_DATA_ROOT": str(data), "PYTHONNOUSERSITE": "1"}
     statement = ("from mac_control.legacy_adapter import inspect_existing_handlers; "
-                 "x=inspect_existing_handlers(); assert len(x) == 102; "
+                 "x=inspect_existing_handlers(); assert len(x) == 109; "
                  "from scripts.dev_mcp_server import make_server; "
                  "assert make_server(include_mutations=True)")
     run([str(py), "-P", "-B", "-c", statement], cwd=release,
@@ -314,10 +317,15 @@ def rollback(root: Path) -> dict:
             raise RuntimeError("No previous Mac Control MCP Server release available")
         target = _verified_release(root, pointer.resolve())
         data = root / "data"
+        from mac_control.workspace_config import resolve as workspace_status
+        if (workspace_status(data)["configured"] and
+                not (target / "src/mac_control/workspace_config.py").is_file()):
+            raise RuntimeError("Previous release lacks external workspace support; rollback would lose access to projects")
         smoke(target, data)
         _activate_release_locked(root, target)
+        from mac_control.workspace_config import resolve as workspace_status
         return {"status": "rolled_back", "active": str(target),
-                "data_preserved": True, "stable_modified": False}
+                "workspace": workspace_status(data), "data_preserved": True, "stable_modified": False}
 
 
 def uninstall(root: Path) -> dict:
@@ -427,15 +435,18 @@ def _save_chatbridge_key(data: Path) -> None:
 
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
-            chatbridge_url: str | None = None, with_watcher: bool = True) -> dict:
+            chatbridge_url: str | None = None, with_watcher: bool = True,
+            workspace_requested: Path | None = None) -> dict:
     with _lifecycle_lock(root) as locked_root:
         return _install_locked(locked_root, with_chatbridge, with_gui,
-                               chatbridge_source, chatbridge_url, with_watcher)
+                               chatbridge_source, chatbridge_url, with_watcher,
+                               workspace_requested)
 
 
 def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
                     chatbridge_source: Path | None = None,
-                    chatbridge_url: str | None = None, with_watcher: bool = True) -> dict:
+                    chatbridge_url: str | None = None, with_watcher: bool = True,
+                    workspace_requested: Path | None = None) -> dict:
     info = paths(root)
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
@@ -456,14 +467,15 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     # Do not modify any Stable or MCP-Dev launchd service.
     info["releases"].mkdir(parents=True, exist_ok=True, mode=0o700)
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in ("workspace", "run", "backups", "workspace/projects",
-                 "workspace/scratch", "workspace/scratch/tmp", "workspace/artifacts",
-                 "workspace/downloads", "workspace/logs", "logs"):
+    for name in ("config", "run", "backups", "logs"):
         folder = data / name
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         folder.chmod(0o700)
     for path in (info["releases"], data, data / "run"):
         path.chmod(0o700)
+    # User work is not owned by the release or by product data.
+    from mac_control.workspace_config import provision as provision_workspace
+    workspace_info = provision_workspace(data, root, workspace_requested)
     created = False
     if not dest.exists():
         dest.mkdir(mode=0o700)
@@ -565,7 +577,8 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
               file=sys.stderr)
     pointer = info["current"]
-    return {"status": "installed", "watcher": watcher_status, "release": str(dest),
+    return {"status": "installed", "watcher": watcher_status,
+            "workspace": workspace_info, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
             "entrypoint": str(pointer / "bin/mac-control-stdio-mcp.sh"),
@@ -629,6 +642,11 @@ def purge(root: Path) -> dict:
     if not marker.is_file() or marker.is_symlink():
         raise RuntimeError("Refusing to purge a directory without installer ownership")
     with _lifecycle_lock(root) as locked_root:
+        from mac_control.workspace_config import legacy_has_user_data, resolve as workspace_status
+        # Fail before touching any managed dependency if legacy user data may be lost.
+        if legacy_has_user_data(locked_root / "data"):
+            raise RuntimeError("Legacy user workspace contains projects; migrate them separately before full uninstall")
+        saved_workspace = workspace_status(locked_root / "data")["workspace_root"]
         # The public-route guard must pass before uninstalling either service.
         try:
             from scripts.setup_network import assert_public_route_safe_for_uninstall
@@ -640,6 +658,7 @@ def purge(root: Path) -> dict:
         result = _uninstall_locked(locked_root)
         shutil.rmtree(locked_root)
     return {"status": "purged", "root": str(root),
+            "user_workspace_preserved": saved_workspace,
             "owned_services_removed": True,
             "managed_chatbridge_removed": dependency_removed,
             "releases_removed": result["removed_releases"]}
@@ -649,7 +668,9 @@ def status(root: Path) -> dict:
     info = paths(root)
     pointer = info["current"]
     active = pointer.resolve() if pointer.is_symlink() else None
+    from mac_control.workspace_config import resolve as workspace_status
     return {"status": "installed" if active and active.is_dir() else "not_installed",
+            "workspace": workspace_status(info["data"]),
             "active": str(active) if active else None,
             "expected_release": str(info["release"]),
             "data": str(info["data"]), "remote_https_oauth": "EXPERIMENTAL_UNVERIFIED"}
@@ -699,6 +720,8 @@ def main() -> int:
     parser.add_argument("--without-watcher", dest="with_watcher", action="store_false",
                         help="Skip Watcher provisioning and stop its owned service if present")
     parser.set_defaults(with_watcher=True)
+    parser.add_argument("--workspace-root", type=Path,
+                        help="Explicit user workspace outside install root (default ~/AgentWorkspace)")
     parser.add_argument("--language", choices=("ru", "en"), help="Choose setup language")
     args = parser.parse_args()
     selected_language = args.language
@@ -748,6 +771,7 @@ def main() -> int:
     if args.plan:
         result = {"status": "plan_only", "root": str(info["root"]),
                   "release": str(info["release"]),
+                   "workspace_root": str(args.workspace_root or (info["root"].parent / "AgentWorkspace")),
                   "entrypoint": str(info["current"] / "bin/mac-control-stdio-mcp.sh"),
                   "installs_packages": True, "network_required": True,
                   "watcher": "install_with_chatbridge" if args.with_watcher and args.with_chatbridge else "skip",
@@ -771,7 +795,8 @@ def main() -> int:
         result = purge(args.root)
     else:
         result = install(args.root, args.with_chatbridge, args.with_gui,
-                         args.chatbridge_source, args.chatbridge_url, with_watcher=args.with_watcher)
+                         args.chatbridge_source, args.chatbridge_url,
+                         with_watcher=args.with_watcher, workspace_requested=args.workspace_root)
     if args.install and result.get("status") == "installed":
         if not sys.stdin.isatty():
             result["guided_setup"] = {"status": "pending_owner_interaction",

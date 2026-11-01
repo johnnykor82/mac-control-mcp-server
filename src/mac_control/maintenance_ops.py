@@ -92,17 +92,17 @@ def _workspace_path(name: str, *, write: bool = False) -> Path:
         if write:
             raise PermissionError('Writes require a workspace-relative path')
         try:
-            relative = relative.relative_to(DATA_ROOT)
+            relative = Path("workspace") / relative.relative_to(fs_ops.roots()["workspace"])
         except ValueError:
-            raise PermissionError('Path is outside the data workspace') from None
+            raise PermissionError('Path is outside the user workspace') from None
     if (not relative.parts or relative.parts[0] != 'workspace'
             or len(relative.parts) < 2 or '..' in relative.parts):
         raise PermissionError('Only workspace/<file> is writable')
-    _no_symlinks(DATA_ROOT / 'workspace')
+    _no_symlinks(fs_ops.roots()['workspace'])
     # Reuse the existing sensitive/hidden/generated path denylist. No new
     # project root or credentials configuration can be written through aliases.
     _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix())
-    if target == (DATA_ROOT / 'workspace') or target.is_dir():
+    if target == fs_ops.roots()['workspace'] or target.is_dir():
         raise ValueError('Expected a workspace file')
     if target.exists() and target.stat().st_nlink != 1:
         raise PermissionError('Hardlinked files are not supported')
@@ -251,7 +251,7 @@ def register(mcp) -> None:
         relative = Path(path)
         if relative.is_absolute() or not relative.parts or relative.parts[0] != 'workspace' or '..' in relative.parts:
             raise ValueError('Only workspace-relative paths are allowed')
-        _no_symlinks(DATA_ROOT / 'workspace')
+        _no_symlinks(fs_ops.roots()['workspace'])
         nested = Path(*relative.parts[1:]).as_posix()
         base, directory = fs_ops.target_for('workspace', nested)
         if not directory.is_dir():

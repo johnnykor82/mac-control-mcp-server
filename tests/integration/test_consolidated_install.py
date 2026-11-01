@@ -127,9 +127,10 @@ class ConsolidatedInstallTests(unittest.TestCase):
             external.mkdir()
             (external / "unrelated.txt").write_text("preserve")
             with patch.object(install, "DEFAULT_ROOT", root):
-                result = install.purge(root)
-            self.assertEqual(result["status"], "purged")
-            self.assertFalse(root.exists())
+                with self.assertRaisesRegex(RuntimeError, "Legacy user workspace"):
+                    install.purge(root)
+            self.assertEqual((root / "data/workspace/private.txt").read_text(), "temporary fixture")
+            self.assertTrue((root / ".mac-control-installer-owned").exists())
             self.assertEqual((external / "unrelated.txt").read_text(), "preserve")
 
     def test_cli_installation_from_release_not_chatbridge_checkout(self):

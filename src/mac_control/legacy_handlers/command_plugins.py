@@ -65,9 +65,17 @@ def _require():
             f"{POLICY} with enabled: true"
         )
 
+def _environment():
+    root = roots()["workspace"]
+    return {**ENVIRONMENT, "TMPDIR":str(root / "scratch/tmp"),
+            "TMP":str(root / "scratch/tmp"), "TEMP":str(root / "scratch/tmp"),
+            "XDG_CACHE_HOME":str(root / "scratch/cache")}
+
+
 def _cwd(project):
     if project == "workspace":
-        for path in (WORKSPACE / "scratch/tmp", WORKSPACE / "scratch/cache"):
+        root = roots()["workspace"]
+        for path in (root / "scratch/tmp", root / "scratch/cache"):
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
     available = roots()
     if project not in available:
@@ -86,7 +94,7 @@ def _tmux(args, *, timeout=8, env=None):
     return subprocess.run(
         call, capture_output=True, text=True, errors="replace",
         stdin=subprocess.DEVNULL, timeout=timeout,
-        env=env or ENVIRONMENT,
+        env=env or _environment(),
     )
 
 def _session(session):
@@ -144,7 +152,7 @@ def register(mcp):
         with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
             proc = subprocess.Popen(
                 [SHELL, "-f", "-c", command], cwd=cwd,
-                env=ENVIRONMENT, stdin=subprocess.DEVNULL,
+                env=_environment(), stdin=subprocess.DEVNULL,
                 stdout=stdout, stderr=stderr, start_new_session=True,
             )
             expired = False
@@ -179,7 +187,7 @@ def register(mcp):
         r = _tmux(
             ["new-session", "-d", "-s", name, "-c", cwd,
              "-x", size[0], "-y", size[1], SHELL, "-f"],
-            env=ENVIRONMENT,
+            env=_environment(),
         )
         if r.returncode:
             raise RuntimeError(r.stderr[:2000])

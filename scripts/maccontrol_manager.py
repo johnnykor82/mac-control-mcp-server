@@ -21,6 +21,9 @@ DEFAULT_ROOT = Path.home() / "MacControlMCP"
 API = "https://api.github.com/repos/johnnykor82/mac-control-mcp-server/releases?per_page=50"
 TAG_RE = re.compile(r"v0\.1\.0-beta\.(\d+)\Z")
 MAX_DOWNLOAD = 16 * 1024 * 1024
+# The current installed release owns its source, not user data.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 MAX_FILES = 300
 MAX_EXPANDED = 80 * 1024 * 1024
 ASSET_HOSTS = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
@@ -143,9 +146,38 @@ def main(argv=None):
     commands.add_parser("status")
     commands.add_parser("rollback")
     un = commands.add_parser("uninstall")
-    un.add_argument("--all", action="store_true", help="Also erase all Mac Control data and workspace")
+    un.add_argument("--all", action="store_true", help="Erase owned Mac Control data only; never user workspace")
+    ws = commands.add_parser("workspace", help="Inspect and set independent user workspace")
+    ws_actions = ws.add_subparsers(dest="workspace_action",required=True)
+    ws_actions.add_parser("status")
+    ws_set = ws_actions.add_parser("set")
+    ws_set.add_argument("path",type=Path)
+    ws_inventory = ws_actions.add_parser("inventory", help="Read-only inventory of a legacy workspace")
+    ws_inventory.add_argument("--from",dest="source",required=True,type=Path)
+    ws_migrate = ws_actions.add_parser("migrate", help="Non-destructive copy; dry-run by default")
+    ws_migrate.add_argument("--from",dest="source",required=True,type=Path)
+    ws_migrate.add_argument("--name",default="legacy-import")
+    ws_migrate.add_argument("--execute",action="store_true")
+    ws_migrate.add_argument("--yes",action="store_true")
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
+    if args.command == "workspace":
+        from mac_control.workspace_config import resolve, set_root
+        data = root / "data"
+        if not (root / ".mac-control-installer-owned").is_file():
+            raise RuntimeError("Mac Control installation not found")
+        if args.workspace_action == "set":
+            result = set_root(data,args.path,root)
+        elif args.workspace_action == "status":
+            result = resolve(data)
+        else:
+            from scripts.workspace_migration import inventory, migrate
+            destination = Path(resolve(data)["workspace_root"])
+            result = (inventory(args.source,destination) if args.workspace_action == "inventory"
+                      else migrate(args.source,destination,args.name,execute=args.execute,
+                                   confirmed=args.yes))
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0
     if args.command == "update":
         return update(root, without_chatbridge=args.without_chatbridge, without_gui=args.without_gui)
     if args.command == "uninstall" and args.all:

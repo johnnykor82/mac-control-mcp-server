@@ -1,5 +1,6 @@
 """Controlled filesystem tools for explicitly approved project roots."""
 from ..runtime_paths import DATA_ROOT
+from ..workspace_config import workspace_root
 import hashlib
 import json
 import mimetypes
@@ -13,7 +14,7 @@ import time
 from pathlib import Path
 
 ROOT = DATA_ROOT
-WORKSPACE = ROOT / "workspace"
+WORKSPACE = workspace_root(ROOT)
 TRUSTED_CONFIG = ROOT / "allowed_projects.json"
 RECOVERY = ROOT / "backups" / "fs_recovery"
 DENY = {".git", ".ssh", ".aws", ".gnupg", ".venv", "__pycache__", "node_modules", ".DS_Store"}
@@ -21,7 +22,11 @@ DENY_PREFIX = (".env", "id_rsa", "id_ed25519", ".npmrc", ".netrc", ".pypirc")
 MAX_FILE = 512 * 1024
 
 def roots():
-    result = {"workspace": WORKSPACE}
+    from ..workspace_config import resolve
+    active = resolve(ROOT)
+    if active["configured"] and not active["exists"]:
+        raise FileNotFoundError("Configured workspace is unavailable; reconnect external volume")
+    result = {"workspace": Path(active["workspace_root"])}
     if TRUSTED_CONFIG.is_file() and not TRUSTED_CONFIG.is_symlink():
         settings = json.loads(TRUSTED_CONFIG.read_text())
         projects = settings.get("projects", {})
@@ -99,7 +104,7 @@ def register(mcp):
     def project_roots() -> dict:
         """List directory roots approved by the Mac owner. New roots require local configuration."""
         return {"projects": {name: str(path) for name, path in roots().items()},
-                "default_write_project": "workspace", "workspace": str(WORKSPACE),
+                "default_write_project": "workspace", "workspace": str(roots()["workspace"]),
                 "agent_write_policy": "Default all agent-created work to workspace; external writes only by specific owner request or necessary system integration.",
                 "config": str(TRUSTED_CONFIG), "config_writable_via_mcp": False}
 
