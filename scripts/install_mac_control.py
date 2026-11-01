@@ -389,6 +389,12 @@ def _uninstall_locked(root: Path) -> dict:
     for target in targets:
         shutil.rmtree(target)
     releases.rmdir()
+    # Remove only CLI shims created for this root, not unrelated user commands.
+    try:
+        from scripts.setup_cli_commands import unregister
+    except ModuleNotFoundError:
+        from setup_cli_commands import unregister
+    unregister(root)
     marker.unlink()
     return {"status": "uninstalled", "removed_releases": len(targets),
             "data_preserved": str(root / "data"), "stable_modified": False}
@@ -545,12 +551,26 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     watcher_status = (_watcher_service_module().status(root)["status"]
                       if _watcher_enabled(root, dest) else "disabled")
     _install_manager_launcher(info["root"])
+    try:
+        from scripts.setup_cli_commands import register as register_cli
+    except ModuleNotFoundError:
+        from setup_cli_commands import register as register_cli
+    cli_commands = register_cli(info["root"])
+    if any(value == "conflict" or value == "profile_conflict"
+           for value in cli_commands.values()):
+        print("CLI registration: existing commands or shell profile were preserved; "
+              "inspect cli_commands and use ~/MacControlMCP/current/bin/mclog as fallback.",
+              file=sys.stderr)
+    elif cli_commands.get("path") == "added_to_zprofile":
+        print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
+              file=sys.stderr)
     pointer = info["current"]
     return {"status": "installed", "watcher": watcher_status, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
             "entrypoint": str(pointer / "bin/mac-control-stdio-mcp.sh"),
             "native_gui": gui_status,
+            "cli_commands": cli_commands,
             "remote_https_oauth": "EXPERIMENTAL_UNVERIFIED"}
 
 

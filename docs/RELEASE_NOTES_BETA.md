@@ -59,3 +59,11 @@ Mac Control MCP Server предоставляет авторизованному
 - Existing ChatBridge services outside this root are rejected to avoid silently breaking the consolidated deployment.
 - Confirmed `maccontrol uninstall --all` invokes the owned ChatBridge uninstaller and stops its LaunchAgent before deleting the Mac Control tree. Tailscale is not changed.
 - The system LaunchAgent registration and any global tools, including `uv`, remain managed separately by macOS/tool installers.
+
+## v0.1.0-beta.20 — mclog CLI registration
+
+- Install, update and reinstalls register `mclog` and `maccontrol` as user-scoped commands under `~/.local/bin`, with no sudo.
+- `mclog` runs the active `~/MacControlMCP/current/bin/mclog` release and continues to work after update/rollback.
+- On Macs without `~/.local/bin` in PATH, add an idempotent PATH block in `~/.zprofile`; open a new Terminal or source it.
+- Existing user executables and symlinks are preserved without overwrite. Both commands and the exact PATH block are removed during uninstall.
+- Regression tests cover PATH invocation, idempotence, cleanup, foreign commands, unsafe symlinks and spaces in installation paths.

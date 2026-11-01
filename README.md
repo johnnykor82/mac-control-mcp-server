@@ -240,8 +240,14 @@ scroll, and `q` to exit.
 After installing Mac Control, launch it from a separate terminal:
 
 ```sh
-"$HOME/MacControlMCP/current/bin/mclog"
+mclog
 ```
+
+The installer registers `mclog` and `maccontrol` in `~/.local/bin`.
+When this directory is missing from `PATH`, it adds a guarded entry to
+`~/.zprofile`; reopen Terminal or run `source ~/.zprofile`.
+Fallback: `~/MacControlMCP/current/bin/mclog`. Existing unrelated commands
+are preserved, and uninstall removes only Mac Control-owned command wrappers.
 
 The bundled executable automatically reads
 `~/MacControlMCP/data/logs/audit.jsonl*`.

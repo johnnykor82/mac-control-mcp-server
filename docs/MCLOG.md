@@ -7,8 +7,13 @@ A bundled, **read-only** curses dashboard for observing locally authorized MCP t
 Open a separate terminal on the Mac with Mac Control installed:
 
 ```sh
-"$HOME/MacControlMCP/current/bin/mclog"
+mclog
 ```
+
+The installer registers `mclog` (and `maccontrol`) in `~/.local/bin`, creating an owner-only launcher.
+If needed, it adds `~/.local/bin` to the login shell `PATH` through an idempotent `~/.zprofile` block.
+Start a new Terminal or run `source ~/.zprofile` to activate the change.
+Without a PATH entry, use `~/MacControlMCP/current/bin/mclog`. Uninstall removes only owned launchers.
 
 The launcher follows the currently activated version and automatically reads:
 
