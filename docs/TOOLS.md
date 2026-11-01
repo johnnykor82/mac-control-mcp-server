@@ -156,12 +156,12 @@ This module requires the installed GUI helper and the relevant macOS Screen Reco
 
 ## Downstream MCP services — 4 tools
 
-Configure approved targets locally in `mcp_targets.json`. Each downstream server has its own authentication, permissions and tool schema. Read discovery first; a tool can be called through the read wrapper only if the downstream metadata explicitly marks it read-only. Optional media arguments use the configured, scoped media mechanism rather than arbitrary file access.
+Mac Control discovers MCP connections from Claude Desktop, Claude CLI, Cursor and VS Code. Connect directly by HTTP(S) URL or one-off stdio `target_spec`; `mcp_targets.json` remains optional. Each server has its own authentication and tool schema. Read discovery first; a tool can be called through the read wrapper only if the downstream metadata explicitly marks it read-only. Optional media arguments use the configured, scoped media mechanism rather than arbitrary file access.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `mcp_targets` | R | List configured downstream MCP target names and transport types. | No arguments. |
-| `mcp_bridge_list` | R | Discover a target's tool names, schemas and read-only declarations. | `target="demo"` after local target configuration. |
+| `mcp_targets` | R | List discovered MCP connections and transport types without credentials. | No arguments. |
+| `mcp_bridge_list` | R | Discover tool names and schemas by URL, existing name or stdio spec. | `target="https://server.example/mcp"` or `target_spec={"type":"stdio",...}`. |
 | `mcp_bridge_read` | R | Invoke a downstream tool explicitly declared read-only. | `target="demo", tool=discovered_read_tool, arguments={}` |
 | `mcp_bridge_call` | W | Invoke an approved downstream tool through the write-capable wrapper. | `target="demo", tool=discovered_tool, arguments=validated_arguments` |
 
