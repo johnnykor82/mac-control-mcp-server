@@ -33,3 +33,11 @@ exit code, and reports timeouts or an unlocatable post-install binary.
 No automatic retry or package installation is performed without consent.
 If the failure persists, use `brew install tmux` in Terminal to inspect
 the complete error message.
+
+**Observed on JKMac-2:** tmux 3.8 is already installed and a real MCP PTY
+session was opened, sent a command, read and closed successfully. A Homebrew
+exit code 1 may follow a successful installation; beta.24 now checks the
+resulting executable via `tmux -V` and returns `installed_with_warnings`
+with `available=true` if functional, preserving the Homebrew diagnostics.
+The historical Homebrew error text was not captured in beta.23, so its exact
+cause is unknown.

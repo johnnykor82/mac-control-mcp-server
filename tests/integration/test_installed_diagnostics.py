@@ -169,7 +169,44 @@ class InstalledDiagnosticsTests(unittest.TestCase):
             process.return_value.stderr=""
             process.return_value.stdout=""
             result=tmux_install.ensure(approved=True)
-            self.assertEqual(result["error_code"],"TMUX_BINARY_NOT_FOUND")
+            self.assertEqual(result["error_code"],"TMUX_BINARY_UNUSABLE")
+
+    def test_homebrew_exit_one_with_working_tmux_is_available_with_warning(self):
+        from subprocess import CompletedProcess
+        with patch.object(tmux_install, "locate",
+                          side_effect=[None, "/opt/homebrew/bin/tmux"]), \
+             patch.object(tmux_install, "_homebrew",
+                          return_value="/opt/homebrew/bin/brew"), \
+             patch.object(tmux_install.subprocess, "run",
+                          side_effect=[
+                            CompletedProcess(["brew"],1,"Install finished",
+                                             "Homebrew cleanup failed"),
+                            CompletedProcess(["tmux","-V"],0,"tmux 3.8\n","")
+                          ]) as run:
+            state=tmux_install.ensure(approved=True)
+        self.assertEqual(state["status"],"installed_with_warnings")
+        self.assertTrue(state["available"])
+        self.assertEqual(state["version"],"tmux 3.8")
+        self.assertEqual(state["exit_code"],1)
+        self.assertIn("cleanup failed",state["stderr_tail"])
+        self.assertEqual(run.call_args.args[0],
+                         ["/opt/homebrew/bin/tmux","-V"])
+
+    def test_homebrew_exit_zero_with_working_tmux_is_installed(self):
+        from subprocess import CompletedProcess
+        with patch.object(tmux_install, "locate",
+                          side_effect=[None, "/opt/homebrew/bin/tmux"]), \
+             patch.object(tmux_install, "_homebrew",
+                          return_value="/opt/homebrew/bin/brew"), \
+             patch.object(tmux_install.subprocess, "run",
+                          side_effect=[
+                            CompletedProcess(["brew"],0,"",""),
+                            CompletedProcess(["tmux","-V"],0,"tmux 3.8\n","")
+                          ]):
+            state=tmux_install.ensure(approved=True)
+        self.assertEqual(state["status"],"installed")
+        self.assertTrue(state["available"])
+        self.assertEqual(state["version"],"tmux 3.8")
 
     def test_tmux_logs_redact_secrets(self):
         value=("error: AUTHORIZATION Bearer secret-value" + chr(10)

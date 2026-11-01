@@ -171,6 +171,11 @@ Mac Control MCP Server предоставляет авторизованному
   at the interactive prompt or `maccontrol update --install-tmux`; no
   unintended package installs or retries. If the Mac-specific cause persists,
   run `brew install tmux` in Terminal and inspect the error message.
+- If Homebrew returns exit code 1 after successfully installing tmux
+  (as observed on JKMac-2), the installer now verifies the actual binary with
+  `tmux -V` and reports `installed_with_warnings` / available=true rather
+  than falsely reporting a missing terminal. Real tmux 3.8 terminal
+  open/send/read/close was verified via the installed JKMac-2 MCP server.
 - No changes to existing Tailscale Funnel routes, OAuth/ChatBridge credentials,
   Watcher, GUI permissions or user workspace paths. All other MCP tools work
   independently of the optional tmux installation.

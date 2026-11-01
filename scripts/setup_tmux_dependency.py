@@ -90,13 +90,34 @@ def ensure(*, approved=False, interactive=False, input_fn=input):
                 "error_code": "HOMEBREW_EXEC_ERROR", "detail": _excerpt(error),
                 "remedy": "Check Homebrew path and execution permissions"}
     executable = locate()
-    if result.returncode or executable is None:
-        return {
-            "status": "install_failed", "available": False,
-            "error_code": ("HOMEBREW_INSTALL_FAILED" if result.returncode
-                           else "TMUX_BINARY_NOT_FOUND"),
-            "exit_code": result.returncode, "brew_path": brew,
-            "stderr_tail": _excerpt(result.stderr),
-            "stdout_tail": _excerpt(result.stdout),
-            "remedy": "Check the Homebrew output; run brew install tmux in Terminal"}
-    return {"status": "installed", "available": True, "tmux_path": executable}
+    working = False
+    if executable:
+        try:
+            probe = subprocess.run(
+                [executable, "-V"], stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, timeout=8,
+                env=_environment(brew))
+            working = probe.returncode == 0 and probe.stdout.strip().startswith("tmux ")
+        except (OSError, subprocess.TimeoutExpired):
+            working = False
+    if working:
+        if result.returncode:
+            # Homebrew can fail during post-install or cleanup even when the
+            # package is installed and working (observed on JKMac-2).
+            return {
+                "status": "installed_with_warnings", "available": True,
+                "tmux_path": executable, "version": probe.stdout.strip(),
+                "error_code": "HOMEBREW_NONZERO_AFTER_SUCCESS",
+                "exit_code": result.returncode, "brew_path": brew,
+                "stderr_tail": _excerpt(result.stderr),
+                "stdout_tail": _excerpt(result.stdout)}
+        return {"status": "installed", "available": True,
+                "tmux_path": executable, "version": probe.stdout.strip()}
+    return {
+        "status": "install_failed", "available": False,
+        "error_code": ("HOMEBREW_INSTALL_FAILED" if result.returncode
+                       else "TMUX_BINARY_UNUSABLE"),
+        "exit_code": result.returncode, "brew_path": brew,
+        "stderr_tail": _excerpt(result.stderr),
+        "stdout_tail": _excerpt(result.stdout),
+        "remedy": "Check the Homebrew output; run brew install tmux in Terminal"}
