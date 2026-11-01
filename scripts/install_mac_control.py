@@ -561,12 +561,19 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
     provider_url = chatbridge_url or os.environ.get("MACCONTROL_CHATBRIDGE_URL", "http://127.0.0.1:8787")
+    chatbridge_auth = {"authenticated": False, "status": "not_configured"}
     if with_chatbridge:
         try:
-            from scripts.setup_chatbridge_dependency import ensure
+            from scripts.setup_chatbridge_dependency import ensure, browser_login_status
         except ModuleNotFoundError:
-            from setup_chatbridge_dependency import ensure
-        ensure(provider_url, chatbridge_source, install_root=root)
+            from setup_chatbridge_dependency import ensure, browser_login_status
+        bridge_info = ensure(provider_url, chatbridge_source, install_root=root)
+        if isinstance(bridge_info, dict):
+            provider_url = bridge_info.get("url", provider_url)
+            chatbridge_auth = browser_login_status(provider_url)
+            if not chatbridge_auth["authenticated"]:
+                print("ChatBridge needs sign-in in the managed Chrome profile; "
+                      "finish login, then rerun --setup.", file=sys.stderr)
     elif chatbridge_source is not None or chatbridge_url is not None:
         raise RuntimeError("ChatBridge options cannot be used with --without-chatbridge")
     uv = find_uv()
@@ -712,10 +719,12 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         cleanup = {"status": "skipped", "reason": type(exc).__name__}
         print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
-    return {"status": "installed" if tmux_status["available"] else "setup_incomplete",
+    ready = tmux_status["available"] and (not with_chatbridge or chatbridge_auth["authenticated"])
+    return {"status": "installed" if ready else "setup_incomplete",
             "watcher": watcher_status,
             "release_cleanup": cleanup,
             "tmux": tmux_status,
+            "chatbridge_auth": chatbridge_auth,
             "workspace": workspace_info, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",

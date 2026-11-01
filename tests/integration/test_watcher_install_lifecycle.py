@@ -92,7 +92,10 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
         with patch.object(installer, "paths", return_value=paths), \
              patch.object(installer, "find_uv", return_value="/fake/uv"), \
              patch.object(installer, "smoke"), \
-             patch("scripts.setup_chatbridge_dependency.ensure", return_value={"status": "ready"}):
+             patch("scripts.setup_chatbridge_dependency.ensure",
+                   return_value={"status": "compatible", "url": "http://127.0.0.1:8787"}), \
+             patch("scripts.setup_chatbridge_dependency.browser_login_status",
+                   return_value={"authenticated": True, "status": "ready"}):
             return installer.install(self.root, with_chatbridge=with_chatbridge,
                                      with_gui=False, with_watcher=with_watcher)
 

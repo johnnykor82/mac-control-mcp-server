@@ -43,13 +43,29 @@ public source export and provenance review remain prerequisites.
 | --- | --- |
 | GUI permissions | Normal native helper installation needs no Apple Command Line Tools. Setup requests missing Accessibility/Screen Recording grants sequentially; a system popup is not guaranteed, and only the owner grants access in Settings. |
 | Manual developer builds | scripts/build_mac_control_gui.py and scripts/package_gui_release.py still require Apple developer tools and Swift. |
-| ChatBridge HTTP Browser API | Independent runtime dependency, automatically installed from SHA256-pinned published release into ~/MacControlMCP/deps/{chatbridge-source,chatbridge,chatbridge-data} when missing. A compatible service is reused only when installed within that root. --without-chatbridge skips setup; --chatbridge-source must point into the managed deps path. Full uninstall --all removes this managed dependency through its own installer, not Tailscale. |
+| ChatBridge HTTP Browser API | Required standard-install dependency, automatically installed from SHA256-pinned published release into ~/MacControlMCP/deps/{chatbridge-source,chatbridge,chatbridge-data} when missing. A compatible service is reused only when installed within that root. --without-chatbridge skips setup; --chatbridge-source must point into the managed deps path. Full uninstall --all removes this managed dependency through its own installer, not Tailscale. |
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
 | Public HTTPS route | Direct public domain with trusted TLS and TCP 443 reverse proxy to 127.0.0.1:3201, or Tailscale Funnel without public IP. Owner configures direct DNS/TLS/proxy/router and verifies inbound HTTPS. Never expose port 3201 externally. |
 | Tailscale GUI app, account and MagicDNS/Funnel approval | External; reuse an existing App Store or Standalone install, leave VPN/Exit Node unchanged |
 | mclog / maccontrol CLI | Registered in `~/.local/bin` without sudo; when required, `~/.zprofile` adds the directory to PATH. Both commands follow the active Mac Control installation; uninstall removes only owned wrappers. |
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
+
+## ChatBridge installation and authenticated readiness (E4)
+
+The Mac Control installer detects a compatible owned ChatBridge instance. If the
+default loopback port 8787 is occupied by another service, it selects an unused
+loopback port without stopping the foreign service and saves the actual URL
+in `data/chatbridge_connection.txt`.
+
+ChatBridge's managed installer starts its dedicated Chrome profile. The owner
+signs into ChatGPT in that browser. The Mac Control installer then checks
+ChatBridge `GET /ready`, which probes the real authenticated composer;
+`/health` or Browser API capabilities alone do not establish readiness.
+Until `/ready` succeeds, setup status is `setup_incomplete` and the installer
+must offer a resume path. Existing authenticated sessions do not need
+another login. Browser authorization and first-login visual acceptance still
+require manual verification during release acceptance.
 
 ## Interactive setup and owner responsibilities
 

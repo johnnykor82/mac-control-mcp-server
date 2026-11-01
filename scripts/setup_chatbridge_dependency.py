@@ -59,6 +59,52 @@ def verify(url: str = DEFAULT_URL) -> dict:
             "mac_control_browser_provider": "chatbridge", "versioned_api": "v1"}
 
 
+
+def select_endpoint(preferred: str = DEFAULT_URL) -> str:
+    """Reuse a compatible service or select an unused loopback port."""
+    requested = local_origin(preferred)
+    port = requested.port or 80
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            try:
+                verify(preferred)
+                return preferred
+            except urllib.error.HTTPError as error:
+                if error.code == 401:
+                    raise RuntimeError("Existing ChatBridge requires its API key") from None
+            except (urllib.error.URLError, TimeoutError, ValueError, RuntimeError):
+                pass
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as available:
+                available.bind(("127.0.0.1", 0))
+                return "http://127.0.0.1:" + str(available.getsockname()[1])
+    return preferred
+
+
+def browser_login_status(url: str = DEFAULT_URL) -> dict:
+    """Probe a real authenticated ChatGPT composer, never only /health."""
+    local_origin(url)
+    key = os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
+    request = urllib.request.Request(
+        url.rstrip("/") + "/ready",
+        headers=({"Authorization": "Bearer " + key} if key else {}),
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            if getattr(response, "status", 200) != 200:
+                raise RuntimeError("Unexpected ChatBridge readiness response")
+            return {"authenticated": True, "status": "ready", "url": url}
+    except urllib.error.HTTPError as error:
+        if error.code == 503:
+            return {"authenticated": False, "status": "login_required",
+                    "url": url, "next": "Sign in through ChatBridge's managed Chrome window"}
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return {"authenticated": False, "status": "unavailable", "url": url,
+                "next": "Check ChatBridge service and retry setup"}
+
+
 def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
     root = install_root.expanduser().resolve()
     return (root / "deps/chatbridge-source", root / "deps/chatbridge",
@@ -254,6 +300,8 @@ def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> 
 
 def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Path | None = None) -> dict:
     """Reuse a compatible endpoint; only a refused connection permits fresh setup."""
+    if install_root is not None:
+        url = select_endpoint(url)
     try:
         result = verify(url)
         if install_root is not None:
