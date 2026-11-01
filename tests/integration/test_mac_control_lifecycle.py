@@ -17,6 +17,20 @@ class MacControlMCPServerLifecycleTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         (self.root / "releases").mkdir()
         (self.root / "data/workspace").mkdir(parents=True)
+        # Real macOS Funnel is intentionally active on the developer machine.
+        # This is an isolated fixture: never examine/change the live route.
+        self.root.chmod(0o700)
+        (self.root / "data").chmod(0o700)
+        from scripts import setup_network
+        guard = patch.object(setup_network, "assert_public_route_safe_for_uninstall", return_value=None)
+        guard.start()
+        self.addCleanup(guard.stop)
+        # The host has real LaunchAgents. Treat this temporary install as
+        # independent: it has no owned remote or Watcher service.
+        for function in ("_remote_plist_exists", "_watcher_plist_exists"):
+            service = patch.object(ic, function, return_value=False)
+            service.start()
+            self.addCleanup(service.stop)
         self.user = self.root / "data/workspace/do-not-delete.txt"
         self.user.write_text("keep")
         (self.root / ".mac-control-installer-owned").write_text("owned")
