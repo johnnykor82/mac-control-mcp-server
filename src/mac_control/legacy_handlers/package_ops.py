@@ -4,6 +4,7 @@ Installed formula names are restricted to simple Homebrew/core-style identifiers
 No shell command strings, sudo, casks, taps, or arbitrary installer URLs.
 """
 from ..runtime_paths import DATA_ROOT
+from ..tmux_runtime import locate as locate_tmux
 import json
 import os
 import getpass
@@ -111,7 +112,7 @@ def register(mcp):
         """Check Homebrew and tmux installation without executing shell scripts."""
         binary = brew()
         result = {"brew_path": binary,
-                  "tmux_path": shutil.which("tmux"),
+                  "tmux_path": locate_tmux(),
                   "formula_installs_supported": binary is not None}
         if binary:
             test = _run([binary, "--version"])

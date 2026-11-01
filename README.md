@@ -422,3 +422,16 @@ account limits and network settings can affect operation.
  Existing Tailscale Funnel rules are preserved.
 
 **tmux (beta.24):** if owner-approved Homebrew installation fails, `maccontrol update` now includes a bounded, redacted error excerpt instead of only exit code 1. To inspect the full Homebrew failure, run `brew install tmux` in Terminal.
+
+### Release retention and tmux capability discovery (beta.25)
+
+Once an update has activated successfully, the installer keeps `current`
+and `previous` for rollback and removes only validated, unreferenced older
+release snapshots. Preview with `maccontrol releases cleanup --dry-run`;
+run explicit cleanup with `maccontrol releases cleanup --yes`. This never
+removes AgentWorkspace projects, product data, OAuth, ChatBridge, Watcher,
+GUI, Funnel routes, user logs or backups.
+
+`package_capabilities` now uses the same runtime tmux resolver as the
+terminal tools, including standard Homebrew locations outside launchd's
+restricted PATH.

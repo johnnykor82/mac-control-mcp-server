@@ -445,3 +445,18 @@ Watcher ещё нужно проверить после обновления. И
  Existing Tailscale Funnel rules are preserved.
 
 **tmux (beta.24):** при неудачной установке через Homebrew команда `maccontrol update` теперь выводит диагностическое сообщение Homebrew, а не только код 1. Для самостоятельной проверки используйте `brew install tmux` в Terminal.
+
+### Очистка старых версий (beta.25)
+
+После успешного обновления Mac Control сохраняет только две версии:
+`current` и `previous` (для отката). Более старые проверенные каталоги
+релизов удаляются автоматически. Непонятные или чужие папки не удаляются.
+
+Проверить без удаления: `maccontrol releases cleanup --dry-run`.
+Очистить вручную: `maccontrol releases cleanup --yes`.
+
+Это касается **только** `~/MacControlMCP/releases`. Проекты
+`~/AgentWorkspace`, настройки, OAuth, ChatBridge, Watcher, Funnel,
+журналы и резервные копии остаются нетронутыми. Также
+`package_capabilities` теперь правильно находит `tmux`, установленный
+через Homebrew, даже если путь отсутствует в `PATH` фонового процесса.

@@ -149,6 +149,12 @@ def main(argv=None):
                      help="Explicitly allow Homebrew installation of tmux when missing")
     commands.add_parser("status")
     commands.add_parser("rollback")
+    releases = commands.add_parser("releases", help="Inspect or prune unused installer releases")
+    releases_actions = releases.add_subparsers(dest="releases_action", required=True)
+    cleanup = releases_actions.add_parser("cleanup", help="Preview cleanup; --yes applies deletions")
+    cleanup.add_argument("--dry-run", action="store_true", help="Show only; default")
+    cleanup.add_argument("--yes", action="store_true",
+                         help="Delete only eligible old release directories")
     un = commands.add_parser("uninstall")
     un.add_argument("--all", action="store_true", help="Erase owned Mac Control data only; never user workspace")
     ws = commands.add_parser("workspace", help="Inspect and set independent user workspace")
@@ -165,6 +171,10 @@ def main(argv=None):
     ws_migrate.add_argument("--yes",action="store_true")
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
+    if args.command == "releases":
+        if args.dry_run and args.yes:
+            raise ValueError("Choose --dry-run or --yes, not both")
+        return installed(root, "--releases-cleanup", *(["--yes"] if args.yes else []))
     if args.command == "workspace":
         from mac_control.workspace_config import resolve, set_root
         data = root / "data"

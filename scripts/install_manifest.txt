@@ -96,6 +96,7 @@ src/mac_control/watcher_runtime/watcher_http_adapter.py
 src/mac_control/watcher_runtime/watcher_schedule_store.py
 src/mac_control/watcher_runtime/watcher_tab_lifecycle.py
 src/mac_control/watcher_runtime/watcher_telemetry.py
+src/mac_control/tmux_runtime.py
 src/mac_control/workspace_config.py
 src/mac_control/workspace_policy.py
 docs/WORKSPACE_MIGRATION.ru.md

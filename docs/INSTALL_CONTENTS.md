@@ -143,3 +143,21 @@ Watcher browser result and file report artifacts are written beneath the
 external `workspace_root/artifacts/`; only Watcher private operational state
 (SQLite, service locks and credentials) stays under the installation's
 `data/run/watcher/`. Existing reports remain readable at their original paths.
+
+### Release retention (beta.25)
+
+A successful install/update retains only the currently active release and the
+release referenced by `previous`. Validated, unreferenced older installer-owned
+snapshots are automatically removed. All candidates are restricted to verified
+release directories directly under `~/MacControlMCP/releases`; unknown or
+ambiguous directories are skipped.
+
+Use `maccontrol releases cleanup --dry-run` to preview candidates and
+reclaimable disk space without deleting anything. Use
+`maccontrol releases cleanup --yes` for an explicitly requested cleanup.
+Neither operation touches user workspace contents, product `data/`, OAuth,
+Watcher, ChatBridge, GUI, Funnel or other installed applications.
+
+If cleanup is unsafe or fails, a successful installation remains active and
+the installer returns a structured warning/skip status rather than masking
+or rolling back the newly installed release.

@@ -179,3 +179,28 @@ Mac Control MCP Server предоставляет авторизованному
 - No changes to existing Tailscale Funnel routes, OAuth/ChatBridge credentials,
   Watcher, GUI permissions or user workspace paths. All other MCP tools work
   independently of the optional tmux installation.
+
+## v0.1.0-beta.25 — consistent tmux discovery and automatic release retention
+
+- `package_capabilities.tmux_path` and `terminal_capabilities.tmux_path`
+  now use the same live executable resolver, checking `/opt/homebrew/bin/tmux`
+  and `/usr/local/bin/tmux` before the service's minimal `PATH`.
+  A newly installed tmux is discovered without restarting Mac Control;
+  non-executable binaries are not reported.
+- Installer release garbage collection runs **after** successful release
+  activation and post-install setup. It protects both `current` and
+  `previous` for one-step rollback and deletes only validated,
+  installer-owned, unreferenced older snapshots under
+  `~/MacControlMCP/releases`. Unknown directory names, symlinks,
+  unexpected top-level files, missing ownership metadata and incomplete
+  activation are skipped/refused.
+- Read-only preview: `maccontrol releases cleanup --dry-run`.
+  Explicit cleanup: `maccontrol releases cleanup --yes`. The preview
+  lists protected releases, candidates and estimated reclaimable bytes;
+  deletion results include reclaimed bytes and errors.
+- User projects in `~/AgentWorkspace`, `data/` (OAuth/Watcher/service
+  configuration and logs), ChatBridge, GUI, Tailscale/Funnel and other
+  non-release paths are never targets of release cleanup.
+- Release retention is covered by dedicated tests of rollback protection,
+  dry-run, unrecognized folders, symlinks, dangling pointers, interrupted
+  activation, missing ownership markers and new tmux detection.

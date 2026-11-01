@@ -13,6 +13,7 @@ import errno
 import fcntl
 import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import shutil
@@ -140,6 +141,105 @@ def _verified_release(root: Path, candidate: Path) -> Path:
     if not (candidate / "bin/mac-control-stdio-mcp.sh").is_file():
         raise RuntimeError("Release is not a Mac Control MCP Server installation")
     return candidate
+
+
+# Versioned releases are immutable installer-owned snapshots.
+_RELEASE_ID = re.compile(r"(?:source-[0-9a-f]{12}|[0-9a-f]{12}-[0-9a-f]{12,16})\Z")
+_RELEASE_TOP = {
+    ".venv", "AGENT_INSTALL.md", "AGENT_WORKSPACE_POLICY.md",
+    "BETA_SOURCE_MANIFEST.txt", "bin", "build", "contracts", "docs", "LICENSE",
+    "README.md", "README.ru.md", "requirements", "scripts",
+    "SECURITY.md", "src", "tests",
+}
+
+
+def _release_bytes(folder: Path) -> int:
+    """Estimate actual on-disk bytes, without following links."""
+    total = 0
+    for base, directories, files in os.walk(folder, followlinks=False):
+        for name in (*directories, *files):
+            entry = Path(base) / name
+            try:
+                total += entry.lstat().st_blocks * 512
+            except FileNotFoundError:
+                continue
+    return total
+
+
+def _release_cleanup_locked(root: Path, *, dry_run: bool = True) -> dict:
+    """Remove only verified, unreferenced Mac Control release snapshots.
+
+    The caller must hold the installer lifecycle lock. Current and previous
+    remain available for rollback; no user data or service state is touched.
+    """
+    root = root.resolve()
+    releases = root / "releases"
+    marker = root / ".mac-control-installer-owned"
+    if (not marker.is_file() or marker.is_symlink()
+            or marker.stat().st_uid != os.getuid()):
+        raise RuntimeError("Refusing cleanup without owned installation marker")
+    if (not releases.is_dir() or releases.is_symlink()
+            or releases.stat().st_uid != os.getuid()):
+        raise RuntimeError("Unsafe releases directory")
+    preserved = set()
+    for label in ("current", "previous"):
+        pointer = root / label
+        if pointer.exists() or pointer.is_symlink():
+            if not pointer.is_symlink():
+                raise RuntimeError("Unsafe activation pointer: " + label)
+            preserved.add(_verified_release(root, pointer.resolve()))
+    if not (root / "current").is_symlink():
+        raise RuntimeError("No verified active release; cleanup refused")
+    if any(root.glob(".pending-current-*")) or any(root.glob(".pending-previous-*")):
+        raise RuntimeError("Activation is in progress; cleanup refused")
+    candidates, skipped = [], []
+    for item in sorted(releases.iterdir()):
+        if item in preserved:
+            continue
+        if item.is_symlink() or not item.is_dir() or not _RELEASE_ID.fullmatch(item.name):
+            skipped.append({"path": str(item), "reason": "unrecognized_or_unsafe"})
+            continue
+        if (item.stat().st_uid != os.getuid()
+                or (item / ".venv").is_symlink()
+                or not (item / ".venv/bin/python").is_file()
+                or {entry.name for entry in item.iterdir()} - _RELEASE_TOP):
+            skipped.append({"path": str(item), "reason": "unverified_or_extra_files"})
+            continue
+        try:
+            _verified_release(root, item)
+        except RuntimeError:
+            skipped.append({"path": str(item), "reason": "unverified_release"})
+            continue
+        candidates.append({"path": str(item), "bytes": _release_bytes(item)})
+    removed, errors = [], []
+    if not dry_run:
+        for item in candidates:
+            path = Path(item["path"])
+            # Recheck immediately before deletion while the lifecycle lock is held.
+            if path in preserved or path.is_symlink():
+                errors.append({"path": str(path), "error": "release_changed"})
+                continue
+            try:
+                _verified_release(root, path)
+                shutil.rmtree(path)
+                removed.append(item)
+            except (OSError, RuntimeError) as exc:
+                errors.append({"path": str(path), "error": type(exc).__name__})
+    return {
+        "status": "dry_run" if dry_run else "cleaned",
+        "protected": [str(path) for path in sorted(preserved)],
+        "candidates": candidates,
+        "skipped": skipped,
+        "removed": removed,
+        "errors": errors,
+        "reclaimable_bytes": sum(item["bytes"] for item in candidates),
+        "reclaimed_bytes": sum(item["bytes"] for item in removed),
+    }
+
+
+def releases_cleanup(root: Path, *, dry_run: bool = True) -> dict:
+    with _lifecycle_lock(root) as locked_root:
+        return _release_cleanup_locked(locked_root, dry_run=dry_run)
 
 
 def _atomic_pointer(root: Path, name: str, target: Path) -> None:
@@ -599,8 +699,14 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         elif tmux_status.get("stdout_tail"):
             print("Homebrew output (redacted):\n" + tmux_status["stdout_tail"],
                   file=sys.stderr)
+    try:
+        cleanup = _release_cleanup_locked(root, dry_run=False)
+    except (RuntimeError, OSError) as exc:
+        cleanup = {"status": "skipped", "reason": type(exc).__name__}
+        print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
     return {"status": "installed", "watcher": watcher_status,
+            "release_cleanup": cleanup,
             "tmux": tmux_status,
             "workspace": workspace_info, "release": str(dest),
             "current": str(pointer), "data": str(data),
@@ -712,6 +818,8 @@ def main() -> int:
     action.add_argument("--update", action="store_true", help="Install new version, preserve previous for rollback")
     action.add_argument("--rollback", action="store_true", help="Restore previous verified release")
     action.add_argument("--uninstall", action="store_true", help="Remove installed binaries only; retain data")
+    action.add_argument("--releases-cleanup", action="store_true",
+                        help="Preview removable old releases (apply only with --yes)")
     action.add_argument("--purge", action="store_true", help="Delete entire owned ~/MacControlMCP after confirmation")
     parser.add_argument("--yes", action="store_true", help="Confirm previously approved full removal")
     action.add_argument("--github-oauth-guide", action="store_true", help="Show GitHub OAuth App registration steps")
@@ -813,6 +921,8 @@ def main() -> int:
         result = status(args.root)
     elif args.rollback:
         result = rollback(args.root)
+    elif args.releases_cleanup:
+        result = releases_cleanup(args.root, dry_run=not args.yes)
     elif args.uninstall:
         result = uninstall(args.root)
     elif args.purge:

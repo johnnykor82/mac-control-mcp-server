@@ -4,6 +4,7 @@ Arbitrary shell commands run as the macOS account running this server.
 Working-directory selection is not a sandbox. Do not enable on an untrusted MCP.
 """
 from ..runtime_paths import DATA_ROOT
+from ..tmux_runtime import locate as locate_tmux
 import hashlib
 import json
 import os
@@ -46,7 +47,7 @@ KEYS = {
     "Enter", "C-c", "C-d", "C-z", "Tab", "Escape", "BSpace",
     "Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown",
 }
-TMUX = next((p for p in ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux") if Path(p).is_file()), shutil.which("tmux"))
+TMUX = locate_tmux()
 SHELL = "/bin/zsh"
 
 def _enabled():
@@ -88,8 +89,7 @@ def _runtime():
 
 def _tmux_available():
     # The user may install tmux after Mac Control started: rediscover it.
-    return TMUX or next((p for p in ("/opt/homebrew/bin/tmux","/usr/local/bin/tmux",
-                       shutil.which("tmux")) if p and Path(p).is_file()), None)
+    return locate_tmux()
 
 
 def _tmux_error():
