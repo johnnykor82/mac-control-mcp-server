@@ -153,3 +153,24 @@ Mac Control MCP Server предоставляет авторизованному
 - No Funnel, Tailscale, OAuth, ChatBridge, Watcher service state or user
   workspace migration is performed by this feature. Installation still
   requires manual macOS TCC consent where needed.
+
+## v0.1.0-beta.24 — Homebrew tmux installation diagnostics
+
+- On JKMac-2, beta.23 installed successfully but owner-approved `brew install tmux`
+  returned exit code 1. Its stdout and stderr were captured but discarded,
+  making the actual failure impossible to diagnose from the installation log.
+- The installer now retains the user's Homebrew-relevant environment (including
+  `USER`, `LOGNAME`, `TMPDIR`, locale, PATH, proxy and certificate settings),
+  rather than replacing it with a minimal `HOME`/`PATH` dictionary.
+  Homebrew auto-update and analytics are still disabled for this operation.
+- Failures return `error_code`, exit status, the resolved Homebrew path and
+  bounded, redacted stderr/stdout excerpts, which are printed to the Terminal
+  and included in the structured `tmux` result. Timeouts and missing
+  post-install binaries also return structured errors rather than exceptions.
+- Homebrew installation remains conditional on the owner's explicit `y`
+  at the interactive prompt or `maccontrol update --install-tmux`; no
+  unintended package installs or retries. If the Mac-specific cause persists,
+  run `brew install tmux` in Terminal and inspect the error message.
+- No changes to existing Tailscale Funnel routes, OAuth/ChatBridge credentials,
+  Watcher, GUI permissions or user workspace paths. All other MCP tools work
+  independently of the optional tmux installation.

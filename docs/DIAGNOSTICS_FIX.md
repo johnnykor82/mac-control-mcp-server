@@ -22,3 +22,14 @@ alter OAuth/ChatBridge identities, or silently grant macOS TCC permissions.
 For a live post-update check, reconnect the MCP client and invoke the four
 diagnostic tools; interactive terminal open/read/send/close additionally needs
 an installed tmux and owner-enabled terminal access.
+
+## beta.24: tmux/Homebrew failure reporting
+
+The beta.23 installer suppressed Homebrew's stderr/stdout when an
+owner-authorized `brew install tmux` failed. The beta.24 installer preserves
+the user's Homebrew-relevant environment (locale, TMPDIR, username, network
+proxy settings and PATH), emits bounded redacted diagnostics with the precise
+exit code, and reports timeouts or an unlocatable post-install binary.
+No automatic retry or package installation is performed without consent.
+If the failure persists, use `brew install tmux` in Terminal to inspect
+the complete error message.

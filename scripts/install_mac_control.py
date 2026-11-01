@@ -590,6 +590,15 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     if not tmux_status["available"]:
         print("Interactive terminal unavailable: " + tmux_status["remedy"],
               file=sys.stderr)
+        if tmux_status.get("error_code"):
+            print("tmux Homebrew error: " + tmux_status["error_code"],
+                  file=sys.stderr)
+        if tmux_status.get("stderr_tail"):
+            print("Homebrew stderr (redacted):\n" + tmux_status["stderr_tail"],
+                  file=sys.stderr)
+        elif tmux_status.get("stdout_tail"):
+            print("Homebrew output (redacted):\n" + tmux_status["stdout_tail"],
+                  file=sys.stderr)
     pointer = info["current"]
     return {"status": "installed", "watcher": watcher_status,
             "tmux": tmux_status,

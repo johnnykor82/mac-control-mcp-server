@@ -130,6 +130,63 @@ class InstalledDiagnosticsTests(unittest.TestCase):
             self.assertEqual(process.call_args.args[0],
                              ["/opt/homebrew/bin/brew","install","tmux"])
 
+    def test_homebrew_receives_user_environment_and_reports_error(self):
+        with patch.object(tmux_install,"locate",return_value=None), \
+             patch.object(tmux_install,"_homebrew",return_value="/opt/homebrew/bin/brew"), \
+             patch.object(tmux_install.subprocess,"run") as process, \
+             patch.dict(os.environ,{"USER":"jk","LOGNAME":"jk",
+                                    "TMPDIR":"/tmp/jk-tmp",
+                                    "HTTPS_PROXY":"http://proxy.test:8080",
+                                    "LANG":"ru_RU.UTF-8"}):
+            process.return_value.returncode=1
+            process.return_value.stderr="Error: Homebrew needs writable cache directory"
+            process.return_value.stdout="==> Downloading tmux"
+            result=tmux_install.ensure(approved=True)
+            self.assertEqual(result["status"],"install_failed")
+            self.assertEqual(result["error_code"],"HOMEBREW_INSTALL_FAILED")
+            self.assertIn("writable cache",result["stderr_tail"])
+            self.assertIn("Downloading",result["stdout_tail"])
+            env=process.call_args.kwargs["env"]
+            self.assertEqual(env["USER"],"jk")
+            self.assertEqual(env["LOGNAME"],"jk")
+            self.assertEqual(env["TMPDIR"],"/tmp/jk-tmp")
+            self.assertEqual(env["HTTPS_PROXY"],"http://proxy.test:8080")
+            self.assertEqual(env["LANG"],"ru_RU.UTF-8")
+            self.assertIn("/opt/homebrew/bin",env["PATH"])
+            self.assertEqual(env["HOMEBREW_NO_AUTO_UPDATE"],"1")
+
+    def test_homebrew_timeout_and_missing_binary_are_structured(self):
+        with patch.object(tmux_install,"locate",return_value=None), \
+             patch.object(tmux_install,"_homebrew",return_value="/opt/homebrew/bin/brew"), \
+             patch.object(tmux_install.subprocess,"run") as process:
+            process.side_effect=subprocess.TimeoutExpired(
+                ["brew","install","tmux"],360,output=b"fetching...",stderr=b"timed out")
+            result=tmux_install.ensure(approved=True)
+            self.assertEqual(result["error_code"],"HOMEBREW_TIMEOUT")
+            self.assertFalse(result["available"])
+            process.side_effect=None
+            process.return_value.returncode=0
+            process.return_value.stderr=""
+            process.return_value.stdout=""
+            result=tmux_install.ensure(approved=True)
+            self.assertEqual(result["error_code"],"TMUX_BINARY_NOT_FOUND")
+
+    def test_tmux_logs_redact_secrets(self):
+        value=("error: AUTHORIZATION Bearer secret-value" + chr(10)
+               + "error: token=personal-secret" + chr(10)
+               + "Error: cannot write to /opt/homebrew/Cellar")
+        result=tmux_install._excerpt(value)
+        self.assertNotIn("secret-value",result)
+        self.assertNotIn("personal-secret",result)
+        self.assertIn("Cellar",result)
+
+    def test_tmux_existing_binary_does_not_invoke_brew(self):
+        with patch.object(tmux_install,"locate",return_value="/opt/homebrew/bin/tmux"), \
+             patch.object(tmux_install.subprocess,"run") as process:
+            status=tmux_install.ensure(approved=True)
+            self.assertEqual(status["status"],"ready")
+            process.assert_not_called()
+
     def test_terminal_sessions_open_read_send_close_after_dependency_available(self):
         registry=Registry()
         actions=[]

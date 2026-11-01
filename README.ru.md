@@ -443,3 +443,5 @@ Watcher ещё нужно проверить после обновления. И
  tmux. Install/update can offer Homebrew installation with owner approval;
  `maccontrol update --install-tmux` explicitly authorizes it.
  Existing Tailscale Funnel rules are preserved.
+
+**tmux (beta.24):** при неудачной установке через Homebrew команда `maccontrol update` теперь выводит диагностическое сообщение Homebrew, а не только код 1. Для самостоятельной проверки используйте `brew install tmux` в Terminal.

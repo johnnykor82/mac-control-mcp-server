@@ -420,3 +420,5 @@ account limits and network settings can affect operation.
  tmux. Install/update can offer Homebrew installation with owner approval;
  `maccontrol update --install-tmux` explicitly authorizes it.
  Existing Tailscale Funnel rules are preserved.
+
+**tmux (beta.24):** if owner-approved Homebrew installation fails, `maccontrol update` now includes a bounded, redacted error excerpt instead of only exit code 1. To inspect the full Homebrew failure, run `brew install tmux` in Terminal.
