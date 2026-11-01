@@ -43,7 +43,7 @@ def public_origin(value: str) -> str:
     parsed = urlsplit(value.strip())
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or
             parsed.password or parsed.query or parsed.fragment or
-            parsed.path not in ("", "/")):
+            not (parsed.path in ("", "/") or re.fullmatch(r"/maccontrol(?:-[2-9][0-9]?)?", parsed.path))):
         raise ValueError("Public URL must be an HTTPS origin, without paths or credentials")
     if parsed.hostname in ("localhost", "127.0.0.1", "::1") or parsed.hostname.endswith(".local"):
         raise ValueError("OAuth callback must use a publicly reachable HTTPS host")

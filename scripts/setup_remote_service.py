@@ -150,8 +150,10 @@ def _endpoint_ready(public_url: str) -> bool:
     # Bypass HTTP proxy environment settings for this strictly local health check.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     local = "http://127.0.0.1:" + str(PORT)
+    from urllib.parse import urlsplit
+    prefix = urlsplit(public_url).path.rstrip("/")
     try:
-        with opener.open(local + "/.well-known/oauth-authorization-server", timeout=1) as response:
+        with opener.open(local + "/.well-known/oauth-authorization-server" + prefix, timeout=1) as response:
             metadata = json.loads(response.read(65536))
         if not isinstance(metadata, dict) or str(metadata.get("issuer", "")).rstrip("/") != public_url.rstrip("/"):
             return False
@@ -162,7 +164,7 @@ def _endpoint_ready(public_url: str) -> bool:
         return False
     try:
         request = urllib.request.Request(
-            local + "/mcp", method="POST",
+            local + prefix + "/mcp", method="POST",
             data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
             headers={"Content-Type": "application/json"})
         with opener.open(request, timeout=1):

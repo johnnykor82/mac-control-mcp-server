@@ -42,10 +42,24 @@ def public_origin(value: str) -> tuple[str, str, int]:
     return origin
 
 
+def public_service_url(value: str) -> tuple[str, str, int]:
+    """Validate an HTTPS origin with an optional single safe mount prefix."""
+    if not isinstance(value, str) or any(ord(char) <= 32 or ord(char) >= 127 for char in value):
+        raise ValueError("Invalid public service URL")
+    parsed = urlsplit(value)
+    path = parsed.path.rstrip("/")
+    if path and not re.fullmatch(r"/maccontrol(?:-[2-9][0-9]?)?", path):
+        raise ValueError("Invalid public service mount path")
+    clean = parsed._replace(path="", query="", fragment="").geturl()
+    if parsed.query or parsed.fragment or parsed.path.endswith("//"):
+        raise ValueError("Invalid public service URL")
+    return public_origin(clean)
+
+
 class RemoteOriginGuard:
     def __init__(self, app, public_url: str):
         self.app = app
-        self.public = public_origin(public_url)
+        self.public = public_service_url(public_url)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -79,9 +93,11 @@ class RemoteOriginGuard:
 def remote_http_options(public_url: str) -> dict:
     # FastMCP 4.1.1 ignores Host ports and keeps same-origin HTTP fallback even
     # with allowed_origins. The additional guard enforces the owner HTTPS origin.
-    _, host, _ = public_origin(public_url)
+    _, host, port = public_service_url(public_url)
+    parsed = urlsplit(public_url)
+    origin = parsed.scheme + "://" + parsed.netloc
     return {
         "allowed_hosts": [host],
-        "allowed_origins": [public_url.rstrip("/")],
+        "allowed_origins": [origin],
         "middleware": [Middleware(RemoteOriginGuard, public_url=public_url)],
     }

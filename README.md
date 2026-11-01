@@ -435,3 +435,14 @@ GUI, Funnel routes, user logs or backups.
 `package_capabilities` now uses the same runtime tmux resolver as the
 terminal tools, including standard Homebrew locations outside launchd's
 restricted PATH.
+
+### Shared Tailscale Funnel HTTPS:443 (next beta)
+
+The guided installer preserves other HTTPS handlers on a shared Funnel.
+When root / already belongs to another service, it allocates /maccontrol
+(or /maccontrol-2, etc.), with MCP at https://device.ts.net/maccontrol/mcp.
+OAuth operations and path-aware discovery use separately scoped routes.
+The installer checks both Funnel/Serve views, requires a verified local
+OAuth challenge and PUBLISH owner approval, changes only its own handler
+paths, and checks all unrelated routes after each update. It never calls
+tailscale funnel reset. Existing installations retain their public URL.

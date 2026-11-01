@@ -204,3 +204,12 @@ Mac Control MCP Server предоставляет авторизованному
 - Release retention is covered by dedicated tests of rollback protection,
   dry-run, unrecognized folders, symlinks, dangling pointers, interrupted
   activation, missing ownership markers and new tmux detection.
+
+## Next beta — automatic, non-destructive shared Funnel on HTTPS:443
+
+- Adds safe subpath deployment under /maccontrol/mcp when other services already own / on the same HTTPS:443 host. If /maccontrol is taken, select /maccontrol-2 ... /maccontrol-9 without touching existing routes.
+- FastMCP OAuth issuer, callback, token and MCP resource URL use the selected prefix. Dedicated path-aware RFC 8414 and RFC 9728 metadata routes are published separately to avoid overwriting an existing root-level OAuth server.
+- Reads both Tailscale funnel/serve configuration views before every publish step. Requires local authenticated issuer metadata, an anonymous 401 challenge and owner confirmation PUBLISH. Adds only 3 scoped handlers, verifies their destinations and hashes all unrelated routes. On partial failure rolls back only handlers installed by that transaction; unknown ownership fails closed.
+- Tailscale strips --set-path. The proxy backend target includes the same mount path, preserving the expected FastMCP URL. Never runs tailscale funnel reset, deletes foreign handlers or replaces the root route.
+- Previously installed root URLs and saved OAuth configurations remain unchanged on routine updates. Existing /maccontrol-N installations keep their chosen prefix.
+- No production Funnel modification by publishing this source beta: owner must run the guided setup and explicitly confirm publication.

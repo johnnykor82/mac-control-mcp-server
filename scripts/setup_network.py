@@ -114,7 +114,8 @@ def tailscale_state() -> dict:
     }
 
 
-def publication_state(executable: str, hostname: str, *, language: str = "ru") -> dict:
+def publication_state(executable: str, hostname: str, *, language: str = "ru",
+                      prefix: str | None = None) -> dict:
     """Read both views; accept only an empty or exactly matching publication.
 
     ServeConfig fields: https://github.com/tailscale/tailscale/blob/main/ipn/serve.go
@@ -149,9 +150,37 @@ def publication_state(executable: str, hostname: str, *, language: str = "ru") -
         "AllowFunnel": {target: True},
     }
     # JSON comparison distinguishes required booleans from numeric 0/1.
-    if json.dumps(configs[0], sort_keys=True) == json.dumps(expected, sort_keys=True):
+    if not prefix and json.dumps(configs[0], sort_keys=True) == json.dumps(expected, sort_keys=True):
         return {"status": "existing_matching", "public_url": "https://" + hostname}
-    return {"status": "conflict", "reason": text(language, 'Existing routes do not exactly match HTTPS for Mac Control on local port 3201', 'Существующие маршруты не соответствуют точно HTTPS для Mac Control на локальном порту 3201')}
+    if not prefix and isinstance(configs[0].get("Web"), dict):
+        # Preserve an already-root-mounted Mac Control even if unrelated
+        # services were later added to its same HTTPS listener.
+        target = hostname + ":443"
+        web = configs[0]["Web"]
+        handlers = web.get(target, {}).get("Handlers")
+        if (set(configs[0]) == {"TCP", "Web", "AllowFunnel"}
+                and json.dumps(configs[0]["TCP"], sort_keys=True)
+                    == json.dumps(expected["TCP"], sort_keys=True)
+                and json.dumps(configs[0]["AllowFunnel"], sort_keys=True)
+                    == json.dumps(expected["AllowFunnel"], sort_keys=True)
+                and set(web) == {target} and isinstance(handlers, dict)
+                and handlers.get("/") == {"Proxy": f"http://127.0.0.1:{PORT}"}):
+            return {"status": "existing_matching",
+                    "public_url": "https://" + hostname}
+    # Shared host: allow ONLY additive namespace-specific handlers. Unrelated
+    # handlers are fingerprinted and must remain identical during publication.
+    try:
+        from scripts.shared_funnel_routes import choose, analyze
+    except ModuleNotFoundError:
+        from shared_funnel_routes import choose, analyze
+    shared = (analyze(configs[0], hostname, prefix)
+              if prefix else choose(configs[0], hostname))
+    if shared["status"] == "conflict":
+        return {**shared, "reason": text(language,
+                 "Existing routes do not exactly match a safe Mac Control namespace: ",
+                 "Существующие маршруты не соответствуют безопасному пространству Mac Control: ")
+                 + shared.get("reason", "unknown")}
+    return shared
 
 
 def assert_public_route_safe_for_uninstall(root: Path, *, known_remote_service: bool = False,
@@ -194,7 +223,13 @@ def assert_public_route_safe_for_uninstall(root: Path, *, known_remote_service: 
     executable = tailscale_cli()
     if not executable:
         raise RuntimeError("Tailscale CLI недоступен; отсутствие публичного маршрута не подтверждено. " + instructions)
-    state = publication_state(executable, hostname)
+    prefix = urlsplit(origin).path.rstrip("/")
+    state = (publication_state(executable, hostname, prefix=prefix)
+             if prefix else publication_state(executable, hostname))
+    if prefix and state["status"] == "shared_available":
+        # The published OAuth/MCP namespace is absent, but other services
+        # still share 443. The installer must never require removing them.
+        return {"status": "no_owned_public_routes", "other_routes_preserved": True}
     if state["status"] != "empty":
         raise RuntimeError("Остановка/удаление запрещены до отключения публичного маршрута 3201. " + instructions)
     return {"status": "no_active_routes"}
@@ -311,9 +346,21 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input, language
         print(text(language,
             "WARNING: Tailscale CLI and daemon versions differ. Review the installed Tailscale variants and update the CLI for the running daemon; no software was changed.",
             "ВНИМАНИЕ: версии CLI и демона Tailscale различаются. Проверьте установленные варианты Tailscale и обновите CLI для работающего демона; программы не изменялись."))
-    existing = publication_state(state["cli_path"], state["device_dns_name"], language=language)
+    preferred_prefix = None
+    try:
+        existing_oauth = check_oauth(root)
+    except (OSError, ValueError, RuntimeError):
+        existing_oauth = None
+    if isinstance(existing_oauth, dict):
+        saved = urlsplit(str(existing_oauth.get("public_url", "")))
+        if saved.hostname == state["device_dns_name"]:
+            preferred_prefix = saved.path.rstrip("/") or None
+    existing = publication_state(state["cli_path"], state["device_dns_name"],
+                                 language=language, prefix=preferred_prefix)
     report.update({"tailscale": state, "publication_state": existing})
-    if existing["status"] not in ("empty", "existing_matching"):
+    if existing["status"] not in ("empty", "existing_matching",
+                                  "shared_available", "shared_partial",
+                                  "shared_matching"):
         print(text(language, 'The existing Funnel/Serve configuration cannot be safely used: ', 'Нельзя безопасно использовать существующую конфигурацию Funnel/Serve: ') + existing["reason"])
         print(text(language, 'Review it manually; the wizard made no changes.', 'Проверьте её вручную; мастер не вносил изменений.'))
         return report
@@ -322,7 +369,7 @@ def guided_network(root: Path, *, network: bool = True, input_fn=input, language
     print(text(language, 'The Tailscale client is running and its assigned IP was found on a local interface.', 'Клиент Tailscale работает, его назначенный IP найден на локальном интерфейсе.'))
     print(text(language, 'This does not prove internet reachability: public HTTPS is checked later from an external network.', 'Это не доказывает доступность из интернета: публичный HTTPS проверяется позже из внешней сети.'))
     print(text(language, 'Next, configure GitHub OAuth for this URL:', 'Далее настройте GitHub OAuth для адреса:'))
-    origin = "https://" + state["device_dns_name"]
+    origin = existing.get("public_url") or "https://" + state["device_dns_name"]
     print(origin)
     print(text(language, 'Your Tailscale network may require MagicDNS, HTTPS and owner authorization for Funnel.', 'В вашей сети Tailscale могут потребоваться MagicDNS, HTTPS и разрешение владельца на Funnel.'))
     print(text(language, 'Publication requires configured OAuth, an anonymous HTTP 401 response and separate owner confirmation with PUBLISH.', 'Для публикации нужны настроенный OAuth, анонимный ответ HTTP 401 и отдельное подтверждение владельца PUBLISH.'))
@@ -433,8 +480,9 @@ def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
     # substitute a remote issuer or authentication challenge for the loopback app.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     local = f"http://127.0.0.1:{PORT}"
+    prefix = urlsplit(configured["public_url"]).path.rstrip("/")
     metadata_request = urllib.request.Request(
-        local + "/.well-known/oauth-authorization-server",
+        local + "/.well-known/oauth-authorization-server" + prefix,
         headers={"Accept": "application/json"},
     )
     try:
@@ -454,7 +502,7 @@ def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
     except (OSError, ValueError) as exc:
         raise RuntimeError(text(language, 'Could not verify the local OAuth issuer and metadata size', 'Не удалось проверить локальный OAuth issuer и размер metadata')) from exc
     request = urllib.request.Request(
-        local + "/mcp", method="POST",
+        local + prefix + "/mcp", method="POST",
         headers={"Content-Type": "application/json"},
         data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
     )
@@ -475,6 +523,103 @@ def _oauth_guard(root: Path, *, language: str = "ru") -> dict:
     return configured
 
 
+def _enable_shared_funnel(executable: str, hostname: str, prefix: str,
+                          root: Path, configured: dict, *,
+                          input_fn=input, language: str = "ru") -> dict:
+    """Add only exact Mac Control handlers to an existing shared HTTPS:443.
+
+    Authenticated loopback already passed _oauth_guard before entry.
+    A conservative transactional rollback disables only paths attempted by
+    this call, after reconfirming they're still owned by Mac Control.
+    """
+    from scripts.shared_funnel_routes import backend_for, compare_preserved
+    desired = "https://" + hostname + prefix
+    if configured["public_url"].rstrip("/") != desired:
+        raise RuntimeError("Configured OAuth URL does not match the selected Funnel path")
+    snapshot = publication_state(executable, hostname, language=language, prefix=prefix)
+    if snapshot["status"] not in ("shared_available", "shared_partial", "shared_matching"):
+        raise RuntimeError("Shared Funnel route is unsafe: " + snapshot.get("reason", "unknown"))
+    report = {"public_url": desired, "port": PORT,
+              "external_connectivity_verified": False,
+              "github_oauth_login_verified": False}
+    if snapshot["status"] == "shared_matching":
+        return {**report, "status": "existing_shared_funnel_reused"}
+    if not sys.stdin.isatty():
+        raise RuntimeError("Interactive owner confirmation is required for shared Funnel publication")
+    print(text(language,
+        "Existing Funnel paths will remain unchanged; publish Mac Control routes under " + prefix + "?",
+        "Существующие маршруты Funnel сохранятся; добавить маршруты Mac Control под " + prefix + "?"))
+    if input_fn("Enter PUBLISH to add only Mac Control paths: ") != "PUBLISH":
+        raise RuntimeError("Owner did not approve shared Funnel publication")
+    verified = _oauth_guard(root, language=language)
+    if (verified["public_url"].rstrip("/") != desired or
+            set(verified["allowed_github_ids"]) != set(configured["allowed_github_ids"])):
+        raise RuntimeError("OAuth configuration changed before publication")
+    current = publication_state(executable, hostname, language=language, prefix=prefix)
+    if (current["status"] not in ("shared_available", "shared_partial", "shared_matching")
+            or not compare_preserved(snapshot, current)
+            or set(snapshot["already_present"]) != set(current["already_present"])):
+        raise RuntimeError("Shared Funnel changed before publication; no changes made")
+    added = []
+    attempted = []
+    try:
+        for path in current["missing"]:
+            # Check between mutations: another process may have modified
+            # the shared Funnel after our last route was installed.
+            state = publication_state(executable, hostname, language=language, prefix=prefix)
+            if (state["status"] not in ("shared_available", "shared_partial")
+                    or not compare_preserved(snapshot, state)
+                    or path not in state["missing"]):
+                raise RuntimeError("Concurrent Funnel change detected")
+            attempted.append(path)
+            command = [executable, "funnel", "--bg", "--yes", "--https=443",
+                       "--set-path=" + path, backend_for(path)]
+            outcome = run(command, timeout=50)
+            if outcome.returncode:
+                raise RuntimeError("Tailscale could not add the requested route")
+            state = publication_state(executable, hostname, language=language, prefix=prefix)
+            if (state["status"] not in ("shared_partial", "shared_matching")
+                    or not compare_preserved(snapshot, state)
+                    or path not in state["already_present"]):
+                raise RuntimeError("Cannot verify shared Funnel after adding route")
+            added.append(path)
+        final = publication_state(executable, hostname, language=language, prefix=prefix)
+        if final["status"] != "shared_matching" or not compare_preserved(snapshot, final):
+            raise RuntimeError("Shared Funnel did not reach verified expected state")
+    except (OSError, RuntimeError) as exc:
+        rollback_errors = []
+        for path in reversed(attempted):
+            try:
+                state = publication_state(executable, hostname, language=language, prefix=prefix)
+                if path not in state.get("already_present", []):
+                    # The failed command may not have installed its route.
+                    continue
+                if (state["status"] not in ("shared_partial", "shared_matching")
+                        or not compare_preserved(snapshot, state)):
+                    # Never remove a route after unrelated state changed;
+                    # report incomplete rollback, rather than false success.
+                    rollback_errors.append(path)
+                    continue
+                off = run([executable, "funnel", "--https=443",
+                           "--set-path=" + path, "off"], timeout=50)
+                if off.returncode:
+                    rollback_errors.append(path)
+                    continue
+                post_off = publication_state(executable, hostname, language=language,
+                                             prefix=prefix)
+                if (post_off["status"] not in ("shared_available", "shared_partial")
+                        or path in post_off["already_present"]
+                        or not compare_preserved(snapshot, post_off)):
+                    rollback_errors.append(path)
+            except (OSError, RuntimeError):
+                rollback_errors.append(path)
+        if rollback_errors:
+            raise RuntimeError("Shared Funnel publication failed; own route rollback incomplete") from exc
+        raise RuntimeError("Shared Funnel publication failed; only newly added routes were rolled back") from exc
+    return {**report, "status": "shared_funnel_published",
+            "added_routes": added, "preserved_routes_sha256": snapshot["unrelated_routes_sha256"]}
+
+
 def enable_funnel(root: Path, *, input_fn=input, language: str = "ru") -> dict:
     executable = tailscale_cli()
     ts = tailscale_state()
@@ -485,6 +630,10 @@ def enable_funnel(root: Path, *, input_fn=input, language: str = "ru") -> dict:
     if not hostname.endswith(".ts.net"):
         raise RuntimeError(text(language, 'The Tailscale device domain name is unavailable; configure MagicDNS and HTTPS', 'Доменное имя устройства Tailscale недоступно; настройте MagicDNS и HTTPS'))
     configured = _oauth_guard(root, language=language)
+    prefix = urlsplit(configured["public_url"]).path.rstrip("/")
+    if prefix:
+        return _enable_shared_funnel(executable, hostname, prefix, root,
+                                     configured, input_fn=input_fn, language=language)
     expected = "https://" + hostname
     if configured["public_url"].rstrip("/") != expected:
         raise RuntimeError(text(language, 'The GitHub OAuth HTTPS URL does not match the Tailscale device URL', 'HTTPS-адрес в настройках GitHub OAuth не совпадает с адресом устройства Tailscale'))

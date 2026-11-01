@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 168
+Included files: 173
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -32,6 +32,8 @@ docs/MCLOG.md
 docs/PUBLIC_RELEASE_GATES.md
 docs/RELEASE_NOTES_BETA.md
 docs/REMOTE_ACCESS_GUIDE.md
+docs/SPEC_SHARED_FUNNEL.md
+docs/SPEC_SHARED_FUNNEL.ru.md
 docs/SSH_SFTP_TRANSFER_SPEC.md
 docs/TOOLS.md
 docs/TOOLS.ru.md
@@ -68,6 +70,7 @@ scripts/setup_network.py
 scripts/setup_remote_service.py
 scripts/setup_tmux_dependency.py
 scripts/setup_watcher_service.py
+scripts/shared_funnel_routes.py
 scripts/test_github_oauth_login.py
 scripts/workspace_migration.py
 src/mac_control/__init__.py
@@ -99,6 +102,7 @@ src/mac_control/maintenance_ops.py
 src/mac_control/operations.py
 src/mac_control/remote_auth.py
 src/mac_control/remote_http.py
+src/mac_control/remote_mount.py
 src/mac_control/runtime_paths.py
 src/mac_control/tmux_runtime.py
 src/mac_control/trusted_registry.py
@@ -159,6 +163,7 @@ tests/integration/test_remote_service.py
 tests/integration/test_server_tool_parity.py
 tests/integration/test_setup_language.py
 tests/integration/test_setup_network.py
+tests/integration/test_shared_funnel.py
 tests/integration/test_ssh_portability.py
 tests/integration/test_ssh_sftp_live.py
 tests/integration/test_ssh_sftp_transfer.py

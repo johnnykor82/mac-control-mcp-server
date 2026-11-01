@@ -58,6 +58,14 @@ def main() -> None:
         auth = build_auth()
         server = make_server(include_mutations=True, auth=auth)
         http_options = remote_http_options(str(auth.base_url))
+        from mac_control.remote_mount import service_prefix, create_remote_app
+        if service_prefix(str(auth.base_url)):
+            import uvicorn
+            # Operational routes are mounted under /maccontrol. Discovery
+            # metadata has narrow, distinct root-level routes per RFC 8414.
+            app = create_remote_app(server, str(auth.base_url), **http_options)
+            uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+            return
     else:
         server = make_server()
     server.run(

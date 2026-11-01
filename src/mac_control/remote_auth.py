@@ -14,7 +14,7 @@ from fastmcp.server.auth import OAuthProxy
 from fastmcp.server.auth.providers.github import GitHubTokenVerifier
 
 from .runtime_paths import DATA_ROOT
-from .remote_http import public_origin
+from .remote_http import public_service_url
 
 
 class AllowedGitHubUsersVerifier(GitHubTokenVerifier):
@@ -62,7 +62,7 @@ def load_config(path: Path | None = None) -> dict:
         raise ValueError("Invalid OAuth client configuration")
     if not isinstance(config["jwt_signing_key"], str) or len(config["jwt_signing_key"]) < 32:
         raise ValueError("JWT signing key must be at least 32 characters")
-    public_origin(config["public_url"])
+    public_service_url(config["public_url"])
     return config
 
 

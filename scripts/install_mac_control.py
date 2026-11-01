@@ -44,7 +44,8 @@ COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/WATCHER_GUIDE.md",
               "docs/WATCHER_GUIDE.ru.md", "docs/WORKSPACE_MIGRATION.md",
               "docs/WORKSPACE_MIGRATION.ru.md", "docs/DIAGNOSTICS_FIX.md",
-              "docs/DIAGNOSTICS_FIX.ru.md")
+              "docs/DIAGNOSTICS_FIX.ru.md", "docs/SPEC_SHARED_FUNNEL.md",
+              "docs/SPEC_SHARED_FUNNEL.ru.md")
 
 
 def run(argv: list[str], **kwargs) -> subprocess.CompletedProcess:

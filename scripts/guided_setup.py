@@ -37,8 +37,10 @@ def verify_local_oauth(root, origin, *, language=None):
     except ImportError:
         from setup_network import _oauth_guard
     _oauth_guard(root, language=language or detect_language())
+    from urllib.parse import urlsplit
+    prefix = urlsplit(origin).path.rstrip("/")
     request = urllib.request.Request(
-        "http://127.0.0.1:3201/.well-known/oauth-authorization-server",
+        "http://127.0.0.1:3201/.well-known/oauth-authorization-server" + prefix,
         headers={"Accept": "application/json"},
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

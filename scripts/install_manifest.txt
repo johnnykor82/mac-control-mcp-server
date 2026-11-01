@@ -48,6 +48,7 @@ scripts/setup_github_oauth.py
 scripts/setup_gui_dependency.py
 scripts/setup_language.py
 scripts/setup_network.py
+scripts/shared_funnel_routes.py
 scripts/setup_remote_service.py
 scripts/setup_watcher_service.py
 scripts/test_github_oauth_login.py
@@ -80,6 +81,7 @@ src/mac_control/maintenance_ops.py
 src/mac_control/operations.py
 src/mac_control/remote_auth.py
 src/mac_control/remote_http.py
+src/mac_control/remote_mount.py
 src/mac_control/runtime_paths.py
 src/mac_control/trusted_registry.py
 src/mac_control/watcher_runtime/WATCHER_USAGE.md
@@ -103,3 +105,5 @@ docs/WORKSPACE_MIGRATION.ru.md
 docs/WORKSPACE_MIGRATION.md
 docs/DIAGNOSTICS_FIX.md
 docs/DIAGNOSTICS_FIX.ru.md
+docs/SPEC_SHARED_FUNNEL.md
+docs/SPEC_SHARED_FUNNEL.ru.md
