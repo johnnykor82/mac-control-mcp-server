@@ -115,7 +115,7 @@ is present and a tunnel that does not disrupt the user's existing VPN.
 Keep the primary server Mac's Stable/DEV and ChatBridge unchanged.
 
 
-### SSH/SFTP file transfers (unreleased development branch)
+### SSH/SFTP file transfers (v0.1.0-beta.21)
 
 The Python source includes `ssh_file_transfer.py` and the fixed
 `ssh_file_remote.py` helper. No Paramiko/AsyncSSH environment is added:

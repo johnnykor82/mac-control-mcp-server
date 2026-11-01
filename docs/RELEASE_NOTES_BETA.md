@@ -69,7 +69,7 @@ Mac Control MCP Server предоставляет авторизованному
 - Regression tests cover PATH invocation, idempotence, cleanup, foreign commands, unsafe symlinks and spaces in installation paths.
 
 
-## Unreleased SSH/SFTP transfers (draft PR #2; not in beta.20)
+## v0.1.0-beta.21 — SSH/SFTP file transfer and resumable uploads
 
 - Seven new MCP tools: `ssh_upload`, `ssh_download`, `ssh_write_text`,
   `ssh_transfer_begin`, `ssh_transfer_chunk`, `ssh_transfer_finish`,

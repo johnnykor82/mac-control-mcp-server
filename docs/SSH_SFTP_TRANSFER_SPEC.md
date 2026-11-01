@@ -1,6 +1,6 @@
 # SSH/SFTP file transfer — architecture and delivery specification (S1)
 
-Status: **implementation tested; owner accepted best-effort pre-rename SHA-256 checking**
+Status: **implemented and tested in v0.1.0-beta.21; owner accepted best-effort pre-rename SHA-256 checking**
 Tracking: [#1](https://github.com/johnnykor82/mac-control-mcp-server/issues/1)  
 Priority: high
 
