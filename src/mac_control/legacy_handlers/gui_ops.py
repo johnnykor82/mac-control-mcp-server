@@ -96,7 +96,14 @@ def register(mcp):
             "available" if status.get("accessibility_trusted") else "accessibility_unavailable")
         info["screen_recording_state"] = (
             "available" if status.get("screen_capture_trusted") else "screen_recording_unavailable")
-        return {"helper": str(HELPER), **status, "ipc": info}
+        # A successful IPC status call proves the helper is responsive even
+        # when ps cannot match its exact argv (LaunchServices/on-demand start).
+        info["process_detection"] = ("observed" if info["helper_pid"] else
+                                      "not_observed")
+        info["service_state"] = "responsive"
+        info["launch_mode"] = "on_demand"
+        return {"helper": str(HELPER), **status, "functional_state":"operational",
+                "ipc":info}
 
     @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def gui_displays() -> dict:

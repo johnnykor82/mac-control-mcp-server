@@ -34,6 +34,18 @@ def execute(argv, cwd, timeout):
         "stderr_truncated": len(result.stderr) > 8000,
     }
 
+def _managed_service():
+    # The installed release is the single source of truth for the MCP port
+    # and LaunchAgent identity. Never import arbitrary scripts from sys.path.
+    from ..maintenance_ops import _service_helper
+    return _service_helper()
+
+
+def _launchd_labels():
+    # Keep historic labels opt-in only (through allowed_services.txt).
+    return {_managed_service().LABEL, "org.maccontrol.mcpserver.watcher"}
+
+
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def approved_commands() -> dict:
@@ -95,11 +107,16 @@ def register(mcp):
         return {**result, "stdout": "\n".join(result["stdout"].splitlines()[:limit + 1])}
 
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
-    def local_http_probe(port: int, path: str = "/", method: str = "GET") -> dict:
+    def local_http_probe(port: int | None = None, path: str = "/", method: str = "GET") -> dict:
         """Probe approved localhost HTTP ports without credentials or redirects."""
-        if port not in (3000, 4000, 8000, 8080, 11434, 9333):
+        active_mcp_port = _managed_service().PORT
+        if port is None:
+            port = active_mcp_port
+        if type(port) is not int or port not in (3000, 4000, 8000, 8080, 11434, 9333, active_mcp_port):
             raise PermissionError("Local port not on approved list")
-        if method not in ("GET", "HEAD") or not re.fullmatch(r"/[a-zA-Z0-9_./?=&%-]{0,180}", path):
+        if (method not in ("GET", "HEAD")
+                or not re.fullmatch(r"/[a-zA-Z0-9_./?=&%-]{0,180}", path)
+                or any(segment == ".." for segment in path.split("?")[0].split("/"))):
             raise ValueError("Unsupported method or path")
         url = f"http://127.0.0.1:{port}{path}"
         request = urllib.request.Request(url, method=method)
@@ -121,11 +138,13 @@ def register(mcp):
             return {"status": exc.code, "body_preview": data.decode("utf-8", "replace")}
 
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
-    def launchd_status(label: str = "net.johnnykor.chatgpt-mcp") -> dict:
+    def launchd_status(label: str = "") -> dict:
         """Inspect own LaunchAgent or another locally approved label."""
+        if not label:
+            label = _managed_service().LABEL
         if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", label):
             raise ValueError("Invalid launchd label")
-        allowlist = {"net.johnnykor.chatgpt-mcp"}
+        allowlist = _launchd_labels()
         cfg = Path(__file__).resolve().parent.parent / "allowed_services.txt"
         if cfg.is_file() and not cfg.is_symlink():
             allowlist.update(
@@ -137,18 +156,22 @@ def register(mcp):
         query = f"gui/{os.getuid()}/{label}"
         result = execute(["/bin/launchctl", "print", query],
                          str(Path.home()), 8)
+        original = result["stdout"]
+        state = re.search(r"^\s*state = (\S+)", original, re.M)
+        pid = re.search(r"^\s*pid = (\d+)", original, re.M)
         result["stdout"] = "\n".join(
-            line.strip() for line in result["stdout"].splitlines()
+            line.strip() for line in original.splitlines()
             if any(key in line for key in
                    ("state =", "pid =", "last exit code =", "runs =",
                     "program =", "path =", "throttle interval ="))
         )[:6000]
-        return result
+        return {**result, "label": label, "state": state.group(1) if state else None,
+                "pid": int(pid.group(1)) if pid else None}
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def launchd_restart(label: str) -> dict:
         """Restart ONLY a locally allowlisted LaunchAgent. Mac Control uses restart_server instead."""
-        if label == "net.johnnykor.chatgpt-mcp":
+        if label == _managed_service().LABEL:
             raise ValueError("Use restart_server for the MCP agent")
         if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", label):
             raise ValueError("Invalid label")

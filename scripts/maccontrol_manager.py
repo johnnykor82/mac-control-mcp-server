@@ -124,7 +124,7 @@ def installed(root, action, *extra):
     if not script.is_file(): raise RuntimeError("Mac Control is not installed")
     return subprocess.call([sys.executable, str(script), "--root", str(root), action, *extra])
 
-def update(root, without_chatbridge=False, without_gui=False):
+def update(root, without_chatbridge=False, without_gui=False, install_tmux=False):
     if not (root / ".mac-control-installer-owned").is_file():
         raise RuntimeError("Mac Control installation not found: " + str(root))
     tag, assets = latest_beta()
@@ -132,7 +132,9 @@ def update(root, without_chatbridge=False, without_gui=False):
     archive = verified_archive(tag, assets)
     with tempfile.TemporaryDirectory(prefix="maccontrol-verified-") as temp:
         source = unpack_release(archive, tag, Path(temp))
-        options = (["--without-chatbridge"] if without_chatbridge else []) + (["--without-gui"] if without_gui else [])
+        options = ((["--without-chatbridge"] if without_chatbridge else [])
+                   + (["--without-gui"] if without_gui else [])
+                   + (["--install-tmux"] if install_tmux else []))
         return subprocess.call([sys.executable, str(source / "scripts/install_mac_control.py"),
                                 "--root", str(root), "--update", *options])
 
@@ -143,6 +145,8 @@ def main(argv=None):
     upd = commands.add_parser("update", help="Fetch latest verified GitHub beta release")
     upd.add_argument("--without-chatbridge", action="store_true")
     upd.add_argument("--without-gui", action="store_true")
+    upd.add_argument("--install-tmux", action="store_true",
+                     help="Explicitly allow Homebrew installation of tmux when missing")
     commands.add_parser("status")
     commands.add_parser("rollback")
     un = commands.add_parser("uninstall")
@@ -179,7 +183,8 @@ def main(argv=None):
         print(json.dumps(result,ensure_ascii=False,indent=2))
         return 0
     if args.command == "update":
-        return update(root, without_chatbridge=args.without_chatbridge, without_gui=args.without_gui)
+        return update(root, without_chatbridge=args.without_chatbridge,
+                      without_gui=args.without_gui, install_tmux=args.install_tmux)
     if args.command == "uninstall" and args.all:
         if root != DEFAULT_ROOT.resolve():
             raise RuntimeError("Full removal requires the standard installation root")

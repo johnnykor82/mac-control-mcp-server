@@ -23,9 +23,12 @@ import urllib.request
 from urllib.parse import urlsplit
 
 try:
-    from scripts.setup_language import choose_language, detect_language, text
+    from .setup_language import choose_language, detect_language, text
 except ImportError:
-    from setup_language import choose_language, detect_language, text
+    try:
+        from scripts.setup_language import choose_language, detect_language, text
+    except ImportError:
+        from setup_language import choose_language, detect_language, text
 
 
 DEFAULT_ROOT = Path.home() / "MacControlMCP"

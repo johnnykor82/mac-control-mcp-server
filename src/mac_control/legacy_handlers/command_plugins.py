@@ -86,11 +86,25 @@ def _runtime():
     RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
     RUNTIME.chmod(0o700)
 
+def _tmux_available():
+    # The user may install tmux after Mac Control started: rediscover it.
+    return TMUX or next((p for p in ("/opt/homebrew/bin/tmux","/usr/local/bin/tmux",
+                       shutil.which("tmux")) if p and Path(p).is_file()), None)
+
+
+def _tmux_error():
+    return {"status":"unavailable","error":{"code":"TMUX_NOT_INSTALLED",
+            "message":"Interactive terminal requires tmux"},
+            "remedy":"Install with brew install tmux or maccontrol update --install-tmux",
+            "retryable":True}
+
+
 def _tmux(args, *, timeout=8, env=None):
-    if TMUX is None:
+    binary = _tmux_available()
+    if binary is None:
         raise RuntimeError("tmux missing; install with brew install tmux")
     _runtime()
-    call = [TMUX, "-S", str(SOCKET), *args]
+    call = [binary, "-S", str(SOCKET), *args]
     return subprocess.run(
         call, capture_output=True, text=True, errors="replace",
         stdin=subprocess.DEVNULL, timeout=timeout,
@@ -132,10 +146,11 @@ def register(mcp):
         return {
             "enabled": enabled, "policy": str(POLICY),
             "policy_error": error,
-            "tmux_path": TMUX, "shell": SHELL,
+            "tmux_path": _tmux_available(), "shell": SHELL,
             "user": ENVIRONMENT["USER"],
             "projects": sorted(roots()),
-            "interactive": TMUX is not None,
+            "interactive": _tmux_available() is not None,
+            "interactive_error": _tmux_error() if _tmux_available() is None else None,
             "security": "Shell executes as service user, not sandboxed",
         }
 
@@ -181,6 +196,8 @@ def register(mcp):
     def terminal_open(project: str = "workspace", width: int = 120, height: int = 36) -> dict:
         """Create persistent tmux PTY session, usable across MCP reconnections/restarts."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         cwd = _cwd(project)
         name = "mc-" + secrets.token_hex(8)
         size = [str(max(60, min(width, 240))), str(max(16, min(height, 90)))]
@@ -199,12 +216,16 @@ def register(mcp):
     def terminal_read(session: str, lines: int = 100) -> dict:
         """Read current tmux PTY screen and scrollback; no keys are sent."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         return _screen(_session(session), lines)
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def terminal_send(session: str, text: str = "", key: str = "") -> dict:
         """Type literal text and/or a terminal key (Enter, C-c, arrows). Avoid secrets in chat."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         session = _session(session)
         if len(text) > 4000 or "\x00" in text:
             raise ValueError("Invalid terminal text")
@@ -227,6 +248,8 @@ def register(mcp):
     def terminal_resize(session: str, width: int = 120, height: int = 36) -> dict:
         """Resize interactive terminal pane for menus and editors."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         session = _session(session)
         cols = max(60, min(int(width), 240))
         rows = max(16, min(int(height), 90))
@@ -239,6 +262,8 @@ def register(mcp):
     def terminal_list() -> dict:
         """List active persistent terminal sessions."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         result = _tmux(["list-sessions", "-F", "#{session_name}|#{session_created}|#{session_attached}"])
         if result.returncode:
             return {"sessions": []}
@@ -257,6 +282,8 @@ def register(mcp):
     def terminal_close(session: str) -> dict:
         """Terminate one explicitly identified interactive terminal session."""
         _require()
+        if _tmux_available() is None:
+            return _tmux_error()
         session = _session(session)
         r = _tmux(["kill-session", "-t", f"={session}"])
         if r.returncode:

@@ -7,6 +7,8 @@ LaunchAgent. No directories, processes or services are changed on import.
 from __future__ import annotations
 
 from collections import deque
+import importlib.util
+from types import ModuleType
 import hashlib
 import inspect
 import json
@@ -150,17 +152,51 @@ def _log_content(path: Path) -> str | None:
 
 
 def _service_helper():
-    # Static shipped import. Never load executable code from DATA_ROOT.
-    try:
-        from scripts import setup_remote_service
-    except ModuleNotFoundError as exc:
-        if exc.name != 'scripts':
+    """Import ONLY the shipped release module, independently of sys.path/cwd.
+
+    Use a private package name so relative imports inside setup_remote_service
+    resolve to the same pinned release/scripts directory. Do not execute
+    similarly named modules from a user's workspace, site-packages or sys.path.
+    """
+    source = RELEASE_ROOT / "scripts" / "setup_remote_service.py"
+    parent = source.parent
+    if (source.is_symlink() or parent.is_symlink() or not source.is_file()
+            or source.resolve(strict=True) != source):
+        raise RuntimeError("Shipped remote lifecycle helper is not trustworthy")
+    oauth = parent / "setup_github_oauth.py"
+    if (oauth.is_symlink() or not oauth.is_file()
+            or oauth.resolve(strict=True) != oauth):
+        raise RuntimeError("Shipped OAuth dependency is not trustworthy")
+    package_name = "_maccontrol_shipped_remote_helpers"
+    module_name = package_name + ".setup_remote_service"
+    existing = sys.modules.get(module_name)
+    if existing is not None and Path(existing.__file__).resolve() == source:
+        return existing
+    with _WRITE_LOCK:
+        existing = sys.modules.get(module_name)
+        if existing is not None and Path(existing.__file__).resolve() == source:
+            return existing
+        if package_name in sys.modules:
+            raise RuntimeError("Shipped module namespace collision")
+        package = ModuleType(package_name)
+        package.__path__ = [str(parent)]
+        package.__package__ = package_name
+        spec = importlib.util.spec_from_file_location(module_name, source)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Unable to load shipped remote lifecycle helper")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[package_name] = package
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+            if Path(module.__file__).resolve() != source:
+                raise RuntimeError("Unexpected remote lifecycle helper source")
+        except BaseException:
+            sys.modules.pop(module_name, None)
+            sys.modules.pop(package_name + ".setup_github_oauth", None)
+            sys.modules.pop(package_name, None)
             raise
-        # Script launches put release/scripts, rather than release, on sys.path.
-        import setup_remote_service
-    if Path(setup_remote_service.__file__).resolve() != RELEASE_ROOT / 'scripts/setup_remote_service.py':
-        raise RuntimeError('Unexpected remote lifecycle helper source')
-    return setup_remote_service
+        return module
 
 
 def _owned_service(root: Path | None = None) -> tuple[Path, dict]:

@@ -42,7 +42,8 @@ COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "docs/CHATGPT_SETUP.ru.md", "docs/CAPABILITIES.md", "docs/CAPABILITIES.ru.md",
               "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/WATCHER_GUIDE.md",
               "docs/WATCHER_GUIDE.ru.md", "docs/WORKSPACE_MIGRATION.md",
-              "docs/WORKSPACE_MIGRATION.ru.md")
+              "docs/WORKSPACE_MIGRATION.ru.md", "docs/DIAGNOSTICS_FIX.md",
+              "docs/DIAGNOSTICS_FIX.ru.md")
 
 
 def run(argv: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -436,17 +437,19 @@ def _save_chatbridge_key(data: Path) -> None:
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None, with_watcher: bool = True,
-            workspace_requested: Path | None = None) -> dict:
+            workspace_requested: Path | None = None,
+            install_tmux: bool = False) -> dict:
     with _lifecycle_lock(root) as locked_root:
         return _install_locked(locked_root, with_chatbridge, with_gui,
                                chatbridge_source, chatbridge_url, with_watcher,
-                               workspace_requested)
+                               workspace_requested, install_tmux)
 
 
 def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
                     chatbridge_source: Path | None = None,
                     chatbridge_url: str | None = None, with_watcher: bool = True,
-                    workspace_requested: Path | None = None) -> dict:
+                    workspace_requested: Path | None = None,
+                    install_tmux: bool = False) -> dict:
     info = paths(root)
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
@@ -576,8 +579,15 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     elif cli_commands.get("path") == "added_to_zprofile":
         print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
               file=sys.stderr)
+    # PTY needs tmux; install through Homebrew only after owner approval.
+    from scripts.setup_tmux_dependency import ensure as ensure_tmux
+    tmux_status = ensure_tmux(approved=install_tmux,interactive=sys.stdin.isatty())
+    if not tmux_status["available"]:
+        print("Interactive terminal unavailable: " + tmux_status["remedy"],
+              file=sys.stderr)
     pointer = info["current"]
     return {"status": "installed", "watcher": watcher_status,
+            "tmux": tmux_status,
             "workspace": workspace_info, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
@@ -722,6 +732,8 @@ def main() -> int:
     parser.set_defaults(with_watcher=True)
     parser.add_argument("--workspace-root", type=Path,
                         help="Explicit user workspace outside install root (default ~/AgentWorkspace)")
+    parser.add_argument("--install-tmux",action="store_true",
+                        help="Owner authorizes installing tmux with Homebrew if missing")
     parser.add_argument("--language", choices=("ru", "en"), help="Choose setup language")
     args = parser.parse_args()
     selected_language = args.language
@@ -796,7 +808,8 @@ def main() -> int:
     else:
         result = install(args.root, args.with_chatbridge, args.with_gui,
                          args.chatbridge_source, args.chatbridge_url,
-                         with_watcher=args.with_watcher, workspace_requested=args.workspace_root)
+                         with_watcher=args.with_watcher, workspace_requested=args.workspace_root,
+                         install_tmux=args.install_tmux)
     if args.install and result.get("status") == "installed":
         if not sys.stdin.isatty():
             result["guided_setup"] = {"status": "pending_owner_interaction",

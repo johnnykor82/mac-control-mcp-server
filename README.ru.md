@@ -434,3 +434,12 @@ Watcher — не отдельная облачная служба и не доп
 подтвердил базовую установку и подключение на другом Mac; реальную доставку нового
 Watcher ещё нужно проверить после обновления. Изменения веб-интерфейса ChatGPT,
 ограничения аккаунта и настройки сети могут влиять на работу.
+
+## Диагностика установленного Mac Control
+
+[Инструкция по диагностике](docs/DIAGNOSTICS_FIX.ru.md): `mcp_diagnostics`,
+ `launchd_status`, `local_http_probe` and `gui_status` report
+ live state without changing services. Interactive terminal requires
+ tmux. Install/update can offer Homebrew installation with owner approval;
+ `maccontrol update --install-tmux` explicitly authorizes it.
+ Existing Tailscale Funnel rules are preserved.

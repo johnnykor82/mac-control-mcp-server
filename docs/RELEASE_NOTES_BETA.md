@@ -122,3 +122,34 @@ Mac Control MCP Server предоставляет авторизованному
 - Documentation: [English](WORKSPACE_MIGRATION.md) and
   [Russian](WORKSPACE_MIGRATION.ru.md). No production projects or services
   were changed to prepare this release.
+
+## v0.1.0-beta.23 — installed MCP diagnostics and interactive terminal
+
+- Fixed `mcp_diagnostics` under the installed release: the remote service
+  helper and its OAuth dependencies load exclusively from that release,
+  independent of the current working directory or ambient Python sys.path.
+  Reject symlinked/foreign helpers. The tool now reports the actual owned
+  LaunchAgent state, PID, effective process PID, and file sizes for permitted
+  redacted log files.
+- `launchd_status()` defaults to `org.maccontrol.mcpserver.remote`.
+  `org.maccontrol.mcpserver.watcher` is also read-only approved. Historic
+  service labels are not enabled by default; an owner may still configure
+  specific names in the local `allowed_services.txt`. No restart permissions
+  were broadened.
+- `local_http_probe()` defaults to the MCP service's declared loopback port
+  (3201 in beta.23), obtained from the verified installed lifecycle module.
+  OAuth metadata paths are supported; GET/HEAD only, no redirects, no proxy,
+  no external hosts or state-changing HTTP methods.
+- The installer and updater check for `tmux` and offer owner-approved
+  Homebrew installation when run interactively. The explicit
+  `maccontrol update --install-tmux` option grants permission from the
+  command line. Missing `tmux` no longer makes terminal_list/open/read/
+  send/resize/close raise an exception; they return `TMUX_NOT_INSTALLED`
+  with remediation. Unrelated MCP tools continue working.
+- `gui_status` separately reports functional IPC responsiveness and
+  process-list visibility. If GUI IPC succeeds but LaunchServices hides its
+  process argv, the state is `responsive` (on-demand), not
+  `not_running`. Actual IPC errors remain structured and actionable.
+- No Funnel, Tailscale, OAuth, ChatBridge, Watcher service state or user
+  workspace migration is performed by this feature. Installation still
+  requires manual macOS TCC consent where needed.

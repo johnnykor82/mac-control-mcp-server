@@ -411,3 +411,12 @@ This is beta software. Beta.16 passed 388 local tests and GitHub CI. The owner
 confirmed base installation and connection on another Mac; real delivery of the
 new Watcher remains a post-upgrade acceptance test. ChatGPT website changes,
 account limits and network settings can affect operation.
+
+## Diagnostics of installed Mac Control
+
+[Diagnostic guide](docs/DIAGNOSTICS_FIX.md): `mcp_diagnostics`,
+ `launchd_status`, `local_http_probe` and `gui_status` report
+ live state without changing services. Interactive terminal requires
+ tmux. Install/update can offer Homebrew installation with owner approval;
+ `maccontrol update --install-tmux` explicitly authorizes it.
+ Existing Tailscale Funnel rules are preserved.
