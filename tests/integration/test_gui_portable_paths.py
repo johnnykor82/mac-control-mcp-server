@@ -53,8 +53,8 @@ func AXIsProcessTrustedWithOptions(_ options: CFDictionary) -> Bool {
     permissionCalls.append("accessibility")
     return false
 }
-func CGRequestScreenCaptureAccess() -> Bool {
-    permissionCalls.append("screen_capture")
+func CGPreflightScreenCaptureAccess() -> Bool {
+    permissionCalls.append("screen_preflight")
     return false
 }
 func offerPermissionSettingsAssistant(_ permission: String) -> Bool {
@@ -96,8 +96,8 @@ do {
 
     def test_permission_requests_are_independent_and_compatibility_is_preserved(self):
         for operation, expected in (("request_accessibility", ["accessibility"]),
-                                    ("request_screen_capture", ["screen_capture", "assistant_screen"]),
-                                    ("request_permissions", ["accessibility", "screen_capture", "assistant_screen"])):
+                                    ("request_screen_capture", ["screen_preflight", "assistant_screen"]),
+                                    ("request_permissions", ["accessibility", "screen_preflight", "assistant_screen"])):
             with self.subTest(operation=operation):
                 output = subprocess.run([str(self.executable), json.dumps({"permission": operation})],
                                         check=True, capture_output=True, text=True, timeout=5)

@@ -313,9 +313,17 @@ func activate(_ req:[String:Any]) throws -> [String:Any] {
 // foreground instance solely to show an owner-controlled settings shortcut.
 // This never grants TCC privileges automatically.
 func offerPermissionSettingsAssistant(_ permission: String) -> Bool {
+    // Launch the actual .app through LaunchServices, not its executable as
+    // a CLI child. TCC must attribute the request to the app bundle.
+    let executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+    let appURL = executableURL.deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+    guard appURL.pathExtension == "app",
+          FileManager.default.fileExists(atPath: appURL.path) else { return false }
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
-    process.arguments = ["--permission-assistant", permission]
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    process.arguments = ["-n", "-a", appURL.path, "--args", "--permission-assistant",
+                         permission, "--data-root", (try? GUI_RUNTIME_PATHS.get().dataRoot) ?? ""]
     process.standardInput = FileHandle.nullDevice
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
@@ -338,6 +346,15 @@ func presentPermissionSettingsAssistant(_ permission: String) -> [String: Any] {
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
     app.activate(ignoringOtherApps: true)
+    // IMPORTANT: this must run in the foreground .app launched by LaunchServices.
+    // Simply opening System Settings never adds the app to the TCC list.
+    if screen {
+        let requested = CGRequestScreenCaptureAccess()
+        if requested || CGPreflightScreenCaptureAccess() {
+            return ["opened_settings": false, "permission": permission,
+                    "screen_capture_trusted": true]
+        }
+    }
     let alert = NSAlert()
     alert.alertStyle = .informational
     alert.messageText = languageRU ? "Разрешите доступ Mac Control" : "Allow access for Mac Control"
@@ -367,13 +384,13 @@ func dispatch(_ req:[String:Any]) async throws -> [String:Any] {
         let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         return ["accessibility_trusted": AXIsProcessTrustedWithOptions(axOption as CFDictionary)]
     case "request_screen_capture":
-        let screen = CGRequestScreenCaptureAccess()
+        let screen = CGPreflightScreenCaptureAccess()
         let assisted = screen ? false : offerPermissionSettingsAssistant("screen")
         return ["screen_capture_trusted": screen, "settings_assistant_launched": assisted]
     case "request_permissions":
         let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let ax = AXIsProcessTrustedWithOptions(axOption as CFDictionary)
-        let screen = CGRequestScreenCaptureAccess()
+        let screen = CGPreflightScreenCaptureAccess()
         let assisted = screen ? false : offerPermissionSettingsAssistant("screen")
         return ["accessibility_trusted": ax, "screen_capture_trusted": screen,
                 "settings_assistant_launched": assisted]

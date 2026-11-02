@@ -23,6 +23,22 @@ class PermissionSettingsAssistantTests(unittest.TestCase):
         self.assertIn('NSWorkspace.shared.open', swift)
         self.assertIn('NSApplication.shared', swift)
 
+    def test_native_app_launch_preserves_bundle_identity_for_tcc(self):
+        swift = SOURCE.read_text()
+        self.assertIn('process.executableURL = URL(fileURLWithPath: "/usr/bin/open")', swift)
+        self.assertIn('["-n", "-a", appURL.path, "--args", "--permission-assistant"', swift)
+        self.assertIn('appURL.pathExtension == "app"', swift)
+
+    def test_foreground_assistant_requests_real_screen_capture_access_before_settings(self):
+        swift = SOURCE.read_text()
+        start = swift.index("func presentPermissionSettingsAssistant(")
+        end = swift.index("func dispatch(", start)
+        assistant = swift[start:end]
+        self.assertIn("CGRequestScreenCaptureAccess()", assistant)
+        self.assertIn("CGPreflightScreenCaptureAccess()", assistant)
+        self.assertLess(assistant.index("CGRequestScreenCaptureAccess()"),
+                        assistant.index("alert.runModal()"))
+
     def test_tcc_is_never_silently_granted(self):
         swift = SOURCE.read_text()
         self.assertIn('CGPreflightScreenCaptureAccess()', swift)
