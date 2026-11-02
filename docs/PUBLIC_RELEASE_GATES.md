@@ -217,3 +217,7 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
   app, OAuth, ChatBridge/Watcher, Funnel and legacy Mac Control were untouched.
 - Do not enable background_native in production nor advertise seven extra
   background_app_* tools until all gates are accepted.
+
+### FR-020 CI failure / test fixture remediation (2026-11-02)
+- The first macOS GitHub Actions run for feature SHA `49a5dc2` (`41511384383`) **failed 3/570 tests**: the new optional-module contract tests assumed the owner-specific `background_native` and `background_browser` feature flags were already enabled. A clean runner correctly leaves those tools unregistered. All pre-test checks, including signed Swift GUI candidate build, **passed**.
+- Bugfix: the two test modules now explicitly enable the modules only while constructing their in-process MCP fixtures. Production feature flags and installed services remain unchanged. With `MAC_CONTROL_DATA_ROOT` pointing at an unused scratch path, local replay of the three previously failing tests **PASS**, and the full 570-test suite **PASS (one skipped)**. CI confirmation on the fix commit is required before changing release status.

@@ -7,7 +7,11 @@ from scripts.dev_mcp_server import make_server
 class ModeSemanticsTests(unittest.TestCase):
  def test_modes_deny_foreground_without_dispatch(self):
   async def scenario():
-   server=make_server(include_mutations=True)
+   # Explicitly activate optional modules only for this in-process test fixture.
+   # Clean CI runners have no owner-specific feature_flags.json.
+   with patch('mac_control.background_browser_ops.enabled', return_value=True), \
+        patch('mac_control.background_native_ops.enabled', return_value=True):
+    server=make_server(include_mutations=True)
    native={'session_token':'not-a-token','window_ref':'0'*64,'element_path':[0],
            'expected_role':'AXButton','expected_title':'Commit','action':'AXPress'}
    browser={'session_token':'not-a-token','action':'click'}
