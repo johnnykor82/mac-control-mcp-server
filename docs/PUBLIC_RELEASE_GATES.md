@@ -125,3 +125,9 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
 - See `docs/E9_STATUS_AUDIT_2026-11-02.ru.md` for the detailed local verification and outstanding blockers.
 
 **Release gate remains OPEN.** No public release, production cutover or external publication authorized by this update.
+
+## E9 local GUI RC acceptance — 2026-11-02
+- The installer source supports an explicit E9-only local GUI archive override via both `MACCONTROL_GUI_RC_ARCHIVE` (absolute file path) and `MACCONTROL_GUI_RC_SHA256` (64 lowercase hex digits). With no archive set, the existing HTTPS release pin remains unchanged.
+- The local path is opened without symlink following; it must be a single-linked regular owner-owned file, not group/world writable, within the archive size limit, and must match the explicit SHA256 before the payload is written. The existing archive extraction and Mach-O/signature checks still apply.
+- RED: 5 new regression tests initially failed. GREEN: all 5 now pass. Full source suite: 552 tests OK (1 skipped).
+- This override exists only to verify a locally built RC without publishing it. It is not authorization to deploy production or to publish a release. E9 remains PARTIAL; E10 remains pending.
