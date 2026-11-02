@@ -51,6 +51,17 @@ public source export and provenance review remain prerequisites.
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
 
+## GUI and macOS privacy permissions (E6)
+
+The standard installer includes the signed GUI helper. The interactive setup
+calls native Accessibility and Screen Recording permission requests, opens
+the corresponding macOS System Settings pages, and checks the actual trusted
+flags after the owner acts. Screen Recording permission refresh may require
+restarting only the owned helper. Explicit `--without-gui` remains a
+diagnostic opt-out, but its setup status is `setup_incomplete` rather
+than a successful full installation. Privacy/TCC permissions cannot be
+granted by the installer, and the final on-device test requires the owner.
+
 ## Required ChatBridge + Watcher bundle (E5)
 
 A standard installation treats ChatBridge and Watcher as one dependency.

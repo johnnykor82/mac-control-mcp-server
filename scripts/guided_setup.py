@@ -184,7 +184,10 @@ def setup(root, *, input_fn=input, interactive=None, with_gui=True, language=Non
 def _setup_locked(root, *, input_fn=input, with_gui=True, language=None):
     language = language or detect_language()
     tr = lambda en, ru: text(language, en, ru)
-    if with_gui and not gui_permissions(root, input_fn=input_fn, language=language):
+    if not with_gui:
+        return {"status": "setup_incomplete", "reason": "gui_explicitly_disabled",
+                "next": "Enable GUI and grant Accessibility / Screen Recording in --setup"}
+    if not gui_permissions(root, input_fn=input_fn, language=language):
         return {"status": "pending_gui_permissions", "next": "Grant macOS permissions and run --setup"}
     network = guided_network(root, network=True, input_fn=input_fn, language=language)
     if network.get("status") != "ready_for_oauth":

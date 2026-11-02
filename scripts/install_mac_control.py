@@ -757,8 +757,9 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
     bridge_present = with_chatbridge or existing_bridge
-    ready = tmux_status["available"] and _bundle_ready(
-        bridge_present, chatbridge_auth, watcher_status)
+    gui_installed = gui_status != "skipped" or preserve_gui
+    ready = (tmux_status["available"] and gui_installed
+             and _bundle_ready(bridge_present, chatbridge_auth, watcher_status))
     return {"status": "installed" if ready else "setup_incomplete",
             "watcher": watcher_status,
             "release_cleanup": cleanup,

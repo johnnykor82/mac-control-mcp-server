@@ -205,7 +205,8 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
         self.watcher.ensure.side_effect = ensure
         with patch.object(installer, "_watcher_plist_exists", return_value=False):
             result = self.install()
-        self.assertEqual(result["status"], "installed")
+        # Explicit test-only GUI opt-out can never claim full readiness.
+        self.assertEqual(result["status"], "setup_incomplete")
         self.assert_target_started(self.new)
         self.assert_database_preserved()
 
