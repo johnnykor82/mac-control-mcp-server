@@ -555,6 +555,12 @@ def _bundle_ready(bridge_present: bool, auth: dict, watcher_status: str) -> bool
             and watcher_status == "running")
 
 
+def _release_venv_command(uv: str, release: Path) -> list[str]:
+    """Prefer an isolated uv-managed Python to a potentially writable system runtime."""
+    return [uv, "venv", "--managed-python", "--python", "3.13",
+            str(release / ".venv")]
+
+
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None, with_watcher: bool = True,
@@ -625,7 +631,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         created = True
         try:
             copy_source(dest)
-            run([uv, "venv", "--python", "3.13", str(dest / ".venv")], timeout=180)
+            run(_release_venv_command(uv, dest), timeout=180)
             run([uv, "pip", "install", "--python", str(dest / ".venv/bin/python"),
                  "-r", str(dest / "requirements/dev-frozen.txt")], timeout=600)
             smoke(dest, data)

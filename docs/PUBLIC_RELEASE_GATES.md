@@ -131,3 +131,9 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
 - The local path is opened without symlink following; it must be a single-linked regular owner-owned file, not group/world writable, within the archive size limit, and must match the explicit SHA256 before the payload is written. The existing archive extraction and Mach-O/signature checks still apply.
 - RED: 5 new regression tests initially failed. GREEN: all 5 now pass. Full source suite: 552 tests OK (1 skipped).
 - This override exists only to verify a locally built RC without publishing it. It is not authorization to deploy production or to publish a release. E9 remains PARTIAL; E10 remains pending.
+
+## E9 Watcher protected runtime installer fix — 2026-11-02
+- Assess: a default `uv venv --python 3.13` resolved the user's Miniforge Python with group-writable executable (mode 775). The Watcher correctly refused to load its LaunchAgent; do not weaken its file-ownership or permission validation.
+- Fix: new versioned releases invoke `uv venv --managed-python --python 3.13` to provision an isolated, protected Python independent of host Conda configuration. Existing installs are not implicitly rewritten.
+- Test: one RED->GREEN installer contract test, 35 focused tests and the full 553-test source suite pass (1 skipped). Real uv-managed Python 3.13.12 on this Mac has executable mode 755 and owner UID 501.
+- Deployment remains E9 PARTIAL until managed ChatBridge, Watcher, GUI/TCC and OAuth are accepted.
