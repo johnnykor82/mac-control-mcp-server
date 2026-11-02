@@ -124,6 +124,21 @@ class GuidedSetupTests(unittest.TestCase):
         self.assertIn("Privacy_Accessibility", opener.call_args_list[0].args[0][1])
         self.assertIn("Privacy_ScreenCapture", opener.call_args_list[1].args[0][1])
 
+    def test_screen_permission_assistant_owns_settings_navigation(self):
+        missing = {"accessibility_trusted": True, "screen_capture_trusted": False}
+        operations = []
+        def gui(root, operation):
+            operations.append(operation)
+            if operation == "request_screen_capture":
+                return {**missing, "settings_assistant_launched": True}
+            return dict(missing)
+        with patch.object(guided_setup, "_gui_call", side_effect=gui), \
+             patch.object(guided_setup.subprocess, "run") as opener:
+            self.assertFalse(guided_setup.gui_permissions(
+                self.root, language="en", input_fn=lambda _: "s"))
+        self.assertEqual(operations, ["status", "request_screen_capture", "status"])
+        opener.assert_not_called()
+
     def test_gui_requests_only_missing_screen_permission(self):
         state = {"accessibility_trusted": True, "screen_capture_trusted": False}
         calls = []

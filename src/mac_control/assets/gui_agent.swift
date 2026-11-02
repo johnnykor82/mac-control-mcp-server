@@ -308,6 +308,53 @@ func activate(_ req:[String:Any]) throws -> [String:Any] {
     let success=app.activate(options:[])
     return ["bundle_id":bundleId,"activated":success]
 }
+// The helper runs as an LSUIElement service without a visible main window.
+// When macOS has already rejected its one-time TCC prompt, launch a second,
+// foreground instance solely to show an owner-controlled settings shortcut.
+// This never grants TCC privileges automatically.
+func offerPermissionSettingsAssistant(_ permission: String) -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+    process.arguments = ["--permission-assistant", permission]
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        return true
+    } catch {
+        return false
+    }
+}
+
+@MainActor
+func presentPermissionSettingsAssistant(_ permission: String) -> [String: Any] {
+    let screen = permission == "screen"
+    let languageRU = Locale.preferredLanguages.first?.hasPrefix("ru") == true
+    let pane = screen ? "Privacy_ScreenCapture" : "Privacy_Accessibility"
+    let name = screen
+        ? (languageRU ? "Запись экрана и системного аудио" : "Screen & System Audio Recording")
+        : (languageRU ? "Универсальный доступ" : "Accessibility")
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    app.activate(ignoringOtherApps: true)
+    let alert = NSAlert()
+    alert.alertStyle = .informational
+    alert.messageText = languageRU ? "Разрешите доступ Mac Control" : "Allow access for Mac Control"
+    alert.informativeText = languageRU
+        ? "Для работы требуется разрешение «\(name)». Нажмите кнопку ниже, чтобы сразу открыть нужный раздел настроек macOS и включить Mac Control MCP Server."
+        : "Mac Control needs \(name). Open the correct macOS settings pane and enable Mac Control MCP Server."
+    alert.addButton(withTitle: languageRU ? "Открыть настройки" : "Open Settings")
+    alert.addButton(withTitle: languageRU ? "Позже" : "Later")
+    let selection = alert.runModal()
+    var opened = false
+    if selection == .alertFirstButtonReturn,
+       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?" + pane) {
+        opened = NSWorkspace.shared.open(url)
+    }
+    return ["opened_settings": opened, "permission": permission]
+}
+
 func dispatch(_ req:[String:Any]) async throws -> [String:Any] {
     let op=argument(req,"op")
     switch op {
@@ -320,12 +367,16 @@ func dispatch(_ req:[String:Any]) async throws -> [String:Any] {
         let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         return ["accessibility_trusted": AXIsProcessTrustedWithOptions(axOption as CFDictionary)]
     case "request_screen_capture":
-        return ["screen_capture_trusted": CGRequestScreenCaptureAccess()]
+        let screen = CGRequestScreenCaptureAccess()
+        let assisted = screen ? false : offerPermissionSettingsAssistant("screen")
+        return ["screen_capture_trusted": screen, "settings_assistant_launched": assisted]
     case "request_permissions":
         let axOption: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let ax = AXIsProcessTrustedWithOptions(axOption as CFDictionary)
         let screen = CGRequestScreenCaptureAccess()
-        return ["accessibility_trusted": ax, "screen_capture_trusted": screen]
+        let assisted = screen ? false : offerPermissionSettingsAssistant("screen")
+        return ["accessibility_trusted": ax, "screen_capture_trusted": screen,
+                "settings_assistant_launched": assisted]
     case "displays": return ["displays":displayInfo()]
     case "windows": return ["windows":windowInfo(), "frontmost":focusedApp()]
     case "ui_tree":
@@ -487,6 +538,16 @@ struct Program {
     static func main() async {
         do {
             _ = try GUI_RUNTIME_PATHS.get()
+            if let assistantIndex = CommandLine.arguments.firstIndex(of: "--permission-assistant") {
+                guard assistantIndex + 1 < CommandLine.arguments.count,
+                      ["screen", "accessibility"].contains(CommandLine.arguments[assistantIndex + 1]) else {
+                    throw AgentError.invalid("Invalid permission assistant request")
+                }
+                let result = presentPermissionSettingsAssistant(
+                    CommandLine.arguments[assistantIndex + 1])
+                serialize(["ok": true, "data": result])
+                return
+            }
             if CommandLine.arguments.contains("--serve") {
                 try await startGUIServer()
                 return

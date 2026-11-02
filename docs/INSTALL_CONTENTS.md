@@ -83,7 +83,11 @@ The direct path `~/MacControlMCP/current/bin/mclog` remains available.
 The standard installer includes the signed GUI helper. The interactive setup
 calls native Accessibility and Screen Recording permission requests, opens
 the corresponding macOS System Settings pages, and checks the actual trusted
-flags after the owner acts. Screen Recording permission refresh may require
+flags after the owner acts. If native prompting is no longer shown by macOS,
+a separate foreground Mac Control permission assistant displays **Open Settings**
+and **Later**; the first button navigates to the correct Screen Recording pane
+without searching manually. The guided setup does not open a second settings
+window while this assistant is active. Screen Recording permission refresh may require
 restarting only the owned helper. Explicit `--without-gui` remains a
 diagnostic opt-out, but its setup status is `setup_incomplete` rather
 than a successful full installation. Privacy/TCC permissions cannot be

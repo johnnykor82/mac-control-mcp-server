@@ -57,6 +57,10 @@ func CGRequestScreenCaptureAccess() -> Bool {
     permissionCalls.append("screen_capture")
     return false
 }
+func offerPermissionSettingsAssistant(_ permission: String) -> Bool {
+    permissionCalls.append("assistant_" + permission)
+    return true
+}
 func requestPermission(_ operation: String) -> [String: Any] {
     switch operation {
 ''' + permission_cases + '\n    default: return [:]\n    }\n}\n'
@@ -92,8 +96,8 @@ do {
 
     def test_permission_requests_are_independent_and_compatibility_is_preserved(self):
         for operation, expected in (("request_accessibility", ["accessibility"]),
-                                    ("request_screen_capture", ["screen_capture"]),
-                                    ("request_permissions", ["accessibility", "screen_capture"])):
+                                    ("request_screen_capture", ["screen_capture", "assistant_screen"]),
+                                    ("request_permissions", ["accessibility", "screen_capture", "assistant_screen"])):
             with self.subTest(operation=operation):
                 output = subprocess.run([str(self.executable), json.dumps({"permission": operation})],
                                         check=True, capture_output=True, text=True, timeout=5)

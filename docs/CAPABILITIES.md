@@ -160,6 +160,13 @@ Its normal prebuilt installation does not require compiling Swift locally.
 
 macOS Accessibility and Screen Recording permissions are separate owner grants.
 `gui_status` reports permission and helper connectivity information;
+If Screen Recording is not granted, the signed GUI helper requests macOS
+authorization and opens a separate native Mac Control dialog with **Open Settings**
+and **Later**. Choosing Open Settings navigates directly to the Screen Recording /
+Screen & System Audio Recording pane. It never bypasses TCC or marks permission
+as granted until macOS confirms it. The settings dialog runs in a separate
+foreground helper process so the MCP IPC server stays responsive.
+
 `gui_request_permissions` requests the system's permission flow. A prompt may not
 appear, and an agent cannot grant TCC permissions on the owner's behalf.
 Screen captures and Accessibility content may expose any visible private data.
