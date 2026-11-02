@@ -51,6 +51,16 @@ public source export and provenance review remain prerequisites.
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
 
+## Required ChatBridge + Watcher bundle (E5)
+
+A standard installation treats ChatBridge and Watcher as one dependency.
+Watcher is enabled only after ChatBridge reports a usable authenticated
+ChatGPT browser via `/ready`. If login is missing, installation reports
+`setup_incomplete` and preserves an existing active release and Watcher
+without switching pointers. The Watcher must report `running` to qualify
+for the bundle readiness gate; the installer never labels an unstarted
+Watcher as fully ready. Diagnostic opt-out installations remain incomplete.
+
 ## ChatBridge installation and authenticated readiness (E4)
 
 The Mac Control installer detects a compatible owned ChatBridge instance. If the

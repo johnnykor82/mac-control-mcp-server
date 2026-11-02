@@ -86,7 +86,7 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
         self.assertTrue(starts, "Enabled watcher was not started")
         self.assertEqual(starts[-1][1], target)
 
-    def install(self, *, with_chatbridge=True, with_watcher=True):
+    def install(self, *, with_chatbridge=True, with_watcher=True, authenticated=True):
         paths = {"root": self.root, "data": self.data, "releases": self.root / "releases",
                  "release": self.new, "current": self.root / "current"}
         with patch.object(installer, "paths", return_value=paths), \
@@ -95,7 +95,8 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
              patch("scripts.setup_chatbridge_dependency.ensure",
                    return_value={"status": "compatible", "url": "http://127.0.0.1:8787"}), \
              patch("scripts.setup_chatbridge_dependency.browser_login_status",
-                   return_value={"authenticated": True, "status": "ready"}):
+                   return_value={"authenticated": authenticated,
+                                 "status": "ready" if authenticated else "login_required"}):
             return installer.install(self.root, with_chatbridge=with_chatbridge,
                                      with_gui=False, with_watcher=with_watcher)
 
@@ -184,6 +185,15 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
         self.assertEqual((self.root / "previous").resolve(), self.older)
         self.assert_database_preserved()
 
+    def test_missing_browser_login_preserves_running_previous_watcher(self):
+        current = (self.root / "current").resolve()
+        result = self.install(authenticated=False)
+        self.assertEqual(result["status"], "setup_incomplete")
+        self.assertEqual((self.root / "current").resolve(), current)
+        self.watcher.stop_if_installed.assert_not_called()
+        self.watcher.remove_if_installed.assert_not_called()
+        self.assert_database_preserved()
+
     def test_first_install_starts_only_after_marker_and_pointer_exist(self):
         (self.root / "current").unlink()
         (self.root / "previous").unlink()
@@ -201,7 +211,7 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
 
     def test_without_watcher_removes_login_agent_even_without_chatbridge_setup(self):
         result = self.install(with_chatbridge=False, with_watcher=False)
-        self.assertEqual(result["status"], "installed")
+        self.assertEqual(result["status"], "setup_incomplete")
         self.watcher.remove_if_installed.assert_called()
         self.watcher.ensure.assert_not_called()
         self.watcher.start.assert_not_called()

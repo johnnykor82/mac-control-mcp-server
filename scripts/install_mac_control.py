@@ -541,6 +541,20 @@ def _ensure_required_tmux(provision) -> dict:
     return provision(approved=True, interactive=False)
 
 
+
+def _validate_bundle(with_chatbridge: bool, with_watcher: bool,
+                     existing_chatbridge: bool = False) -> None:
+    """Watcher cannot be provisioned without ChatBridge, new or existing."""
+    if with_watcher and not (with_chatbridge or existing_chatbridge):
+        raise RuntimeError("Watcher requires ChatBridge; configure ChatBridge first")
+
+
+def _bundle_ready(bridge_present: bool, auth: dict, watcher_status: str) -> bool:
+    """One readiness condition for the ChatBridge+Watcher installation."""
+    return (bridge_present and auth.get("authenticated") is True
+            and watcher_status == "running")
+
+
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None, with_watcher: bool = True,
@@ -560,6 +574,11 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     info = paths(root)
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
+    connection_file = info.get("data", root / "data") / "chatbridge_connection.txt"
+    if connection_file.is_symlink():
+        raise RuntimeError("Refusing symlink ChatBridge connection file")
+    existing_bridge = connection_file.is_file()
+    _validate_bundle(with_chatbridge, with_watcher, existing_bridge)
     provider_url = chatbridge_url or os.environ.get("MACCONTROL_CHATBRIDGE_URL", "http://127.0.0.1:8787")
     chatbridge_auth = {"authenticated": False, "status": "not_configured"}
     if with_chatbridge:
@@ -576,6 +595,13 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
                       "finish login, then rerun --setup.", file=sys.stderr)
     elif chatbridge_source is not None or chatbridge_url is not None:
         raise RuntimeError("ChatBridge options cannot be used with --without-chatbridge")
+    elif existing_bridge:
+        try:
+            from scripts.setup_chatbridge_dependency import browser_login_status
+        except ModuleNotFoundError:
+            from setup_chatbridge_dependency import browser_login_status
+        provider_url = connection_file.read_text().strip()
+        chatbridge_auth = browser_login_status(provider_url)
     uv = find_uv()
     if not uv:
         raise RuntimeError("uv missing: install uv from https://docs.astral.sh/uv/getting-started/installation/")
@@ -608,6 +634,17 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             raise
     else:
         smoke(dest, data)
+    # Do not change the active release or stop an existing Watcher until
+    # ChatBridge has passed the authenticated browser readiness check.
+    if with_watcher and not chatbridge_auth["authenticated"]:
+        return {
+            "status": "setup_incomplete",
+            "reason": "chatbridge_login_required",
+            "chatbridge_auth": chatbridge_auth,
+            "release": str(dest), "current": str(info["current"]),
+            "watcher": "pending_chatbridge_auth",
+            "next": "Sign in through ChatBridge's managed Chrome, then resume setup",
+        }
     if with_chatbridge:
         _save_chatbridge_key(data)
         # ChatBridge is an independent prerequisite and the ONLY browser owner.
@@ -617,7 +654,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         if not isinstance(original, dict):
             raise ValueError("Invalid feature flags")
         original["background_browser"] = True
-        original["watcher"] = with_watcher
+        original["watcher"] = with_watcher and chatbridge_auth["authenticated"]
         connection = data / "chatbridge_connection.txt"
         if connection.is_symlink():
             raise RuntimeError("Refusing symlink ChatBridge connection file")
@@ -719,7 +756,9 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         cleanup = {"status": "skipped", "reason": type(exc).__name__}
         print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
-    ready = tmux_status["available"] and (not with_chatbridge or chatbridge_auth["authenticated"])
+    bridge_present = with_chatbridge or existing_bridge
+    ready = tmux_status["available"] and _bundle_ready(
+        bridge_present, chatbridge_auth, watcher_status)
     return {"status": "installed" if ready else "setup_incomplete",
             "watcher": watcher_status,
             "release_cleanup": cleanup,
