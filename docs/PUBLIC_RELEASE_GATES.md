@@ -137,3 +137,10 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
 - Fix: new versioned releases invoke `uv venv --managed-python --python 3.13` to provision an isolated, protected Python independent of host Conda configuration. Existing installs are not implicitly rewritten.
 - Test: one RED->GREEN installer contract test, 35 focused tests and the full 553-test source suite pass (1 skipped). Real uv-managed Python 3.13.12 on this Mac has executable mode 755 and owner UID 501.
 - Deployment remains E9 PARTIAL until managed ChatBridge, Watcher, GUI/TCC and OAuth are accepted.
+
+## E9 owner GitHub OAuth consent timeout — 2026-11-02
+- Assess: public metadata and anonymous challenge passed, but the interactive OAuth verification failed with `Client failed to connect: Failed to initialize server session`. Its FastMCP client initialization timeout was only 35 seconds while browser-based GitHub consent callback allowed 180 seconds.
+- Fix: the owner-invoked smoke test now allows `init_timeout=210` seconds, exceeding its 180-second callback window. The actual MCP tool call still has a bounded 30-second timeout. This does not change server OAuth, issuer validation, credentials or runtime authorization.
+- RED/GREEN regression `test_oauth_interactive_timeout` tests the relative timeout invariant, and full suite passes: 554 tests OK, 1 skipped.
+- Test harness isolation: remote-release fixture now explicitly mocks absence of an unrelated real host Watcher LaunchAgent. Without this, host-side E9 installation made the fixture query a synthetic root with no ownership marker.
+- Owner-authenticated GitHub OAuth E2E remains pending; preflight alone is insufficient.

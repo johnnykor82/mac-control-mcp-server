@@ -30,8 +30,12 @@ class InstallRemoteLifecycleTests(unittest.TestCase):
         self.service.status.return_value = {"status": "running"}
         self.exists = patch.object(installer, "_remote_plist_exists", return_value=True)
         self.module = patch.object(installer, "_remote_service_module", return_value=self.service)
-        self.exists.start(); self.module.start()
+        # Remote lifecycle fixtures must not detect the owner's real Watcher
+        # LaunchAgent; the synthetic root has no Watcher ownership marker.
+        self.watcher_exists = patch.object(installer, "_watcher_plist_exists", return_value=False)
+        self.exists.start(); self.module.start(); self.watcher_exists.start()
         self.addCleanup(self.exists.stop); self.addCleanup(self.module.stop)
+        self.addCleanup(self.watcher_exists.stop)
 
     def release(self, name):
         path = self.root / "releases" / name

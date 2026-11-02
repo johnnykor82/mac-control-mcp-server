@@ -29,7 +29,7 @@ async def verify_login(endpoint: str) -> dict:
     auth = OAuth(mcp_url=endpoint, scopes=["read:user"],
                  client_name="Mac Control MCP Server Setup Verification",
                  callback_timeout=180)
-    async with Client(endpoint, auth=auth, init_timeout=35, timeout=30) as client:
+    async with Client(endpoint, auth=auth, init_timeout=210, timeout=30) as client:
         result = await client.call_tool("system_info", {})
         if result.is_error:
             raise RuntimeError("Authenticated MCP system_info returned an error")
