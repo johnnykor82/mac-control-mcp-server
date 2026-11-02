@@ -29,6 +29,7 @@ scripts/build_dev_clipboard.py
 scripts/build_mac_control_gui.py
 scripts/dev_gui_window_capture.swift.part
 scripts/dev_mcp_server.py
+scripts/doctor_mac_control.py
 scripts/gui_clipboard_paste.swift
 scripts/guided_setup.py
 scripts/install_mac_control.py

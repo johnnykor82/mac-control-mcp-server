@@ -106,7 +106,7 @@ def smoke(release: Path, data: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(release / "src") + os.pathsep + str(release),
            "MAC_CONTROL_DATA_ROOT": str(data), "PYTHONNOUSERSITE": "1"}
     statement = ("from mac_control.legacy_adapter import inspect_existing_handlers; "
-                 "x=inspect_existing_handlers(); assert len(x) == 109; "
+                 "x=inspect_existing_handlers(); assert len(x) == 106; "
                  "from scripts.dev_mcp_server import make_server; "
                  "assert make_server(include_mutations=True)")
     run([str(py), "-P", "-B", "-c", statement], cwd=release,
@@ -804,7 +804,7 @@ def _remove_managed_chatbridge(root: Path) -> bool:
     # A separate ChatBridge on the host is not owned by this installation.
     if not any(path.exists() or path.is_symlink() for path in (source, prefix, state)):
         return False
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + cb.MANAGED_LABEL + ".plist")
     if not plist.exists() and not plist.is_symlink():
         return False
     cb.verify_managed_install(root)
@@ -813,7 +813,8 @@ def _remove_managed_chatbridge(root: Path) -> bool:
         raise RuntimeError("Managed ChatBridge installer is missing; refusing to orphan the service")
     completed = subprocess.run(
         [sys.executable, str(script), "uninstall", "--prefix", str(prefix),
-         "--state-dir", str(state), "--remove-app", "--purge-data", "--yes"],
+         "--state-dir", str(state), "--label", cb.MANAGED_LABEL,
+         "--remove-app", "--purge-data", "--yes"],
         cwd=source, check=False, timeout=180, capture_output=True, text=True)
     if completed.returncode:
         raise RuntimeError("Managed ChatBridge could not be uninstalled; its service was preserved or needs inspection")

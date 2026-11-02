@@ -26,6 +26,7 @@ RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b11"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 DEFAULT_URL = "http://127.0.0.1:8787"
+MANAGED_LABEL = "net.chatbridge.gateway.maccontrol"
 
 
 def local_origin(url: str):
@@ -114,7 +115,7 @@ def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
 def verify_managed_install(install_root: Path) -> None:
     """An available external ChatBridge cannot silently break consolidation."""
     _, prefix, state = managed_paths(install_root)
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
     if not plist.is_file() or plist.is_symlink():
         raise RuntimeError("ChatBridge endpoint is running without a managed LaunchAgent; stop it before installing Mac Control")
     try:
@@ -125,7 +126,7 @@ def verify_managed_install(install_root: Path) -> None:
         database = Path(variables["CHATBRIDGE_DB"]).resolve()
     except (OSError, KeyError, ValueError, TypeError):
         raise RuntimeError("Cannot verify existing ChatBridge installation ownership") from None
-    if (data.get("Label") != "net.chatbridge.gateway"
+    if (data.get("Label") != MANAGED_LABEL
             or data.get("ChatBridgeInstaller") != "1"
             or workdir.parent != prefix / "releases"
             or database != state / "state.db"):
@@ -148,7 +149,7 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     if 'name = "chatbridge-gateway"' not in manifest:
         raise RuntimeError("Source is not the expected ChatBridge distribution")
     # Let ChatBridge own its application and state lifecycle inside Mac Control's deps.
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     environment = dict(os.environ)
     client_key = environment.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
     server_key = environment.get("CHATBRIDGE_API_KEY", "")
@@ -159,7 +160,8 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     extra = []
     if install_root is not None:
         _, prefix, state = managed_paths(install_root)
-        extra = ["--prefix", str(prefix), "--state-dir", str(state)]
+        extra = ["--prefix", str(prefix), "--state-dir", str(state),
+                 "--label", MANAGED_LABEL]
     try:
         # Preserve terminal input/output: ChatBridge owns interactive uv consent/login guidance.
         proc = subprocess.run([sys.executable, str(source / "scripts/installer.py"),
@@ -178,17 +180,19 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     return result
 
 
-def assert_installable(url: str) -> None:
+def assert_installable(url: str, *, label: str = "net.chatbridge.gateway") -> None:
     """Refuse existing service ownership or an occupied port before any setup."""
     parsed = local_origin(url)
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + label + ".plist")
     if plist.exists() or plist.is_symlink():
         raise RuntimeError("ChatBridge LaunchAgent already exists; inspect or upgrade it independently")
     state = Path.home() / ".chatbridge"
-    if state.is_symlink() or (state.exists() and (not state.is_dir() or any(state.iterdir()))):
+    if label == "net.chatbridge.gateway" and (
+            state.is_symlink() or
+            (state.exists() and (not state.is_dir() or any(state.iterdir())))):
         raise RuntimeError("Existing ChatBridge state found; recover/start it independently, then rerun Mac Control")
     try:
-        loaded = subprocess.run(["/bin/launchctl", "print", "gui/" + str(os.getuid()) + "/net.chatbridge.gateway"],
+        loaded = subprocess.run(["/bin/launchctl", "print", "gui/" + str(os.getuid()) + "/" + label],
                                 capture_output=True, timeout=5, check=False)
     except subprocess.TimeoutExpired:
         raise RuntimeError("Could not confirm ChatBridge service ownership; setup stopped") from None
@@ -249,7 +253,7 @@ def extract_release(archive: Path, destination: Path) -> Path:
 
 
 def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
         root = Path(temporary)
         archive = root / "release.tar.gz"
@@ -322,7 +326,7 @@ def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Pat
             raise RuntimeError("ChatBridge probe failed; inspect the endpoint before installation") from None
     except (TimeoutError, ValueError):
         raise RuntimeError("ChatBridge probe timed out or returned invalid data; existing service preserved") from None
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     if install_root is not None and source is None:
         existing, _, _ = managed_paths(install_root)
         if existing.is_dir() and (existing / "scripts/installer.py").is_file():

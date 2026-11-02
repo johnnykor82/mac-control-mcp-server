@@ -248,3 +248,21 @@ Mac Control MCP Server предоставляет авторизованному
 - No OAuth secrets, live Funnel routes or active Mac services changed as
   part of developing this fix. Existing owner OAuth configuration is retained
   by the installer and is read when setup resumes.
+
+
+## Local full-capability installer candidate (unreleased)
+
+This worktree remains local; it is not a published release. The candidate
+includes native OpenSSH aliases for SSH/SFTP, an authenticated terminal with
+automatic tmux provisioning, dynamic MCP targets, ChatBridge login readiness,
+ChatBridge+Watcher bundle gates, GUI/TCC guided setup, unchanged visibility
+of shipped tools, owner-approved mclog migration, and `maccontrol doctor`.
+
+The tool inventory is 106 compatibility handlers, 126 local MCP tools with
+background browser enabled. Previously documented 109/129 counts applied
+before the removal of retired command-allowlist tools.
+
+**Acceptance is not complete** until real browser login, macOS TCC approval,
+GitHub OAuth MCP authentication, owned Watcher browser delivery, and a fully
+green isolated install/update/rollback have been verified. Internal planning
+and approval documents remain outside the source checkout.
