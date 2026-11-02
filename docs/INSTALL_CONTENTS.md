@@ -51,6 +51,20 @@ public source export and provenance review remain prerequisites.
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
 
+## Installed tool discovery and mclog conflicts (E7)
+
+All shipped MCP tools remain visible even if a component has not yet been
+configured. A missing ChatBridge/Watcher/GUI dependency is an actionable
+runtime diagnostic, not a hidden feature flag. The existing
+`feature_flags.json` is retained for component status.
+
+When `~/.local/bin/mclog` already exists and is not owned by this release,
+installation preserves it and reports `mclog_resolution: approval_required`.
+After explicit owner approval `resolve_mclog_conflict(approved=True)` moves
+the old launcher to `mclog-legacy` (only when unused) and registers the new
+one. No automatic overwrite, symlink dereference, or deletion occurs.
+The direct path `~/MacControlMCP/current/bin/mclog` remains available.
+
 ## GUI and macOS privacy permissions (E6)
 
 The standard installer includes the signed GUI helper. The interactive setup

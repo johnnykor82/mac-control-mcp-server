@@ -133,7 +133,7 @@ STABLE_TOOLS = frozenset({
 
 
 class ServerToolParityTests(unittest.TestCase):
-    def test_installed_tool_parity_and_watcher_feature_gate(self):
+    def test_installed_tool_parity_does_not_hide_watcher_due_to_flags(self):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder) / 'home'
             data = Path(folder) / 'home/MacControlMCP/data'
@@ -172,14 +172,9 @@ flags = DATA_ROOT / 'feature_flags.json'
 value = json.loads(flags.read_text()); value['watcher'] = False
 flags.write_text(json.dumps(value))
 disabled = asyncio.run(names())
-assert not any(name.startswith('watcher_') for name in disabled)
-for wrapper in ('custom_query', 'custom_command'):
-    try:
-        asyncio.run(collector.handlers[wrapper]('watcher_status', {}))
-    except ValueError as exc:
-        assert 'disabled' in str(exc)
-    else:
-        raise AssertionError('Disabled Watcher reachable through ' + wrapper)
+assert set(disabled) == set(full)
+help_again = asyncio.run(collector.handlers['custom_query']('help'))
+assert any(row['name'] == 'watcher_status' for row in help_again['operations'])
 print(json.dumps({'full': full, 'disabled': disabled}))
 """
             result = subprocess.run([sys.executable, '-c', code], env=env, cwd=ROOT,

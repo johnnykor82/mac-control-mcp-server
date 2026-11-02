@@ -139,26 +139,12 @@ LOCAL_COMPAT_READ_OPERATIONS = frozenset({
 })
 
 def operation_enabled(name: str) -> bool:
-    """Shared installed-feature gate for direct tools and compatibility wrappers."""
-    if not os.environ.get("MAC_CONTROL_DATA_ROOT"):
-        return True
-    flags = {}
-    feature_file = DATA_ROOT / "feature_flags.json"
-    if feature_file.is_file() and not feature_file.is_symlink():
-        try:
-            flags = json.loads(feature_file.read_text())
-            if not isinstance(flags, dict):
-                return False
-        except (OSError, ValueError):
-            return False
-    if name.startswith("watcher_"):
-        return (flags.get("watcher") is True
-                and (Path(__file__).parent / "watcher_runtime/__main__.py").is_file())
-    if name.startswith("gui_"):
-        return (flags.get("native_gui") is True and
-                (DATA_ROOT.parent / "apps/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer").is_file())
-    if name.startswith(("chrome_chat_", "chrome_orchestrator_")):
-        return flags.get("background_browser") is True
+    """Expose shipped tools; report missing dependencies on invocation.
+
+    feature_flags.json describes installation state, not a hidden second
+    authorization mechanism. Actual GUI/Watcher/ChatBridge handlers retain
+    their component availability checks.
+    """
     return True
 
 

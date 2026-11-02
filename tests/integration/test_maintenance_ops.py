@@ -163,7 +163,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(result['status'], 'not_installed')
         spawn.assert_not_called()
 
-    def test_wrappers_obey_the_same_installed_feature_flags(self):
+    def test_wrappers_keep_installed_tools_visible_despite_flags(self):
         from mac_control import dev_enabled_operations as enabled
         (self.data / 'feature_flags.json').write_text(json.dumps({
             'watcher': False, 'native_gui': False, 'background_browser': False,
@@ -173,9 +173,7 @@ class MaintenanceTests(unittest.TestCase):
             names = {x['name'] for x in asyncio.run(self.tools['custom_query']())['operations']}
             self.assertIn('fs_read', names)
             for name in ('gui_screenshot', 'watcher_status', 'chrome_chat_read'):
-                self.assertNotIn(name, names)
-                with self.assertRaises(ValueError):
-                    asyncio.run(self.tools['custom_command'](name))
+                self.assertIn(name, names)
 
     def test_shipped_helper_import_works_outside_release_working_directory(self):
         environment = dict(os.environ)
