@@ -29,7 +29,8 @@ For a custom root, invoke that installation's `current/bin/mclog`. The viewer al
 - Average duration and hourly activity / Средняя длительность и почасовая нагрузка.
 - Scrollable history of tool names, timestamps and statuses / История инструментов, времени и статусов.
 - Historical audit files across log rotation / Данные из ротируемого архива журналов.
-- The name of the calling client **only when the server supplies verified attribution** / Имя клиента только при наличии достоверного идентификатора.
+- Columns / Столбцы: ВРЕМЯ, КОМАНДА, АРГУМЕНТЫ, ИТОГ. The empty client column has been removed / Пустой столбец «Клиент» удалён.
+- New tool calls show bounded *safe argument metadata* / Новые вызовы показывают ограниченное безопасное описание аргументов.
 
 ### Keyboard / Клавиши
 
@@ -43,12 +44,14 @@ For a custom root, invoke that installation's `current/bin/mclog`. The viewer al
 
 ## Security and data handling / Безопасность
 
-The public Mac Control MCP Server produces a minimal audit log containing **tool name, start/end times, outcome and duration**. It does not retain tool arguments, typed text, file contents, screenshots, response bodies or credentials. These restrictions are intentional. Older owner-specific Mac Control installations may have a different logging policy: do not infer their retention settings from this release.
+The public Mac Control MCP Server produces an owner-only audit log with **tool name, start/end times, outcome, duration and a bounded, redacted argument description** for new calls. The argument summary records only approved enum names, safe numerical settings, value type and length or hidden markers; it never stores raw shell command text, arbitrary string values, file paths or content, typed messages, screenshots, response bodies or credentials. Secret-bearing parameter names are masked. This is a deliberately non-reversible summary, not an argument-replay log. Older installations may use different policies.
 
 The installed data directory and log files are private to the macOS account (directories `0700`, files `0600`). Daily rotation retains up to seven archived files. Uninstall preserves the owner data directory and audit history.
 
 ### Limitations / Ограничения
 
-The packaged viewer keeps the original read-only display conventions. Because this public release does **not** record tool parameters, the arguments column will normally be empty. A blank client identity means the server did not record a verified caller identifier. Those are not errors.
+Before this change, tool parameters were never written, so historical rows show «—» (no stored argument information). New calls with no parameters show «нет», and new calls with parameters display only a redacted structural summary (for example: `command=[команда: 48 симв.], project=workspace`). The word `null` is not displayed for missing parameters.
+
+The MCP server does not receive a verified ChatGPT conversation title in tool-call metadata, so the client column is removed rather than presenting a guessed identity. This release does not map ChatBridge browser tabs to unrelated MCP calls.
 
 **No automatic telemetry or external reporting.** All inspection is local.

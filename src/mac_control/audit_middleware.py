@@ -1,13 +1,15 @@
 """Minimal, credential-safe audit trail for the separately installed MCP Server.
 
-Only invocation metadata is retained. Never log call arguments, messages,
-response content, OAuth tokens or exception text. Compatible with mclog.
+Only bounded, value-redacted argument descriptions are retained.
+Never log raw arguments, messages, response content, tokens or exception text.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
 import logging
+import math
+import re
 from logging.handlers import TimedRotatingFileHandler
 import os
 from pathlib import Path
@@ -15,6 +17,84 @@ import time
 import uuid
 
 from fastmcp.server.middleware import Middleware
+
+
+# An intentionally narrow, non-reversible summary. Never persist raw values.
+_SAFE_FIELD = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}\Z")
+_SECRET_FIELD = re.compile(
+    r"token|secret|password|passwd|api.?key|authorization|cookie|credential|bearer|private.?key",
+    re.IGNORECASE,
+)
+# Do not accept arbitrary strings merely because they resemble enum identifiers.
+_SAFE_ENUM_VALUES = {
+    "mode": frozenset(("auto", "foreground", "background")),
+    "action": frozenset((
+        "read", "write", "list", "open", "close", "start", "stop",
+        "click", "move", "drag", "scroll", "left_click", "double_click",
+        "right_click", "set_value", "AXPress", "AXIncrement", "AXDecrement",
+        "AXShowMenu", "AXConfirm", "AXCancel", "AXScrollToVisible",
+    )),
+    "operation": frozenset((
+        "terminal_exec", "terminal_capabilities", "terminal_open", "terminal_read",
+        "terminal_send", "terminal_close", "status", "list", "read", "write",
+        "scan", "query", "inspect", "run", "start", "stop", "open", "close",
+        "gui_status", "gui_windows", "ssh_exec", "custom_command",
+        "custom_query", "watcher_status", "mcp_targets", "mcp_diagnostics",
+    )),
+}
+
+
+_SAFE_NUMERIC_FIELDS = frozenset((
+    "timeout", "timeout_seconds", "max_depth", "max_nodes",
+    "limit", "lines", "offset", "width", "height",
+    "count", "row", "column", "size", "duration_ms",
+))
+
+
+def safe_argument_info(arguments: object) -> dict:
+    """Bounded structure-only audit metadata; never save user-provided text."""
+    if not isinstance(arguments, dict):
+        return {}
+    result = {}
+    priority = ("operation", "action", "mode", "project", "command", "cmd")
+    keys = sorted(arguments, key=lambda k: (
+        str(k) not in priority, priority.index(str(k)) if str(k) in priority else 99, str(k)))
+    for key in keys:
+        if len(result) >= 10:
+            break
+        if not isinstance(key, str) or not _SAFE_FIELD.fullmatch(key):
+            continue
+        val = arguments[key]
+        if _SECRET_FIELD.search(key):
+            label = "[скрыто]"
+        elif val is None:
+            label = "[не передано]"
+        elif isinstance(val, bool):
+            label = val
+        elif isinstance(val, (int, float)) and not isinstance(val, bool):
+            label = (val if key in _SAFE_NUMERIC_FIELDS and
+                     abs(val) <= 1000000000 and math.isfinite(val) else "[число]")
+        elif isinstance(val, str):
+            if key == "project" and val == "workspace":
+                label = "workspace"
+            elif val in _SAFE_ENUM_VALUES.get(key, ()):
+                label = val
+            elif key in ("command", "cmd", "script"):
+                label = f"[команда: {min(len(val), 99999)} симв.]"
+            elif key.endswith(("path", "dir", "file")):
+                label = "[путь]"
+            else:
+                label = f"[строка: {min(len(val), 99999)} симв.]"
+        elif isinstance(val, (list, tuple)):
+            label = f"[список: {min(len(val), 999)}]"
+        elif isinstance(val, dict):
+            label = f"[объект: {min(len(val), 999)} полей]"
+        else:
+            label = "[тип скрыт]"
+        result[key] = label
+    if len(arguments) > len(result):
+        result["other_fields"] = "[пропущены]"
+    return result
 
 
 class AuditMiddleware(Middleware):
@@ -62,9 +142,12 @@ class AuditMiddleware(Middleware):
     async def on_call_tool(self, context, call_next):
         started = time.monotonic()
         request_id = uuid.uuid4().hex
-        # Tool names come from our registry, not from user-supplied argument data.
+        # Tool name is registered; only a bounded summary of argument shapes is retained.
         name = str(context.message.name)[:100]
-        self._record({"event": "tool_start", "id": request_id, "tool": name})
+        self._record({
+            "event": "tool_start", "id": request_id, "tool": name,
+            "argument_info": safe_argument_info(getattr(context.message, "arguments", None)),
+        })
         try:
             result = await call_next(context)
         except BaseException:

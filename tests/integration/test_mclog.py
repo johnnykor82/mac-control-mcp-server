@@ -30,9 +30,33 @@ class MacLogTests(unittest.TestCase):
         self.assertNotIn("secretvalue", mclog.safe_args({"command": "Bearer secretvalue"}, 200))
         self.assertTrue(mclog.safe_args({"command": "x"*70}, 26).endswith("…"))
 
-    def test_client_pid_is_not_identity(self):
-        self.assertEqual(mclog.source({"pid": 3356}), "—")
-        self.assertEqual(mclog.source({"client": "CLI", "pid": 3356}), "CLI")
+
+    def test_no_client_column_and_no_null_for_legacy_audit(self):
+        from unittest.mock import patch
+        class Screen:
+            def __init__(self, width=115, height=14):
+                self.width, self.height = width,height
+                self.rows={}
+            def getmaxyx(self): return (self.height,self.width)
+            def erase(self):self.rows.clear()
+            def addnstr(self,y,x,text,n,style=0):self.rows[y]=text[:n]
+            def refresh(self):pass
+        e={"started":dt.datetime.now(dt.timezone.utc),
+           "tool":"terminal_exec","status":"ok"}
+        for width in (44,80,115):
+            screen=Screen(width)
+            with patch.object(mclog.curses, "color_pair", return_value=0):
+                mclog.draw(screen,[e],0,Path("/tmp"),dt.datetime.now(dt.timezone.utc),0)
+            text="\n".join(screen.rows.values())
+            self.assertIn("АРГУМЕНТЫ"[:min(9,width)],text)
+            self.assertNotIn("КЛИЕНТ",text)
+            self.assertNotIn("null",text)
+            self.assertIn("—",text)
+
+    def test_args_presentation_distinguishes_unknown_and_empty(self):
+        self.assertEqual(mclog.display_args({"tool":"terminal_exec"}, 80),"—")
+        self.assertEqual(mclog.display_args({"tool":"terminal_exec","argument_info":{}},80),"нет")
+        self.assertNotIn("null",mclog.display_args({"tool":"terminal_exec","arguments":None},80))
 
     def test_incremental_partial_and_rotation(self):
         with tempfile.TemporaryDirectory() as folder:

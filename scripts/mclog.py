@@ -136,13 +136,13 @@ def load(log_dir):
     return AuditReader().refresh(log_dir)
 
 
-def source(event):
-    # PID identifies the MCP server, not the calling application.
-    for name in ("client_id", "client_name", "client", "source", "origin", "caller"):
-        value = event.get(name)
-        if isinstance(value, str) and value.strip():
-            return value
-    return "—"
+def display_args(event, limit=80):
+    """New logs include only redacted metadata; old records may omit all args."""
+    if "argument_info" in event:
+        payload = event["argument_info"]
+        return safe_args(payload, limit) if isinstance(payload, dict) and payload else "нет"
+    payload = event.get("arguments")
+    return safe_args(payload, limit) if payload is not None and payload != {} else ("нет" if payload == {} else "—")
 
 
 def is_error(event):
@@ -205,10 +205,9 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
     line(header_y - 1,
          f" {'ТОЛЬКО ОШИБКИ' if errors_only else 'ВСЕ ЗАПРОСЫ'} | e — фильтр | ↑↓ / PgUp / PgDn — история | g — наверх | q — выход",
          curses.A_DIM)
-    src_width = 12 if width >= 80 else 7
-    cmd_width = max(12, min(25, width // 5))
-    args_width = max(3, width - 23 - src_width - cmd_width)
-    line(header_y, f" {'ВРЕМЯ':8} {'КЛИЕНТ':{src_width}} {'КОМАНДА':{cmd_width}} {'АРГУМЕНТЫ':{args_width}} ИТОГ",
+    cmd_width = max(12, min(32, width // 4))
+    args_width = max(10, width - 20 - cmd_width)
+    line(header_y, f" {'ВРЕМЯ':8} {'КОМАНДА':{cmd_width}} {'АРГУМЕНТЫ':{args_width}} ИТОГ",
          curses.color_pair(4) | bold)
     filtered = [e for e in events if is_error(e)] if errors_only else events
     visible = max(0, height - header_y - 2)
@@ -226,12 +225,12 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
         if command in ("custom_command", "custom_query") and isinstance(payload, dict) and payload.get("operation"):
             command = str(payload["operation"])
             payload = payload.get("arguments") or {}
-        args = safe_args(payload, args_width)
+        args = display_args(event, args_width)
         tm = event["started"].astimezone().strftime("%H:%M:%S")
-        row = f" {tm:8} {source(event)[:src_width]:{src_width}} {command[:cmd_width]:{cmd_width}} {args:{args_width}} {result}"
+        row = f" {tm:8} {command[:cmd_width]:{cmd_width}} {args:{args_width}} {result}"
         line(header_y + 1 + i, row, curses.color_pair(color))
     line(height - 1,
-         f" {offset+1 if filtered else 0}–{min(len(filtered), offset + visible)} из {len(filtered)} | «—» — клиент неизвестен | обновление 2 с",
+         f" {offset+1 if filtered else 0}–{min(len(filtered), offset + visible)} из {len(filtered)} | «—» — параметры не записаны | обновление 2 с",
          curses.A_DIM)
     scr.refresh()
     return offset, visible

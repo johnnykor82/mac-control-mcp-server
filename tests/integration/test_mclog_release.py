@@ -61,6 +61,54 @@ class MclogReleaseTests(unittest.TestCase):
             self.assertEqual((len(entries), errors), (1, 0))
             self.assertEqual(entries[0]["status"], "ok")
 
+    def test_argument_info_is_bounded_redacted_and_useful(self):
+        from mac_control.audit_middleware import safe_argument_info
+        marker = 'this_is_a_sensitive_command_unique_83944'
+        payload = {'command': 'echo ' + marker, 'project': 'workspace',
+                   'timeout_seconds': 25, 'api_key': 'ghp_secret',
+                   'data': {'credentials': marker}, 'path': '/tmp/fictional-secret-file'}
+        info = safe_argument_info(payload)
+        encoded = json.dumps(info)
+        self.assertIn('workspace', encoded)
+        self.assertIn('timeout_seconds', encoded)
+        self.assertIn('command', encoded)
+        self.assertNotIn(marker, encoded)
+        self.assertNotIn('ghp_secret', encoded)
+        self.assertNotIn('/tmp/fictional-secret-file', encoded)
+        self.assertLessEqual(len(encoded), 500)
+        self.assertEqual(safe_argument_info({}), {})
+        self.assertEqual(safe_argument_info(None), {})
+        self.assertEqual(safe_argument_info({"action":"private_command_94289"})["action"],
+                         "[строка: 21 симв.]")
+        self.assertEqual(safe_argument_info({"mode":"background"})["mode"], "background")
+        self.assertEqual(safe_argument_info({"operation":"terminal_exec"})["operation"], "terminal_exec")
+        self.assertEqual(safe_argument_info({"api_key":"confidential"})["api_key"], "[скрыто]")
+        self.assertEqual(safe_argument_info({"user_id":12345})["user_id"], "[число]")
+        self.assertEqual(safe_argument_info({"timeout_seconds":25})["timeout_seconds"], 25)
+        self.assertEqual(safe_argument_info({"timeout_seconds":10**1000})["timeout_seconds"],
+                         "[число]")
+        self.assertEqual(safe_argument_info({"data":{"untrusted_secret":"PRIVATE"}})["data"],
+                         "[объект: 1 полей]")
+
+    def test_audit_persists_only_safe_argument_info(self):
+        with tempfile.TemporaryDirectory() as temp:
+            audit = AuditMiddleware(Path(temp) / "logs")
+            marker = "sensitive_content_marker_not_to_log_9323"
+            ctx = SimpleNamespace(message=SimpleNamespace(
+                name="terminal_exec", arguments={"command": "printf " + marker,
+                    "project": "workspace", "timeout_seconds": 20}
+            ))
+            async def run(_):
+                return SimpleNamespace(is_error=False)
+            asyncio.run(audit.on_call_tool(ctx, run))
+            raw=(Path(temp)/"logs/audit.jsonl").read_text()
+            rows=[json.loads(x) for x in raw.splitlines()]
+            self.assertNotIn(marker, raw)
+            self.assertNotIn("arguments", rows[0])
+            self.assertIn("argument_info", rows[0])
+            self.assertEqual(rows[0]["argument_info"]["project"], "workspace")
+            self.assertEqual(rows[0]["argument_info"]["timeout_seconds"], 20)
+
     def test_exceptions_logged_without_contents_and_raised(self):
         with tempfile.TemporaryDirectory() as temp:
             audit = AuditMiddleware(Path(temp) / "logs")
