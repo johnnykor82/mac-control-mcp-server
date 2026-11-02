@@ -19,12 +19,12 @@ The portable second Mac is the intended independent acceptance-test host.
 | Owner data/configuration and recoverable backups | ~/MacControlMCP/data | Preserved on uninstall |
 | Installer lifecycle: plan/install/setup/update/rollback/status/uninstall | install_mac_control.py | Test-verified |
 | Read-only public IP and transport capability diagnosis | setup_network.py | Tests; not external connectivity proof |
-| Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Unit-tested, public E2E pending |
-| Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Guarded tests, external validation pending |
+| Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Public authenticated MCP system_info passed on owner's E9 Mac; independent host pending |
+| Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Owner E9 shared 13-route Funnel verified unchanged on update/rollback; independent host pending |
 | Prebuilt universal native GUI helper (macOS 14+, Apple Silicon/Intel) | ~/MacControlMCP/apps/MacControlMCPServer.app | Pinned SHA256 download; install if absent, reuse verified owner-managed app; TCC owner approval required |
 | Prebuilt universal Unicode clipboard helper | ~/MacControlMCP/releases/<version>/build/gui_clipboard_paste | Provisioned from the same pinned native archive without compilation |
 | Interactive connection wizard | guided_setup.py | TCC, network selection, OAuth, service and public checks; ChatGPT manual |
-| Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Configured after OAuth by setup; live remote E2E pending |
+| Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Public OAuth and authenticated tool call passed on owner's E9 Mac |
 | Smoke test for installed MCP file ops and optional browser | mac_control_smoke.py | Tested |
 
 The source release copies only files listed in `scripts/install_manifest.txt`;
@@ -133,7 +133,9 @@ Sequential requests and status checks for missing TCC grants, public-IP question
 GitHub OAuth, owner-scoped remote MCP LaunchAgent, local 401/issuer checks,
 explicit Funnel `PUBLISH` when needed, and public discovery/authentication probe.
 The owner manually adds the server in ChatGPT and completes OAuth. Public probes
-do not establish real OAuth or ChatGPT E2E; those release checks remain pending.
+alone do not establish real OAuth; the E9 owner-host acceptance separately
+verified public GitHub consent, a successful MCP system_info request and
+a Watcher report delivered through ChatBridge. A fresh-host acceptance remains pending.
 
 `--update` reuses the verified app without replacement; `--with-gui` explicitly
 replaces it from the pinned prebuilt release and can require new TCC approval. `--without-gui` skips a new app and

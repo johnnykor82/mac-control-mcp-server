@@ -160,3 +160,26 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
 - Migration completed successfully: `~/.local/bin/mclog-legacy` retains the original symlink; `~/.local/bin/mclog` is a private mode-0700 managed wrapper to `~/MacControlMCP/current/bin/mclog`. Both commands executed their `--help` operation successfully. The old `net.johnnykor.chatgpt-mcp` LaunchAgent remained running.
 - After explicitly waking the existing owned ChatBridge (browser idle is not a login loss), the installed doctor reported **READY for all 11 components** including the CLI and owner-authenticated OAuth marker. No other Mac services or Funnel routes were reconfigured.
 - Focused CLI migration regression: 2 tests passed. Full source suite after actual migration: 554 tests OK (one skipped). This closes the E9 CLI ownership decision only; independent clean-host installation, remote CI and third-party source/license provenance remain open release gates. E9 is still PARTIAL, E10 remains PENDING.
+
+## E9 reproducible source and declared-license inventory — 2026-11-02
+- Added read-only E9 audits `scripts/release_dependency_audit.py` and
+  `scripts/release_payload_audit.py`, plus seven new regression checks and
+  two corresponding local steps in the macOS source CI workflow.
+- On the current installed Python 3.13 environment, 66/66 pinned
+  distributions match version and have declared license metadata (normalized
+  names), but self-reported metadata are not a license/rights clearance.
+- A 110-file deterministic source archive matches exactly the allowlisted
+  installer manifest; two independent builds from identical sources produce
+  the same SHA256. The archive omits unlisted/untracked files and refuses
+  symlink or duplicate entries. Hash must be regenerated after source edits.
+- Source README RU/EN, ChatGPT setup, installation contents and release notes
+  now distinguish confirmed owner-host E9 E2E (ChatBridge, Watcher, public
+  GitHub OAuth, GUI/TCC, update/rollback) from independent fresh-host and
+  remote CI checks that remain pending.
+- **Critical RC parity issue:** the default native GUI download still pins
+  older beta.11, while E9 signed GUI RC was installed via an explicitly
+  SHA256-pinned local archive. Do not claim equivalent public install yet.
+- Detailed evidence and open provenance gates:
+  `docs/E9_RELEASE_PROVENANCE_AUDIT_2026-11-02.md`.
+- Local changes are not pushed and do not prove GitHub Actions passed for
+  this exact commit. E9 remains PARTIAL; E10 remains PENDING.

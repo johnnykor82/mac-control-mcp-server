@@ -6,7 +6,7 @@
 
 Mac Control MCP Server is an experimental Model Context Protocol (MCP) server designed for autonomous tasks. It offers powerful control of the owner's Mac, not a restrictive sandbox.
 
-> **Beta release.** The owner confirmed installation and connection on another Mac. Automated Watcher migration tests pass; real notification delivery after upgrading remains a separate acceptance step. This is experimental software.
+> **Beta / E9 acceptance.** On the owner's existing Mac, managed ChatBridge login, Watcher report delivery, public GitHub OAuth, GUI TCC permissions, signed GUI replacement, update and rollback were verified. An independent fresh-Mac installation and CI run for the current unpublished commit are still release gates. This is experimental software.
 
 
 
@@ -201,6 +201,9 @@ helpers from the pinned release and verifies SHA256 before extraction. Normal
 installation does not compile helpers or require Apple Command Line Tools.
 The binaries are ad hoc signed, without a Developer ID signature or Apple
 notarization; the signature verifies integrity, not publisher identity.
+The E9 signed GUI RC was verified with an explicitly pinned local archive;
+the default installer still downloads the older pinned beta.11 helper.
+Release-channel binary parity must be resolved before public RC publication.
 Manual developer builds with `scripts/build_mac_control_gui.py` or
 `scripts/package_gui_release.py` still require Apple developer tools and Swift.
 
@@ -304,8 +307,10 @@ published routes. A public probe follows. VPN, WireGuard and Exit Node routing
 are not changed.
 
 A passing probe alone does not verify real OAuth or ChatGPT connectivity.
-The owner confirmed a base connection on another Mac; each installation still
-needs its own real login and tool test, including Watcher delivery after upgrade.
+The owner's E9 installation passed an explicit public OAuth consent and authenticated
+MCP system_info request plus a real managed ChatBridge/Watcher delivery.
+Each new Mac still requires its own live consent and functional acceptance;
+an independent clean-Mac installation is not yet verified.
 See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCESS_GUIDE.md) and [agent instructions](AGENT_INSTALL.md).
 
 ## Security, status and license

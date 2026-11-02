@@ -39,6 +39,16 @@ jobs:
         run: python -m compileall -q src scripts tests
       - name: Install pinned dependencies
         run: python -m pip install -r requirements/dev-frozen.txt
+      - name: Audit pinned dependency version and declared license metadata
+        env:
+          PYTHONPATH: "src:."
+        run: python -P -B scripts/release_dependency_audit.py > "$RUNNER_TEMP/dependency-licenses.json"
+      - name: Validate deterministic source release payload
+        env:
+          PYTHONPATH: "src:."
+        run: |
+          python -P -B scripts/release_payload_audit.py > "$RUNNER_TEMP/source-payload.json"
+          python -c 'import json, os, pathlib; d=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"source-payload.json").read_text()); assert d["files"] > 0 and len(d["sha256"]) == 64'
       - name: Run source unit and integration tests
         env:
           PYTHONPATH: "src:."
