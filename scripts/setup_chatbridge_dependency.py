@@ -61,7 +61,7 @@ def verify(url: str = DEFAULT_URL) -> dict:
 
 
 
-def select_endpoint(preferred: str = DEFAULT_URL) -> str:
+def select_endpoint(preferred: str = DEFAULT_URL, *, reuse_compatible: bool = True) -> str:
     """Reuse a compatible service or select an unused loopback port."""
     requested = local_origin(preferred)
     port = requested.port or 80
@@ -69,14 +69,15 @@ def select_endpoint(preferred: str = DEFAULT_URL) -> str:
         try:
             probe.bind(("127.0.0.1", port))
         except OSError:
-            try:
-                verify(preferred)
-                return preferred
-            except urllib.error.HTTPError as error:
-                if error.code == 401:
-                    raise RuntimeError("Existing ChatBridge requires its API key") from None
-            except (urllib.error.URLError, TimeoutError, ValueError, RuntimeError):
-                pass
+            if reuse_compatible:
+                try:
+                    verify(preferred)
+                    return preferred
+                except urllib.error.HTTPError as error:
+                    if error.code == 401:
+                        raise RuntimeError("Existing ChatBridge requires its API key") from None
+                except (urllib.error.URLError, TimeoutError, ValueError, RuntimeError):
+                    pass
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as available:
                 available.bind(("127.0.0.1", 0))
                 return "http://127.0.0.1:" + str(available.getsockname()[1])
@@ -95,13 +96,19 @@ def browser_login_status(url: str = DEFAULT_URL) -> dict:
         with urllib.request.urlopen(request, timeout=8) as response:
             if getattr(response, "status", 200) != 200:
                 raise RuntimeError("Unexpected ChatBridge readiness response")
+            payload = json.load(response)
+            if (not isinstance(payload, dict)
+                    or payload.get("ready") is not True
+                    or payload.get("chatgpt_authenticated") is not True):
+                return {"authenticated": False, "status": "unverified", "url": url,
+                        "next": "Use real ChatGPT transport and sign in through managed Chrome"}
             return {"authenticated": True, "status": "ready", "url": url}
     except urllib.error.HTTPError as error:
         if error.code == 503:
             return {"authenticated": False, "status": "login_required",
                     "url": url, "next": "Sign in through ChatBridge's managed Chrome window"}
         raise
-    except (urllib.error.URLError, TimeoutError, OSError):
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         return {"authenticated": False, "status": "unavailable", "url": url,
                 "next": "Check ChatBridge service and retry setup"}
 
@@ -132,6 +139,20 @@ def verify_managed_install(install_root: Path) -> None:
             or database != state / "state.db"):
         raise RuntimeError("ChatBridge is installed outside ~/MacControlMCP; remove or migrate it first")
 
+
+
+def owned_endpoint(install_root: Path) -> str | None:
+    """Reuse the actual bound port of this installation, not a guessed free port."""
+    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
+    if not plist.exists() and not plist.is_symlink():
+        return None
+    verify_managed_install(install_root)
+    with plist.open("rb") as stream:
+        env = plistlib.load(stream).get("EnvironmentVariables", {})
+    port = env.get("CHATBRIDGE_PORT")
+    if not isinstance(port, str) or not port.isdecimal() or not 1 <= int(port) <= 65535:
+        raise RuntimeError("Owned ChatBridge port missing or invalid; inspect its LaunchAgent")
+    return "http://127.0.0.1:" + port
 
 def install(source: Path, *, url: str = DEFAULT_URL,
             install_root: Path | None = None) -> dict:
@@ -305,7 +326,8 @@ def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> 
 def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Path | None = None) -> dict:
     """Reuse a compatible endpoint; only a refused connection permits fresh setup."""
     if install_root is not None:
-        url = select_endpoint(url)
+        url = owned_endpoint(install_root) or select_endpoint(
+            url, reuse_compatible=False)
     try:
         result = verify(url)
         if install_root is not None:

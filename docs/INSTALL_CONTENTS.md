@@ -107,9 +107,16 @@ loopback port without stopping the foreign service and saves the actual URL
 in `data/chatbridge_connection.txt`.
 
 ChatBridge's managed installer starts its dedicated Chrome profile. The owner
-signs into ChatGPT in that browser. The Mac Control installer then checks
+signs into ChatGPT in that browser. On subsequent setup runs, the installer
+reads the actual port from its own managed LaunchAgent, so it never tries to
+replace that service with a new instance. A compatible but unrelated
+ChatBridge is not adopted by the managed installer; it receives a separate
+local port instead. The Mac Control installer then checks
 ChatBridge `GET /ready`, which probes the real authenticated composer;
 `/health` or Browser API capabilities alone do not establish readiness.
+An HTTP 200 response alone does not suffice: the JSON body must contain
+`ready: true` and `chatgpt_authenticated: true`. ChatBridge's mock transport
+may return HTTP 200 without authentication, and must not qualify.
 Until `/ready` succeeds, setup status is `setup_incomplete` and the installer
 must offer a resume path. Existing authenticated sessions do not need
 another login. Browser authorization and first-login visual acceptance still

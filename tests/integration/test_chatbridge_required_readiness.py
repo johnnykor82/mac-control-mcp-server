@@ -26,6 +26,15 @@ class RequiredReadinessTests(unittest.TestCase):
         self.assertTrue(other.startswith("http://127.0.0.1:"), other)
         self.assertNotEqual(other, target)
 
+    def test_managed_install_does_not_claim_foreign_compatible_endpoint(self):
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0))
+            busy.listen(1)
+            endpoint = f"http://127.0.0.1:{busy.getsockname()[1]}"
+            with patch.object(bridge, "verify", return_value={"status": "compatible"}):
+                managed = bridge.select_endpoint(endpoint, reuse_compatible=False)
+        self.assertNotEqual(managed, endpoint)
+
     def test_unreachable_browser_reports_incomplete_not_success(self):
         reason = urllib.error.URLError(ConnectionRefusedError(61, "refused"))
         with patch.object(bridge.urllib.request, "urlopen", side_effect=reason):
@@ -46,8 +55,12 @@ class RequiredReadinessTests(unittest.TestCase):
 
     def test_ready_is_stricter_than_browser_capabilities(self):
         with patch.object(bridge.urllib.request, "urlopen",
-                          return_value=io.BytesIO(b'{"status":"ready"}')):
+                          return_value=io.BytesIO(b'{"ready":true,"chatgpt_authenticated":true}')):
             self.assertTrue(bridge.browser_login_status("http://127.0.0.1:8787")["authenticated"])
+        with patch.object(bridge.urllib.request, "urlopen",
+                          return_value=io.BytesIO(b'{"ready":true,"chatgpt_authenticated":null}')):
+            false_ready = bridge.browser_login_status("http://127.0.0.1:8787")
+        self.assertFalse(false_ready["authenticated"], "mock transport is NOT ChatGPT login")
         missing = urllib.error.HTTPError("http://127.0.0.1:8787/ready", 503,
                                          "login required", {}, None)
         with patch.object(bridge.urllib.request, "urlopen", side_effect=missing):
