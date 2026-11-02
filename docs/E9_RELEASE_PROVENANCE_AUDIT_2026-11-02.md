@@ -58,8 +58,11 @@ not authorize a GitHub push, prerelease, new service installation or E10.
 - The macOS CI workflow includes Python 3.9 bootstrap planning, Python 3.13,
   compilation, source and Git-history audits, pinned dependency installation,
   deterministic payload and metadata audits, and full unit/integration tests.
-  **No completed GitHub Actions run matching the current local working commit
-  has been observed**. There has been no push.
+  **GitHub Actions SUCCESS for source commit `068855aeee5a2b1ee7edda0dba983f665a3b2b1f`:**
+  [macOS source validation run 41463010615](https://github.com/johnnykor82/mac-control-mcp-server/actions/runs/41463010615).
+  Run logs confirm **561 tests OK (2 skipped)**, plus successful bootstrap,
+  dependency metadata, packaging and history audit steps.
+  Any later source/documentation commit must get its own matching CI result.
 
 ## Acceptance and remaining P0/P1 items
 
@@ -86,3 +89,19 @@ PYTHONPATH=src:. python -P -B scripts/release_payload_audit.py
 PYTHONPATH=src:. python -P -B -m unittest tests.integration.test_release_provenance_audit -v
 PYTHONPATH=src:. python -P -B -m unittest discover -s tests -p 'test_*.py' -q
 ```
+
+## E9 owner-authorized isolated source smoke — 2026-11-02
+- A temporary release source tree was created only below
+  `~/AgentWorkspace/scratch`. All 110 files were copied byte-for-byte from
+  the explicit installer manifest; unlisted/private files were not included.
+- A fresh process imported the isolated source and constructed the MCP server;
+  the compatibility adapter exposed 106 handlers. The standalone installer
+  `--plan` checked a separate scratch installation root and workspace without
+  creating either, registering launchd agents, touching GUI/TCC, overwriting
+  user-global CLI names or changing shared Funnel routes.
+- Evidence saved as `~/AgentWorkspace/scratch/e9_isolated_source_smoke_20261102.json`.
+  Result **PASS**. This is a **source-isolation and no-write planning smoke**,
+  not a clean physical Mac installation: the Python environment reused the
+  installed read-only interpreter and existing dependencies.
+- An independent fresh-Mac, first-login GUI/OAuth/Watcher run is still a
+  separate E9 release gate; do not mark it passed based on this test.

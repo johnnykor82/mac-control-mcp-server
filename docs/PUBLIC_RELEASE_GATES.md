@@ -183,3 +183,21 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
   `docs/E9_RELEASE_PROVENANCE_AUDIT_2026-11-02.md`.
 - Local changes are not pushed and do not prove GitHub Actions passed for
   this exact commit. E9 remains PARTIAL; E10 remains PENDING.
+
+## E9 branch CI and isolated source smoke — 2026-11-02
+- The owner approved a push of only `feature/installer-full-capabilities`.
+  GitHub Actions run
+  [41463010615](https://github.com/johnnykor82/mac-control-mcp-server/actions/runs/41463010615)
+  **passed** for SHA `068855aeee5a2b1ee7edda0dba983f665a3b2b1f`:
+  macOS-15 / Python 3.9 bootstrap / Python 3.13 validation, source and Git
+  history audits, pinned dependencies and licenses, deterministic payload and
+  561 integration/unit tests (2 skipped). `main` was not changed.
+- An isolated read-only source-copy acceptance (110 identical files, 106 MCP
+  compatibility handlers, isolated server initialization and separate
+  `--plan` for temporary directories) also passed without creating a
+  second user, installing global components or changing LaunchAgents or Funnel.
+  Evidence is stored in
+  `~/AgentWorkspace/scratch/e9_isolated_source_smoke_20261102.json`.
+- This is **not** a real fresh-host GUI/OAuth onboarding. That release gate
+  remains open, along with native GUI public-download pin parity and final
+  binary redistribution/provenance. E9 remains PARTIAL and E10 PENDING.
