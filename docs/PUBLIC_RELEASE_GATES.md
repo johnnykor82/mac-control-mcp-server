@@ -111,3 +111,17 @@ review. The audit scanner is **not** a history/credential assurance.
 Do not invent a GitHub URL before origin exists. Do not run scheduled
 publication or social posting unless the owner explicitly triggers it
 through connected publishing tools.
+
+## Status update — 2026-11-02 (E9 in progress)
+
+The earlier October 26 snapshot remains historical evidence, not a current release approval.
+- Owner-approved roadmap: E0–E8 COMPLETE, E9 ACTIVE, E10 PENDING; source branch feature/installer-full-capabilities at 8cdba98.
+- Full local regression rerun: 547 tests, successful (one skipped). Python 3.13.12 on macOS arm64; installer preflight exit 0.
+- Real GUI permission acceptance: Accessibility and Screen Recording both trusted, AX tree read successfully after owner re-added the GUI helper in macOS Settings.
+- The supported installed `MacControlMCP/bin/maccontrol status` launcher succeeds. The active installed release does not yet expose the new `doctor` subcommand.
+- Current private plan/progress in `AgentWorkspace/projects/mac-control-mcp-server-private/.planning/` are authoritative for stage status; the sibling legacy full-installer plan/spec headers are stale.
+- The source audit attempt was blocked before execution by platform policy; it must not be marked passed. CI from GitHub Actions and a reproducible clean installation have not been verified here.
+- Still required for E9: package equivalence, real authenticated ChatBridge, Watcher end-to-end, remote OAuth, upgrade/rollback, GUI TCC after upgrade, final source-history/secret audit.
+- See `docs/E9_STATUS_AUDIT_2026-11-02.ru.md` for the detailed local verification and outstanding blockers.
+
+**Release gate remains OPEN.** No public release, production cutover or external publication authorized by this update.
