@@ -152,6 +152,8 @@ def main(argv=None):
     upd.add_argument("--install-tmux", action="store_true",
                      help="Explicitly allow Homebrew installation of tmux when missing")
     commands.add_parser("status")
+    commands.add_parser("doctor", help="Read-only complete readiness report (JSON)")
+    commands.add_parser("setup", help="Resume interactive configuration and privacy permissions")
     commands.add_parser("rollback")
     releases = commands.add_parser("releases", help="Inspect or prune unused installer releases")
     releases_actions = releases.add_subparsers(dest="releases_action", required=True)
@@ -195,6 +197,10 @@ def main(argv=None):
                       else migrate(args.source,destination,args.name,execute=args.execute,
                                    confirmed=args.yes))
         print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0
+    if args.command == "doctor":
+        from scripts.doctor_mac_control import collect
+        print(json.dumps(collect(root), ensure_ascii=False, indent=2))
         return 0
     if args.command == "update":
         return update(root, without_chatbridge=not args.with_chatbridge,

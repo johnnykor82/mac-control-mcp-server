@@ -51,6 +51,19 @@ public source export and provenance review remain prerequisites.
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
 
+## Complete readiness report and explicit OAuth evidence (E8)
+
+`maccontrol doctor` returns JSON with statuses for installation, workspace,
+terminal, tmux, SSH/SFTP, MCP Bridge, GUI/TCC, ChatBridge, Watcher, CLI and OAuth.
+No component omission, network availability alone or OAuth metadata preflight
+may cause a false `READY`. All mandatory components must report `ready`.
+Every failure identifies its reason and an action to resume setup.
+
+`maccontrol setup` resumes guided configuration. A successful real GitHub OAuth
+browser test records an owner-only, atomic `data/oauth-acceptance.json` marker
+bound to the tested URL and release pointer. Failed/aborted tests do not record
+acceptance. No keys, cookies or tokens are written to the marker.
+
 ## Installed tool discovery and mclog conflicts (E7)
 
 All shipped MCP tools remain visible even if a component has not yet been
