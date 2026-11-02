@@ -34,7 +34,7 @@ def _call(op, timeout=20, **options):
         raise _gui_ipc.GUIIPCError(
             "helper_not_running", "GUI helper not installed", endpoint=BASE / "run" / "maccontrol-gui.sock")
     req = {"op": op, **options}
-    if len(json.dumps(req, ensure_ascii=False)) > MAX_ARGS:
+    if len(json.dumps(req, ensure_ascii=False).encode("utf-8")) > (7900 if op == "native_backend" else 3000):
         raise ValueError("GUI arguments too long")
     endpoint = BASE / "run" / "maccontrol-gui.sock"
     # Auto-reconnect only BEFORE dispatch. Never replay writes after sendall().

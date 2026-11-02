@@ -49,6 +49,15 @@ jobs:
         run: |
           python -P -B scripts/release_payload_audit.py > "$RUNNER_TEMP/source-payload.json"
           python -c 'import json, os, pathlib; d=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"source-payload.json").read_text()); assert d["files"] > 0 and len(d["sha256"]) == 64'
+      - name: Build and verify signed native GUI candidate (without installation)
+        env:
+          PYTHONPATH: "src:."
+        run: |
+          python -P -B scripts/build_mac_control_gui.py --root "$RUNNER_TEMP/MacControlMCP" > "$RUNNER_TEMP/gui-build.json"
+          codesign --verify --strict build/MacControlMCPServer.app
+          echo '{"op":"native_backend","native_op":"apps"}' | build/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer > "$RUNNER_TEMP/native-staging-smoke.json"
+          python -c 'import json, os, pathlib; d=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"native-staging-smoke.json").read_text()); assert d["ok"] is True and isinstance(d["data"]["apps"],list)'
+          python -c 'import json, os, pathlib; r=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"gui-build.json").read_text()); assert r["started"] is False and r["tcc_permissions_requested"] is False'
       - name: Run source unit and integration tests
         env:
           PYTHONPATH: "src:."

@@ -27,10 +27,12 @@ executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 | SSH and downstream MCP connections | Client tools are included | Owner-specific hosts, identities, known hosts, and target configuration. |
 | SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Working OpenSSH alias/host, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
 
-The experimental `background_native` module is not enabled by the normal product
-installation. Historical DEV documents describe additional experiments; they do
-not expand the supported default toolset. GUI tools in the standard product use
-the separately installed native helper.
+The experimental `background_native` module remains disabled in a normal install.
+FR-020 ports historical `background_app_*` into the existing signed
+`MacControlMCPServer.app` over its owner-only IPC, rather than requiring a second
+native executable or separate TCC authorization. Staged compilation and
+unit/security checks are complete, but live owner-TCC E2E, native soak and public
+GUI artifact acceptance are still pending. The seven APIs are not yet released.
 
 ## One place for agent-created work
 

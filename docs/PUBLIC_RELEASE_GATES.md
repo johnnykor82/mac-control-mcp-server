@@ -201,3 +201,19 @@ The earlier October 26 snapshot remains historical evidence, not a current relea
 - This is **not** a real fresh-host GUI/OAuth onboarding. That release gate
   remains open, along with native GUI public-download pin parity and final
   binary redistribution/provenance. E9 remains PARTIAL and E10 PENDING.
+
+## E9 FR-020: native background GUI consolidation (candidate; not released)
+- Historical Dev Swift AX implementation (8f9edaa) ported to a Swift fragment
+  compiled inside the **existing** MacControlMCPServer.app. Python session
+  capability binding, direct owner-only GUI IPC, PID/window/launch-date checks,
+  safe AX role/action restrictions and capture using GUI ScreenCaptureKit remain.
+- The separate dev_native_background CLI and standalone TCC identity are **not**
+  packaged. Staged ad-hoc signed GUI build and security/unit regression pass
+  locally; GitHub macOS CI now compiles and verifies the staged app without
+  installing or starting it.
+- **Blocked release gate:** test the actual signed GUI app under the owner's
+  Accessibility+Screen Recording permissions, then live E2E, 30-minute native
+  soak, pinned public GUI artifact parity and rollback. The existing production
+  app, OAuth, ChatBridge/Watcher, Funnel and legacy Mac Control were untouched.
+- Do not enable background_native in production nor advertise seven extra
+  background_app_* tools until all gates are accepted.

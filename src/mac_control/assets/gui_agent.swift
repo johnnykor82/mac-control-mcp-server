@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import ApplicationServices
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
 import ScreenCaptureKit

@@ -1,0 +1,176 @@
+// Port of the owner-authored native AX backend (Git 8f9edaa) into the
+// existing signed MacControlMCPServer.app TCC identity.
+// All session tokens and revocation remain in the Python broker.
+struct NativeError: Error, CustomStringConvertible {
+    let code: String
+    let detail: String
+    var description: String { "\(code): \(detail)" }
+}
+func fail(_ code: String, _ message: String) throws -> Never { throw NativeError(code: code, detail: message) }
+func nativeAttr(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+}
+func nativeAxText(_ element: AXUIElement, _ key: String) -> String {
+    guard let value = nativeAttr(element,key) else { return "" }
+    if CFGetTypeID(value) == CFStringGetTypeID() { return value as! String }
+    return ""
+}
+func nativeAxChildren(_ item: AXUIElement, _ key: String = kAXChildrenAttribute as String) -> [AXUIElement] {
+    return (nativeAttr(item,key) as? [AXUIElement]) ?? []
+}
+func nativeAxPoint(_ v: CFTypeRef?) -> CGPoint? {
+    guard let v, CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
+    var out = CGPoint.zero
+    return AXValueGetType(v as! AXValue) == .cgPoint && AXValueGetValue(v as! AXValue,.cgPoint,&out) ? out : nil
+}
+func nativeAxSize(_ v: CFTypeRef?) -> CGSize? {
+    guard let v, CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
+    var out = CGSize.zero
+    return AXValueGetType(v as! AXValue) == .cgSize && AXValueGetValue(v as! AXValue,.cgSize,&out) ? out : nil
+}
+func nativeFront() -> [String: Any] {
+    guard let a = NSWorkspace.shared.frontmostApplication else { return [:] }
+    return ["pid":Int(a.processIdentifier),"bundle_id":a.bundleIdentifier ?? "", "name":a.localizedName ?? ""]
+}
+func nativeApplication(_ bundle: String) throws -> NSRunningApplication {
+    if bundle.count < 3 || bundle.count > 180 { try fail("INVALID_APP", "Bundle ID required") }
+    let candidates = NSRunningApplication.runningApplications(withBundleIdentifier:bundle)
+    guard candidates.count == 1, let app = candidates.first else { try fail("APP_UNAVAILABLE", "Exactly one running target application is required") }
+    return app
+}
+func nativeAxRoot(_ app: NSRunningApplication) throws -> AXUIElement {
+    guard AXIsProcessTrusted() else { try fail("ACCESSIBILITY_DENIED", "Accessibility permission absent for Mac Control GUI Helper") }
+    let root = AXUIElementCreateApplication(app.processIdentifier)
+    AXUIElementSetMessagingTimeout(root,1.5)
+    return root
+}
+func nativeDescriptor(_ element: AXUIElement, _ app: NSRunningApplication) -> [String:Any] {
+    let title = nativeAxText(element,kAXTitleAttribute as String)
+    let role = nativeAxText(element,kAXRoleAttribute as String)
+    let pos=nativeAxPoint(nativeAttr(element,kAXPositionAttribute as String)) ?? .zero
+    let size=nativeAxSize(nativeAttr(element,kAXSizeAttribute as String)) ?? .zero
+    let launched=app.launchDate?.timeIntervalSince1970 ?? 0
+    let identity="\(app.processIdentifier)|\(launched)|\(title)|\(role)|\(pos.x)|\(pos.y)|\(size.width)|\(size.height)"
+    let digest=SHA256.hash(data:Data(identity.utf8)).map { String(format:"%02x",$0) }.joined()
+    return ["window_ref":digest, "title":String(title.prefix(200)),"role":role,
+       "pid":Int(app.processIdentifier), "bundle_id":app.bundleIdentifier ?? "", "bounds":["x":pos.x,"y":pos.y,"width":size.width,"height":size.height]]
+}
+func nativeWindow(_ root: AXUIElement, _ app: NSRunningApplication, _ ref: String) throws -> AXUIElement {
+    let windows = nativeAxChildren(root,kAXWindowsAttribute as String)
+    let matches=windows.filter { (nativeDescriptor($0,app)["window_ref"] as? String) == ref }
+    guard matches.count == 1 else { try fail("STALE_OR_AMBIGUOUS_WINDOW","Window reference no longer selects one window") }
+    return matches[0]
+}
+func nativeRequireNonSecure(_ element: AXUIElement) throws {
+    let role=nativeAxText(element,kAXRoleAttribute as String).lowercased()
+    let subrole=nativeAxText(element,kAXSubroleAttribute as String).lowercased()
+    guard !role.contains("secure") && !subrole.contains("secure") else {
+        try fail("SECURE_ELEMENT_DENIED", "Background access to secure AX elements is forbidden")
+    }
+}
+func nativeNode(_ root: AXUIElement, _ path: [Int]) throws -> AXUIElement {
+    guard path.count <= 10 else { try fail("INVALID_ELEMENT_PATH","Path too deep") }
+    var curr=root
+    try nativeRequireNonSecure(curr)
+    for n in path {
+        let children=nativeAxChildren(curr)
+        guard n >= 0 && n < children.count && n < 100 else { try fail("STALE_ELEMENT","Child index not found") }
+        curr=children[n]
+        try nativeRequireNonSecure(curr)
+    }
+    return curr
+}
+func nativeDescribe(_ item: AXUIElement, _ path:[Int]) -> [String:Any] {
+    let role=nativeAxText(item,kAXRoleAttribute as String)
+    let subrole=nativeAxText(item,kAXSubroleAttribute as String)
+    return ["path":path,"role":role,"subrole":subrole,"title":String(nativeAxText(item,kAXTitleAttribute as String).prefix(150)),
+       "actions":nativeActions(item)]
+}
+func nativeActions(_ item:AXUIElement) -> [String] {
+    var names:CFArray?
+    return AXUIElementCopyActionNames(item,&names) == .success ? ((names as? [String]) ?? []) : []
+}
+func nativeParsePath(_ args:[String:Any]) throws -> [Int] {
+    guard let path=args["element_path"] as? [Int], path.count <= 10 else { try fail("INVALID_ELEMENT_PATH","Element path is required") }
+    return path
+}
+func nativeTask(_ req:[String:Any]) async throws -> [String:Any] {
+    let op = req["op"] as? String ?? ""
+    if op == "frontmost" { return ["frontmost":nativeFront()] }
+    if op == "apps" {
+        let running=NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+        return ["apps":running.prefix(150).map { ["bundle_id":$0.bundleIdentifier ?? "", "pid":Int($0.processIdentifier),"name":$0.localizedName ?? "", "launch_date":$0.launchDate?.timeIntervalSince1970 ?? 0] }]
+    }
+    let bundle=req["bundle_id"] as? String ?? ""
+    let app=try nativeApplication(bundle)
+    if let pid=req["expected_pid"] as? Int, pid != Int(app.processIdentifier) {
+        try fail("STALE_APP","Target PID changed")
+    }
+    if let expected=req["expected_launch_date"] as? Double {
+        guard abs((app.launchDate?.timeIntervalSince1970 ?? 0) - expected) < 0.01 else {
+            try fail("STALE_APP", "Application launch identity changed")
+        }
+    }
+    let root=try nativeAxRoot(app)
+    if op == "windows" {
+        let wins=nativeAxChildren(root,kAXWindowsAttribute as String).prefix(60)
+        return ["windows":wins.map{nativeDescriptor($0,app)},"bundle_id":bundle,"launch_date":app.launchDate?.timeIntervalSince1970 ?? 0,"frontmost":nativeFront()]
+    }
+    let ref=req["window_ref"] as? String ?? ""
+    guard ref.count == 64 && ref.allSatisfy({$0.isHexDigit}) else { try fail("INVALID_WINDOW_REF","Window reference required") }
+    let w=try nativeWindow(root,app,ref)
+
+    if op == "elements" {
+        let maxDepth=max(0,min(req["max_depth"] as? Int ?? 4,8))
+        let maxNodes=max(1,min(req["max_nodes"] as? Int ?? 120,250))
+        var result=[[String:Any]]()
+        func walk(_ item:AXUIElement,_ path:[Int]) {
+            if result.count>=maxNodes { return }
+            let nativeDescriptor=nativeDescribe(item,path)
+            result.append(nativeDescriptor)
+            if path.count>=maxDepth { return }
+            if (nativeDescriptor["subrole"] as? String ?? "").contains("Secure") { return }
+            for (n,child) in nativeAxChildren(item).prefix(100).enumerated() {
+                if result.count>=maxNodes { break }
+                walk(child,path+[n])
+            }
+        }
+        walk(w,[])
+        return ["window_ref":ref,"nodes":result,"truncated":result.count>=maxNodes,"frontmost":nativeFront()]
+    }
+    if op == "action" {
+        let path=try nativeParsePath(req)
+        let selected=try nativeNode(w,path)
+        let role=nativeAxText(selected,kAXRoleAttribute as String)
+        let title=nativeAxText(selected,kAXTitleAttribute as String)
+        let expectedRole=req["expected_role"] as? String ?? ""
+        let expectedTitle=req["expected_title"] as? String ?? ""
+        guard expectedRole==role && expectedTitle==title else { try fail("STALE_ELEMENT","Element role/title mismatch") }
+        let operation=req["action"] as? String ?? ""
+        let before=nativeFront()
+        if operation=="set_value" {
+            guard ["AXTextField","AXTextArea","AXComboBox"].contains(role) &&
+                !role.lowercased().contains("secure") else { try fail("UNSUPPORTED_BACKGROUND_ACTION","Not a supported text element") }
+            var mutable=DarwinBoolean(false)
+            guard AXUIElementIsAttributeSettable(selected,kAXValueAttribute as CFString,&mutable) == .success && mutable.boolValue else {
+                try fail("UNSUPPORTED_BACKGROUND_ACTION","AXValue is not settable")
+            }
+            guard let text=req["text"] as? String, text.count<=5000 else { try fail("INVALID_TEXT","Text limit 5000") }
+            let status=AXUIElementSetAttributeValue(selected,kAXValueAttribute as CFString,text as CFString)
+            guard status == .success else { try fail("UNSUPPORTED_BACKGROUND_ACTION","AX direct text setting rejected (\(status.rawValue))") }
+        } else {
+            let valid=["AXPress","AXIncrement","AXDecrement","AXShowMenu","AXConfirm","AXCancel","AXScrollToVisible"]
+            guard valid.contains(operation) && nativeActions(selected).contains(operation) else {
+                try fail("UNSUPPORTED_BACKGROUND_ACTION","AX direct action not supported by element")
+            }
+            let status=AXUIElementPerformAction(selected,operation as CFString)
+            guard status == .success else { try fail("UNSUPPORTED_BACKGROUND_ACTION","AX action rejected (\(status.rawValue))") }
+        }
+        let after=nativeFront()
+        return ["performed":true,"method":"direct_accessibility","action":operation,
+                "foreground_unchanged":(before["pid"] as? Int)==(after["pid"] as? Int),
+                "foreground_before":before,"foreground_after":after]
+    }
+    try fail("UNKNOWN_ACTION","Unknown native backend operation")
+}
