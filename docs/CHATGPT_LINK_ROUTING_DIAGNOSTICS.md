@@ -64,3 +64,18 @@ was blocked at the platform layer.
 
 Mac Control cannot fix external connection-eligibility denial by
 inventing link aliases, modifying SSH keys or bypassing policy checks.
+
+## Published-tool snapshot drift (possible, not confirmed)
+
+OpenAI documents that a workspace may retain a previously approved frozen
+snapshot of custom MCP tool definitions. If server inputs change after the
+snapshot was approved, the published app may validate against obsolete
+parameters. Compare the invoking plugin's advertised tool schema with the
+currently registered FastMCP schema. Where the owner/admin interface offers
+it, use the app's Manage / Refresh tools or workspace action review to
+reconcile the snapshot. Do not add link_id to FastMCP handler schemas or
+assume every eligible account supports these controls.
+
+Source: https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
+ChatGPT documents explicit safety blocks as independent of saved approvals:
+https://help.openai.com/en/articles/20001497-troubleshooting-plugins-and-apps-in-chatgpt

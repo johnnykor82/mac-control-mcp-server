@@ -344,3 +344,6 @@ and approval documents remain outside the source checkout.
   exact safe alternatives and no leaked caller argument values.
 - No platform eligibility or OpenAI safety policy can be changed by this
   local Mac Control update. Production remains unchanged in this candidate.
+- Document optional refresh of the app's published/frozen MCP tool snapshot
+  where supported, since stale approved schemas can produce parameter
+  mismatches even while local FastMCP schemas are correct.
