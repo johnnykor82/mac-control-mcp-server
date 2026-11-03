@@ -3,7 +3,7 @@
 Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
 инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **133** инструментов (106 frozen, 27 дополнительных).
+- Всего: **135** инструментов (106 frozen, 29 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=137.
 - Не классифицированных статических сообщений: **28**.
@@ -32,6 +32,7 @@
 | project | 2 |
 | read | 2 |
 | restart | 1 |
+| self | 2 |
 | ssh | 17 |
 | system | 1 |
 | terminal | 8 |
@@ -128,6 +129,8 @@
 | read_file | path | 1 | additional |
 | read_service_log | name | 2 | additional |
 | restart_server | — | 0 | additional |
+| self_update_start | — | 1 | additional |
+| self_update_status | — | 0 | additional |
 | ssh_auth_diagnostics | — | 0 | frozen |
 | ssh_diagnostic | host | 2 | frozen |
 | ssh_download | host, local_path, remote_path | 5 | frozen |

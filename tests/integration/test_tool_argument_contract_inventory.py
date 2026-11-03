@@ -14,10 +14,10 @@ class ArgumentContractInventoryTests(unittest.TestCase):
 
     def test_whole_shipped_catalog_including_opt_in_tools(self):
         summary = self.report["summary"]
-        self.assertEqual(summary["tools"], 133)
+        self.assertEqual(summary["tools"], 135)
         self.assertEqual(summary["frozen"], 106)
-        self.assertEqual(summary["additional"], 27)
-        self.assertEqual(len({x["name"] for x in self.report["tools"]}), 133)
+        self.assertEqual(summary["additional"], 29)
+        self.assertEqual(len({x["name"] for x in self.report["tools"]}), 135)
 
     def test_missing_arguments_and_types_are_visible(self):
         by_name = {x["name"]: x for x in self.report["tools"]}
@@ -26,6 +26,9 @@ class ArgumentContractInventoryTests(unittest.TestCase):
         self.assertEqual(by_name["custom_command"]["required"], ["operation"])
         self.assertIn("session_token", by_name["background_browser_action"]["required"])
         self.assertTrue(by_name["audit_search"]["read_only"])
+        self.assertTrue(by_name["self_update_status"]["read_only"])
+        self.assertFalse(by_name["self_update_start"]["read_only"])
+        self.assertIn("with_chatbridge", by_name["self_update_start"]["parameters"])
 
     def test_shared_helpers_included_in_audit_matrix(self):
         modules = self.report["module_inventory"]

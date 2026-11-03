@@ -423,6 +423,23 @@ def register(mcp) -> None:
                 'backup': str(fs_ops.RECOVERY / backup_id) if backup_id else None,
                 'restart_required': False}
 
+    @readonly
+    def self_update_status() -> dict:
+        """Read independent self-update status and detect a disappeared watchdog."""
+        from . import self_update
+        return self_update.status(DATA_ROOT.parent)
+
+    @mutation
+    def self_update_start(with_chatbridge: bool = False) -> dict:
+        """Schedule verified release update with an independent rollback watchdog.
+
+        Uses the installed owner's current Mac Control release only. The
+        watchdog survives this MCP session's restart. ChatBridge updates
+        require an explicit true argument; default preserves ChatBridge.
+        """
+        from . import self_update
+        return self_update.start(DATA_ROOT.parent, RELEASE_ROOT, with_chatbridge)
+
     @mutation
     def restart_server() -> dict:
         """Schedule restart only for this installed, loaded, exactly owned remote agent."""

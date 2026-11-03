@@ -1,4 +1,4 @@
-"""All 133 MCP inputs have machine-readable schemas; never execute operations."""
+"""All 135 MCP inputs have machine-readable schemas; never execute operations."""
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -17,8 +17,8 @@ class AllToolSchemaTests(unittest.TestCase):
                 return await make_server(include_mutations=True).list_tools()
         cls.tools = asyncio.run(collect())
 
-    def test_all_133_schemas_are_well_formed_and_named(self):
-        self.assertEqual(len(self.tools), 133)
+    def test_all_135_schemas_are_well_formed_and_named(self):
+        self.assertEqual(len(self.tools), 135)
         for tool in self.tools:
             with self.subTest(tool=tool.name):
                 Draft202012Validator.check_schema(tool.parameters)

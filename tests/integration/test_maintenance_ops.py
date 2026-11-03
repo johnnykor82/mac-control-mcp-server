@@ -53,9 +53,11 @@ class MaintenanceTests(unittest.TestCase):
     def test_registers_all_compatibility_tools_with_safe_annotations(self):
         self.assertEqual(set(self.tools), {'audit_tail', 'audit_search', 'list_workspace',
             'process_snapshot', 'read_service_log', 'mcp_diagnostics', 'read_file',
-            'write_file', 'restart_server', 'custom_query', 'custom_command'})
+            'write_file', 'restart_server', 'self_update_start', 'self_update_status', 'custom_query', 'custom_command'})
         self.assertFalse(self.registry.annotations['custom_command']['readOnlyHint'])
         self.assertTrue(self.registry.annotations['custom_query']['readOnlyHint'])
+        self.assertTrue(self.registry.annotations['self_update_status']['readOnlyHint'])
+        self.assertFalse(self.registry.annotations['self_update_start']['readOnlyHint'])
 
     def test_workspace_files_are_cas_protected_and_backed_up(self):
         write, read = self.tools['write_file'], self.tools['read_file']

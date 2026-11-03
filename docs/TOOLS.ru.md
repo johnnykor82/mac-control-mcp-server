@@ -246,6 +246,8 @@ Watcher хранит локальное состояние задач и дос�
 | `mcp_diagnostics` | R | Проверить состояние собственного удалённого агента, текущий PID и размеры разрешённых журналов. | Без аргументов. |
 | `read_file` | R | Прочитать небольшой текст workspace или явно разрешённый исходник поставки и получить SHA256. | `path="workspace/artifacts/note.txt"` |
 | `write_file` | W | Атомарно записать текст workspace; существующему файлу нужны текущий хеш и резервная копия. | `path="workspace/artifacts/note.txt", content="Уточнённая заметка", expected_sha256=current_sha256` |
+| `self_update_start` | W | Запустить независимое самообновление Mac Control со строгим откатом через прежний релиз; по умолчанию ChatBridge не меняется. | `with_chatbridge=false` |
+| `self_update_status` | R | Прочитать состояние независимого обновления; `worker_missing` означает потерю watchdog. | Без аргументов |
 | `restart_server` | W | Запланировать отложенный перезапуск проверенного загруженного удалённого LaunchAgent этой установки. | Без аргументов; `restart_scheduled` не доказывает успешный перезапуск. |
 | `custom_query` | R | Вызвать разрешённую операцию чтения из неизменяемой поставки или получить каталог операций. | `operation="help"`; затем `operation="fs_list", arguments={"project":"workspace","path":"."}` |
 | `custom_command` | W | Вызвать операцию неизменяемой поставки с JSON-аргументами и теми же настройками доступности модулей. | `operation="fs_mkdir", arguments={"project":"workspace","path":"artifacts"}` |

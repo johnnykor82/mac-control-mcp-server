@@ -466,3 +466,8 @@ on systems where an unrelated service (such as Hermes WebUI) already owns
 port 8787. Use `maccontrol update --with-chatbridge` only for an explicit
 ChatBridge provisioning/verification operation. Fresh installations retain
 their prior default and strict ownership safeguards.
+
+
+### BF-16: safe agent-driven MCP self-update
+
+After bootstrapping beta.33 using the normal `maccontrol update` CLI, the authenticated agent may call `self_update_start(with_chatbridge=false)`. A detached watchdog, running from the immutable old release, updates from a SHA256-verified GitHub release, checks that the owned LaunchAgent and OAuth MCP endpoint have recovered, and automatically rolls back if the new release does not become healthy. Call `self_update_status` after reconnecting. Set `with_chatbridge=true` only for an explicit owned ChatBridge upgrade; the default does not modify it. A machine reboot or forced killing of the watchdog is detected as `worker_missing`, not silently recovered; persistent external recovery daemon is not installed in this beta.

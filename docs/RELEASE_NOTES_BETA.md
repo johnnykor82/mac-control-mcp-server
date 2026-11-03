@@ -449,3 +449,12 @@ and approval documents remain outside the source checkout.
 - If both services are active on the same data, the installer still stops with
   a recoverable error. Stop/migrate that live service only under a separate
   owner-approved transition.
+
+
+## beta.33 — BF-16: agent-controlled safe self-update with detached watchdog
+
+- Added authenticated `self_update_start(with_chatbridge=false)` and read-only `self_update_status`. The start call returns a job ID before the independent worker updates the running server. Default leaves ChatBridge untouched; setting `with_chatbridge=true` explicitly also upgrades it.
+- The worker is executed from the prior immutable, owner-verified release, holds a cross-process lifecycle lock and records bounded, 0600-private progress under `data/run/self-update/`. It uses the existing SHA256-verified GitHub beta manager; users cannot pass shell commands, URLs or arbitrary source directories.
+- Following installation, the worker checks an owned running LaunchAgent and the authenticated OAuth challenge on loopback MCP. If a changed release fails, it calls the previous release's official rollback installer, verifies recovery, and marks `rolled_back` or `rollback_failed`. An interrupted/missing watchdog is reported as `worker_missing`, never as success.
+- A hard machine reboot or SIGKILL of the independent process can interrupt recovery; this beta detects a missing worker but does not yet install an always-on external OS-level recovery daemon. For existing installations without these tools, bootstrap once with the standard `maccontrol update` command.
+- Updating a service intentionally disconnects the current MCP request; reconnect and call `self_update_status`. This feature is not invoked automatically and never touches a live service merely by being installed.

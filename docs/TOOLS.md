@@ -252,6 +252,8 @@ Approved source reads are `scripts/dev_mcp_server.py`, `scripts/setup_remote_ser
 | `mcp_diagnostics` | R | Inspect the owned remote agent's state, current PID and allowlisted log sizes. | No arguments. |
 | `read_file` | R | Read small workspace text or an explicitly approved shipped source path, returning SHA256. | `path="workspace/artifacts/note.txt"` |
 | `write_file` | W | Atomically write workspace text; existing files require their current hash and receive a backup. | `path="workspace/artifacts/note.txt", content="Revised note", expected_sha256=current_sha256` |
+| `self_update_start` | W | Schedule independent verified Mac Control self-update with rollback; ChatBridge is unchanged by default. | `with_chatbridge=false` |
+| `self_update_status` | R | Read persisted progress; `worker_missing` means the external watchdog vanished. | No arguments |
 | `restart_server` | W | Schedule a delayed restart of this installation's verified, loaded remote LaunchAgent. | No arguments; `restart_scheduled` does not prove the restart succeeded. |
 | `custom_query` | R | Call an enabled frozen shipped read-only operation, or list the operation catalog. | `operation="help"`; then `operation="fs_list", arguments={"project":"workspace","path":"."}` |
 | `custom_command` | W | Call an enabled frozen shipped operation through JSON arguments and the same feature gates. | `operation="fs_mkdir", arguments={"project":"workspace","path":"artifacts"}` |
