@@ -52,12 +52,12 @@ class ArgumentGuidanceTests(unittest.TestCase):
 
     def test_opaque_secrets_are_not_quoted_in_error(self):
         from mac_control.argument_guidance import guided_handler
-        secret="super-private-command-with-token-123456"
-        def terminal_exec(command:str):raise ValueError("Invalid command "+secret)
+        marker="TEST_INPUT_MARKER_DO_NOT_ECHO_20261103"
+        def terminal_exec(command:str):raise ValueError("Invalid command "+marker)
         wrapped=guided_handler("terminal_exec",terminal_exec)
-        with self.assertRaises(ValueError) as x:wrapped(secret)
+        with self.assertRaises(ValueError) as x:wrapped(marker)
         self.assertIn("terminal_capabilities",str(x.exception))
-        self.assertNotIn(secret,str(x.exception))
+        self.assertNotIn(marker,str(x.exception))
 
     def test_unknown_value_error_after_side_effect_does_not_claim_preflight(self):
         from mac_control.argument_guidance import guided_handler
