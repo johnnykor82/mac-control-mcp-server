@@ -34,7 +34,7 @@ These calls explain the environment before an assistant creates files or chooses
 
 ## Approved project files — 11 tools
 
-Use `project="workspace"` for ordinary agent work. Other aliases must appear in `allowed_projects.json` under the data root. Paths are relative to the selected root. Sensitive/hidden/generated paths, traversal and symlinks are rejected; this is not unrestricted disk access. Text reads/writes are limited to 512 KiB. Overwriting/replacing existing text and recoverable deletion require the current SHA256; replacement backups support recovery.
+Use `project="workspace"` for ordinary agent work. Other aliases must appear in `allowed_projects.json` under the data root. Paths are relative to the selected root. Hidden files and directories are supported within a configured project; traversal and symlinks remain blocked by filesystem tools. Text reads/writes are limited to 512 KiB. Overwriting/replacing existing text and recoverable deletion require the current SHA256; replacement backups support recovery.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
@@ -69,7 +69,7 @@ The selected project alias must point to the repository root itself. For example
 
 ## Machine diagnostics and project jobs — 6 tools
 
-Machine diagnostics need no ChatGPT browser login. `project_task` may execute repository test/build code. Service inspection/restart uses a separate local label allowlist; the legacy default label may not describe this installation, so use `mcp_diagnostics` for Mac Control itself.
+Machine diagnostics need no ChatGPT browser login. `project_task` may execute repository test/build code. Service inspection and explicit restart accept any syntactically valid current-user LaunchAgent label without a local label allowlist. Use `mcp_diagnostics` and `restart_server` for Mac Control itself.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
@@ -77,8 +77,8 @@ Machine diagnostics need no ChatGPT browser login. `project_task` may execute re
 | `network_listeners` | R | List listening TCP processes and ports without making network requests. | `limit=50` |
 | `local_http_probe` | R | Probe an approved loopback HTTP port with GET/HEAD, without credentials or redirects. | `port=8000, path="/health", method="GET"` |
 | `project_task` | W | Run `python_compile`, `pytest`, `npm_test` or `npm_build`; pytest uses the project's `.venv/bin/python`. | `project="workspace", task="python_compile", path="projects/demo/main.py"` |
-| `launchd_status` | R | Inspect a locally permitted user LaunchAgent label. | `label=owner_approved_label` |
-| `launchd_restart` | W | Restart an explicitly allowlisted user LaunchAgent. Use the dedicated maintenance restart for Mac Control. | `label=owner_approved_label` |
+| `launchd_status` | R | Inspect any current-user LaunchAgent label. | `label="net.chatbridge.gateway"` |
+| `launchd_restart` | W | Explicitly restart any current-user LaunchAgent by label. Use the dedicated maintenance restart for Mac Control. | `label="net.chatbridge.gateway"` |
 
 ## Local shell and persistent terminals — 8 tools
 

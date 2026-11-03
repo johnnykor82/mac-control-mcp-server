@@ -41,10 +41,6 @@ def _managed_service():
     return _service_helper()
 
 
-def _launchd_labels():
-    # Keep historic labels opt-in only (through allowed_services.txt).
-    return {_managed_service().LABEL, "org.maccontrol.mcpserver.watcher"}
-
 
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
@@ -106,20 +102,11 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def launchd_status(label: str = "") -> dict:
-        """Inspect own LaunchAgent or another locally approved label."""
+        """Inspect any LaunchAgent belonging to the current macOS GUI user."""
         if not label:
             label = _managed_service().LABEL
-        if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", label):
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", label):
             raise ValueError("Invalid launchd label")
-        allowlist = _launchd_labels()
-        cfg = Path(__file__).resolve().parent.parent / "allowed_services.txt"
-        if cfg.is_file() and not cfg.is_symlink():
-            allowlist.update(
-                x.strip() for x in cfg.read_text().splitlines()
-                if re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", x.strip())
-            )
-        if label not in allowlist:
-            raise PermissionError("Service is not locally approved")
         query = f"gui/{os.getuid()}/{label}"
         result = execute(["/bin/launchctl", "print", query],
                          str(Path.home()), 8)
@@ -137,19 +124,11 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def launchd_restart(label: str) -> dict:
-        """Restart ONLY a locally allowlisted LaunchAgent. Mac Control uses restart_server instead."""
+        """Restart a current-user LaunchAgent explicitly; own MCP uses restart_server."""
         if label == _managed_service().LABEL:
             raise ValueError("Use restart_server for the MCP agent")
-        if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", label):
+        if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", label):
             raise ValueError("Invalid label")
-        cfg = Path(__file__).resolve().parent.parent / "allowed_services.txt"
-        allowed = (
-            set(x.strip() for x in cfg.read_text().splitlines()
-                if re.fullmatch(r"[a-zA-Z0-9_.-]{1,120}", x.strip()))
-            if cfg.is_file() and not cfg.is_symlink() else set()
-        )
-        if label not in allowed:
-            raise PermissionError("Label must be explicitly enabled locally")
         return execute(["/bin/launchctl", "kickstart", "-k",
                         f"gui/{os.getuid()}/{label}"], str(Path.home()), 20)
 

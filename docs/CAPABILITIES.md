@@ -254,8 +254,7 @@ Media support follows configured target roots and transport bounds.
 
 `system_info`, `machine_health`, `network_listeners`, and `process_snapshot` help
 inspect the Mac. `local_http_probe` covers specified local ports, not arbitrary
-network scanning. `launchd_status`/`launchd_restart` use the configured service
-allowlist. Availability of a diagnostic does not authorize a repair or restart.
+network scanning. `launchd_status`/`launchd_restart` accept syntactically valid LaunchAgent labels in the current macOS user domain, without a service allowlist. Availability of a diagnostic does not authorize a repair or restart.
 
 ## Remote access, maintenance, logs, and lifecycle
 

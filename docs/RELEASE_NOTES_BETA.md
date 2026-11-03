@@ -420,3 +420,14 @@ and approval documents remain outside the source checkout.
   its own rollback-safe upgrade installer. Unknown/foreign instances are untouched;
   `--without-chatbridge` opts out. The first transition from beta.29 requires
   `maccontrol update --with-chatbridge` because that older CLI defaults to opt-out.
+
+
+## beta.31 — urgent BF-14: current-user LaunchAgent allowlist bugfix
+
+- Fixed `launchd_status` unexpectedly rejecting existing ChatBridge labels such as
+  `net.chatbridge.gateway` and `net.chatbridge.gateway.maccontrol` as not locally approved.
+- Explicit `launchd_restart` now accepts valid current-user LaunchAgent labels
+  without an extra `allowed_services.txt` gate. Neither command runs automatically.
+- Both still use `launchctl` in `gui/<current-uid>`, validate labels, and use
+  `restart_server` for Mac Control's own service. macOS permissions and OAuth remain.
+- No live LaunchAgent, Chrome profile or SQLite state is modified by updating source.

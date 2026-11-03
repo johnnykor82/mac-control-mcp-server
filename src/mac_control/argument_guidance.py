@@ -24,7 +24,7 @@ _ALTERNATIVES = {
     "package": "Call package_capabilities; choose a listed supported formula or job ID.",
     "project": "Call project_roots to see approved project names and supported tasks.",
     "local": "Call system_info and confirm the approved local endpoint and method.",
-    "launchd": "Call launchd_status; select an explicitly approved service label.",
+    "launchd": "Call launchd_status with a current-user LaunchAgent label; own MCP uses restart_server.",
     "network": "Call network_listeners to inspect existing listeners before retrying.",
 }
 _GENERIC = "Review required argument names and values against the tool signature; retry only with authorized input."

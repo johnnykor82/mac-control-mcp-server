@@ -73,8 +73,40 @@ class InstalledDiagnosticsTests(unittest.TestCase):
             self.assertIn(service.LABEL,run.call_args.args[0][-1])
             watcher=self.tools["launchd_status"]("org.maccontrol.mcpserver.watcher")
             self.assertEqual(watcher["label"],"org.maccontrol.mcpserver.watcher")
-            with self.assertRaisesRegex(PermissionError,"not locally approved"):
-                self.tools["launchd_status"]("net.johnnykor.chatgpt-mcp")
+            for label in ("net.chatbridge.gateway", "net.chatbridge.gateway.maccontrol",
+                          "net.johnnykor.chatgpt-mcp"):
+                status = self.tools["launchd_status"](label)
+                self.assertEqual(status["label"], label)
+                self.assertIn(f"gui/{os.getuid()}/{label}", run.call_args.args[0])
+
+    def test_launchd_restart_no_local_label_allowlist_and_no_shell(self):
+        service = Mock(LABEL="org.maccontrol.mcpserver.remote", PORT=3201)
+        with patch.object(system_ops, "_managed_service", return_value=service), \
+             patch.object(system_ops, "execute", return_value={
+                 "exit_code": 0, "stdout": "", "stderr": ""}) as run:
+            for label in ("net.chatbridge.gateway", "net.chatbridge.gateway.maccontrol"):
+                result = self.tools["launchd_restart"](label)
+                self.assertEqual(result["exit_code"], 0)
+                run.assert_called_with(
+                    ["/bin/launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"],
+                    str(Path.home()), 20)
+            with self.assertRaisesRegex(ValueError, "restart_server"):
+                self.tools["launchd_restart"](service.LABEL)
+            self.assertEqual(run.call_count, 2)
+
+    def test_launchd_invalid_labels_rejected_without_running_any_command(self):
+        service = Mock(LABEL="org.maccontrol.mcpserver.remote", PORT=3201)
+        invalid = ("../other", "../../etc/passwd", "net.bad;touch", "a/b", " ",
+                   "bad label", "a" * 121, "-a\n")
+        with patch.object(system_ops, "_managed_service", return_value=service), \
+             patch.object(system_ops, "execute") as run:
+            for label in invalid:
+                with self.subTest(label=label):
+                    with self.assertRaises(ValueError):
+                        self.tools["launchd_status"](label)
+                    with self.assertRaises(ValueError):
+                        self.tools["launchd_restart"](label)
+            run.assert_not_called()
 
     def test_local_probe_uses_installed_port_and_does_not_follow_redirects(self):
         class Response:
