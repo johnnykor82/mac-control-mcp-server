@@ -407,3 +407,16 @@ and approval documents remain outside the source checkout.
 - Root, symlink, traversal and file-level CAS guards remain enforced.
 - On jkmac, jkmac-mcp is the connection name to this server installation;
   maccontrol update refreshes its server code. It does not update legacy Mac Control.
+
+
+## beta.30 installer correction and managed ChatBridge updates
+
+- When ChatBridge beta.11 returns HTTP 404 for POST /v1/browser/verify,
+  Mac Control invokes its supported POST /v1/browser/wake once and requires
+  a successful real GET /ready afterward. Browser wake alone never proves login.
+- Publish and pin ChatBridge v0.2.0-beta.12 with verified SHA256 for both new
+  installs and owner-managed dependency refreshes; beta.12 exposes /verify.
+- `maccontrol update` defaults to refreshing owner-managed ChatBridge using
+  its own rollback-safe upgrade installer. Unknown/foreign instances are untouched;
+  `--without-chatbridge` opts out. The first transition from beta.29 requires
+  `maccontrol update --with-chatbridge` because that older CLI defaults to opt-out.

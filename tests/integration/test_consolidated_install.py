@@ -106,6 +106,30 @@ class ConsolidatedInstallTests(unittest.TestCase):
             self.assertIn("maccontrol-verified-", argv[1])
             self.assertFalse((root / "source").exists())
 
+    def test_default_cli_update_enables_owned_chatbridge_refresh(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "MacControlMCP"
+            root.mkdir()
+            (root / ".mac-control-installer-owned").write_text("owned")
+            tag = "v0.1.0-beta.30"
+            with patch.object(manager, "latest_beta", return_value=(tag, {})), \
+                 patch.object(manager, "verified_archive", return_value=archive_for(tag)), \
+                 patch.object(manager.subprocess, "call", return_value=0) as call:
+                self.assertEqual(manager.update(root), 0)
+            argv = call.call_args.args[0]
+            self.assertIn("--with-chatbridge", argv)
+            self.assertNotIn("--without-chatbridge", argv)
+
+    def test_cli_update_default_and_optout_flags(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(manager, 'update', return_value=0) as update:
+                self.assertEqual(manager.main(['--root', str(root), 'update']), 0)
+                self.assertFalse(update.call_args.kwargs['without_chatbridge'])
+                self.assertEqual(manager.main(['--root', str(root), 'update',
+                                               '--without-chatbridge']), 0)
+                self.assertTrue(update.call_args.kwargs['without_chatbridge'])
+
     def test_uninstall_all_refuses_nonstandard_root_without_deleting(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

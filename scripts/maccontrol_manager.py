@@ -124,7 +124,7 @@ def installed(root, action, *extra):
     if not script.is_file(): raise RuntimeError("Mac Control is not installed")
     return subprocess.call([sys.executable, str(script), "--root", str(root), action, *extra])
 
-def update(root, without_chatbridge=True, without_gui=False, install_tmux=False):
+def update(root, without_chatbridge=False, without_gui=False, install_tmux=False):
     if not (root / ".mac-control-installer-owned").is_file():
         raise RuntimeError("Mac Control installation not found: " + str(root))
     tag, assets = latest_beta()
@@ -145,9 +145,9 @@ def main(argv=None):
     upd = commands.add_parser("update", help="Fetch latest verified GitHub beta release")
     browser = upd.add_mutually_exclusive_group()
     browser.add_argument("--without-chatbridge", action="store_true",
-                         help="Preserve browser dependency untouched (default on update)")
+                         help="Skip owner-managed ChatBridge refresh for this update")
     browser.add_argument("--with-chatbridge", action="store_true",
-                         help="Explicitly provision or verify managed ChatBridge")
+                         help="Explicitly provision or refresh managed ChatBridge (default)")
     upd.add_argument("--without-gui", action="store_true")
     upd.add_argument("--install-tmux", action="store_true",
                      help="Explicitly allow Homebrew installation of tmux when missing")
@@ -203,7 +203,7 @@ def main(argv=None):
         print(json.dumps(collect(root), ensure_ascii=False, indent=2))
         return 0
     if args.command == "update":
-        return update(root, without_chatbridge=not args.with_chatbridge,
+        return update(root, without_chatbridge=args.without_chatbridge,
                       without_gui=args.without_gui, install_tmux=args.install_tmux)
     if args.command == "uninstall" and args.all:
         if root != DEFAULT_ROOT.resolve():

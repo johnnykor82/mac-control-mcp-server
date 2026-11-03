@@ -134,11 +134,18 @@ for the native GUI, `data/` for workspace, configuration, logs and backups,
 
 Run these commands from **any working directory**. Updating downloads the latest
 published GitHub beta with its SHA256SUMS, validates the archive, and activates
-the new release. No source checkout or `git pull` is required for updates:
+the new release. Starting with beta.30, `maccontrol update` also upgrades only
+the installer-owned ChatBridge to the release pinned by Mac Control, preserving
+the Chrome profile, SQLite database and existing settings. Use
+`--without-chatbridge` to skip the dependency. On a Mac running the older
+beta.29 updater, use `maccontrol update --with-chatbridge` once to include the
+dependency in the initial transition. No source checkout or `git pull` is required for updates:
 
 ```sh
 "$HOME/MacControlMCP/bin/maccontrol" update
 "$HOME/MacControlMCP/bin/maccontrol" status
+# Skip updating the Mac Control-owned ChatBridge dependency:
+"$HOME/MacControlMCP/bin/maccontrol" update --without-chatbridge
 "$HOME/MacControlMCP/bin/maccontrol" rollback
 "$HOME/MacControlMCP/bin/maccontrol" uninstall       # preserve data
 "$HOME/MacControlMCP/bin/maccontrol" uninstall --all # erase all (type DELETE)

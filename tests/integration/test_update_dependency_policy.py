@@ -34,7 +34,7 @@ class UpdateDependencyTests(unittest.TestCase):
     def test_update_opt_in_provisions_browser(self):
         self.assertTrue(self.installer_default("--update", "--with-chatbridge"))
 
-    def test_manager_update_default_preserves_existing_dependency(self):
+    def test_manager_update_refreshes_only_opted_in_owned_dependency_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "MacControlMCP"
             root.mkdir()
@@ -44,14 +44,14 @@ class UpdateDependencyTests(unittest.TestCase):
                  patch.object(manager, "unpack_release", return_value=root), \
                  patch.object(manager.subprocess, "call", return_value=0) as call:
                 self.assertEqual(manager.update(root), 0)
-                self.assertIn("--without-chatbridge", call.call_args.args[0])
-                self.assertEqual(manager.update(root, without_chatbridge=False), 0)
-                self.assertNotIn("--without-chatbridge", call.call_args.args[0])
                 self.assertIn("--with-chatbridge", call.call_args.args[0])
+                self.assertEqual(manager.update(root, without_chatbridge=True), 0)
+                self.assertNotIn("--with-chatbridge", call.call_args.args[0])
+                self.assertIn("--without-chatbridge", call.call_args.args[0])
 
     def test_cli_opt_in_and_default(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for flags, preserve in (([], True), (["--without-chatbridge"], True),
+            for flags, preserve in (([], False), (["--without-chatbridge"], True),
                                     (["--with-chatbridge"], False)):
                 with self.subTest(flags=flags), \
                      patch.object(manager, "update", return_value=0) as update:

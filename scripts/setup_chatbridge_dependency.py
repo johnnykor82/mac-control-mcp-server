@@ -8,6 +8,7 @@ import gzip
 import json
 import os
 import plistlib
+import re
 import shutil
 from pathlib import Path, PurePosixPath
 import socket
@@ -20,9 +21,9 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-RELEASE_URL = "https://github.com/johnnykor82/chatbridge/releases/download/v0.2.0-beta.11/chatbridge_gateway-0.2.0b11.tar.gz"
-RELEASE_SHA256 = "bad1268ff113cbd2311eb1d82c113adb2cb5da0902433b1677d7443f516e6064"
-RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b11"
+RELEASE_URL = "https://github.com/johnnykor82/chatbridge/releases/download/v0.2.0-beta.12/chatbridge_gateway-0.2.0b12.tar.gz"
+RELEASE_SHA256 = "5fc826b36e87e370a6747d5fa95e133aeb808e8b94bfe8fe69536acc0525ffc2"
+RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b12"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 DEFAULT_URL = "http://127.0.0.1:8787"
@@ -130,8 +131,25 @@ def browser_login_status(url: str = DEFAULT_URL, *, verify_idle: bool = False) -
                         return outcome(json.load(response))
                 except urllib.error.HTTPError as failure:
                     if failure.code == 404:
-                        return {"authenticated": False, "status": "browser_idle", "url": url,
-                                "next": "Upgrade ChatBridge to a version with /v1/browser/verify"}
+                        # Pre-beta.12 ChatBridge has wake but not atomic verify.
+                        # Explicit owner update may wake once; only /ready with
+                        # a verified ChatGPT composer can establish login.
+                        wake = urllib.request.Request(
+                            url.rstrip("/") + "/v1/browser/wake",
+                            headers=headers, method="POST")
+                        try:
+                            with urllib.request.urlopen(wake, timeout=80) as response:
+                                if getattr(response, "status", 200) != 200:
+                                    return unavailable()
+                                json.load(response)
+                        except urllib.error.HTTPError as wake_failure:
+                            return {"authenticated": False, "status": "unavailable",
+                                    "url": url,
+                                    "next": "Legacy ChatBridge browser wake failed (HTTP " +
+                                            str(wake_failure.code) + ")"}
+                        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+                            return unavailable()
+                        return browser_login_status(url, verify_idle=False)
                     if failure.code == 503:
                         error_body(failure)
                         return {"authenticated": False, "status": "unverified",
@@ -314,35 +332,42 @@ def extract_release(archive: Path, destination: Path) -> Path:
     return destination / RELEASE_DIRECTORY
 
 
+def download_pinned_source(root: Path) -> Path:
+    """Extract a SHA256-pinned published ChatBridge source distribution."""
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    archive = root / "release.tar.gz"
+    digest = hashlib.sha256()
+    downloaded = 0
+    deadline = time.monotonic() + 90
+    try:
+        with urllib.request.urlopen(RELEASE_URL, timeout=20) as response, archive.open("wb") as output:
+            if urlsplit(response.geturl()).scheme != "https":
+                raise RuntimeError("ChatBridge download redirected outside HTTPS")
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                downloaded += len(chunk)
+                if downloaded > MAX_ARCHIVE or time.monotonic() > deadline:
+                    raise RuntimeError("ChatBridge download exceeds size or time limit")
+                digest.update(chunk)
+                output.write(chunk)
+    except (OSError, urllib.error.URLError):
+        raise RuntimeError("Could not download pinned ChatBridge release; retry or use --without-chatbridge") from None
+    if digest.hexdigest() != RELEASE_SHA256:
+        raise RuntimeError("ChatBridge release SHA256 mismatch; installer was not executed")
+    try:
+        source = extract_release(archive, root / "source")
+    except (tarfile.TarError, OSError, EOFError):
+        raise RuntimeError("Invalid ChatBridge release archive; installer was not executed") from None
+    return source
+
+
 def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
     assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
         root = Path(temporary)
-        archive = root / "release.tar.gz"
-        digest = hashlib.sha256()
-        downloaded = 0
-        deadline = time.monotonic() + 90
-        try:
-            with urllib.request.urlopen(RELEASE_URL, timeout=20) as response, archive.open("wb") as output:
-                if urlsplit(response.geturl()).scheme != "https":
-                    raise RuntimeError("ChatBridge download redirected outside HTTPS")
-                while True:
-                    chunk = response.read(65536)
-                    if not chunk:
-                        break
-                    downloaded += len(chunk)
-                    if downloaded > MAX_ARCHIVE or time.monotonic() > deadline:
-                        raise RuntimeError("ChatBridge download exceeds size or time limit")
-                    digest.update(chunk)
-                    output.write(chunk)
-        except (OSError, urllib.error.URLError):
-            raise RuntimeError("Could not download pinned ChatBridge release; retry or use --without-chatbridge") from None
-        if digest.hexdigest() != RELEASE_SHA256:
-            raise RuntimeError("ChatBridge release SHA256 mismatch; installer was not executed")
-        try:
-            source = extract_release(archive, root / "source")
-        except (tarfile.TarError, OSError, EOFError):
-            raise RuntimeError("Invalid ChatBridge release archive; installer was not executed") from None
+        source = download_pinned_source(root)
         if install_root is not None:
             permanent, _, _ = managed_paths(install_root)
             if permanent.is_symlink():
@@ -362,6 +387,88 @@ def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> 
                         shutil.rmtree(staging)
             source = permanent
         return install(source, url=url, install_root=install_root)
+
+
+def assert_managed_idle(url: str) -> None:
+    """Do not interrupt a ChatBridge request during an automatic upgrade."""
+    local_origin(url)
+    key = os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
+    headers = {"Accept": "application/json"}
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    request = urllib.request.Request(url.rstrip("/") + "/v1/system/status",
+                                     headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            status = json.load(response)
+    except (OSError, urllib.error.URLError, ValueError, TimeoutError):
+        raise RuntimeError("Cannot confirm ChatBridge idle; existing service preserved") from None
+    browser = status.get("browser") if isinstance(status, dict) else None
+    active = status.get("active") if isinstance(status, dict) else None
+    browser_active = browser.get("active_requests") if isinstance(browser, dict) else None
+    if (not isinstance(active, int) or isinstance(active, bool) or active < 0
+            or not isinstance(browser_active, int) or isinstance(browser_active, bool)
+            or browser_active < 0):
+        raise RuntimeError("ChatBridge active request status is invalid; upgrade refused")
+    if active or browser_active:
+        raise RuntimeError("ChatBridge has active requests; retry update after they finish")
+
+
+def upgrade_managed(install_root: Path, *, url: str = DEFAULT_URL) -> dict:
+    """Upgrade only the owner's exact managed service from a pinned release.
+
+    The standalone ChatBridge installer controls service rollback and persistent
+    Chrome/SQLite; old source is retained if the service upgrade succeeds.
+    """
+    local_origin(url)
+    verify_managed_install(install_root)
+    source, prefix, state = managed_paths(install_root)
+    if source.is_symlink() or not source.is_dir():
+        raise RuntimeError("Owned ChatBridge source is unavailable or symlinked")
+    manifest = source / "pyproject.toml"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise RuntimeError("Managed ChatBridge source version is unavailable")
+    match = re.search(r'^version = "0\.2\.0b([0-9]+)"$', manifest.read_text(), re.MULTILINE)
+    if not match:
+        raise RuntimeError("Cannot identify managed ChatBridge version; upgrade refused")
+    previous_version = int(match.group(1))
+    if previous_version >= 12:
+        return {"status": "current", "version": "0.2.0b" + str(previous_version)}
+    assert_managed_idle(url)
+    with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-upgrade-") as temporary:
+        new_source = download_pinned_source(Path(temporary))
+        staging = source.with_name(".chatbridge-source-pending-" + os.urandom(6).hex())
+        if staging.exists() or staging.is_symlink():
+            raise RuntimeError("Unsafe ChatBridge source staging path")
+        shutil.copytree(new_source, staging, symlinks=False)
+        try:
+            if 'version = "0.2.0b12"' not in (staging / "pyproject.toml").read_text():
+                raise RuntimeError("Pinned ChatBridge source version mismatch")
+            command = [sys.executable, str(staging / "scripts/installer.py"),
+                       "upgrade", "--prefix", str(prefix), "--state-dir", str(state),
+                       "--label", MANAGED_LABEL]
+            try:
+                completed = subprocess.run(command, cwd=staging, check=False,
+                                           timeout=1800)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("ChatBridge upgrade timed out; inspect owned service") from None
+            if completed.returncode:
+                raise RuntimeError("Owned ChatBridge upgrade failed; old source preserved")
+            verify_managed_install(install_root)
+            verify(url)
+            retained = source.with_name("chatbridge-source.previous-" +
+                                        str(time.time_ns()) + "-" + os.urandom(4).hex())
+            source.rename(retained)
+            try:
+                staging.rename(source)
+            except OSError:
+                retained.rename(source)
+                raise
+            return {"status": "upgraded", "version": "0.2.0b12",
+                    "previous_source": str(retained)}
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
 
 
 def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Path | None = None) -> dict:

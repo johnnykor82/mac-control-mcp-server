@@ -79,6 +79,42 @@ class RequiredReadinessTests(unittest.TestCase):
         self.assertTrue(requests[1][1].endswith("/v1/browser/verify"))
         self.assertGreaterEqual(requests[1][2],45)
 
+    def test_legacy_verify_404_uses_wake_and_rechecks_ready(self):
+        idle=b'{"ready":false,"chatgpt_authenticated":null,"reason":"browser_idle"}'
+        requests=[]
+        def probe(request, timeout):
+            requests.append((request.get_method(), request.full_url))
+            if len(requests)==1:
+                raise urllib.error.HTTPError(request.full_url,503,"idle",{},io.BytesIO(idle))
+            if len(requests)==2:
+                raise urllib.error.HTTPError(request.full_url,404,"missing",{},None)
+            if len(requests)==3:
+                return io.BytesIO(b'{"browser":{"state":"running"}}')
+            return io.BytesIO(b'{"ready":true,"chatgpt_authenticated":true}')
+        with patch.object(bridge.urllib.request,"urlopen",side_effect=probe):
+            state=bridge.browser_login_status("http://127.0.0.1:8787",verify_idle=True)
+        self.assertTrue(state["authenticated"])
+        self.assertEqual([method for method,_ in requests],["GET","POST","POST","GET"])
+        self.assertTrue(requests[2][1].endswith("/v1/browser/wake"))
+        self.assertTrue(requests[3][1].endswith("/ready"))
+
+    def test_legacy_wake_without_real_login_is_incomplete(self):
+        idle=b'{"ready":false,"chatgpt_authenticated":null,"reason":"browser_idle"}'
+        requests=[]
+        def probe(request, timeout):
+            requests.append(request.full_url)
+            if len(requests)==1:
+                raise urllib.error.HTTPError(request.full_url,503,"idle",{},io.BytesIO(idle))
+            if len(requests)==2:
+                raise urllib.error.HTTPError(request.full_url,404,"missing",{},None)
+            if len(requests)==3:
+                return io.BytesIO(b'{"browser":{"state":"running"}}')
+            return io.BytesIO(b'{"ready":false,"chatgpt_authenticated":false}')
+        with patch.object(bridge.urllib.request,"urlopen",side_effect=probe):
+            state=bridge.browser_login_status("http://127.0.0.1:8787",verify_idle=True)
+        self.assertFalse(state["authenticated"])
+        self.assertEqual(state["status"],"unverified")
+
     def test_explicit_verification_rejects_missing_composer(self):
         idle=b'{"ready":false,"chatgpt_authenticated":null,"reason":"browser_idle"}'
         denied=b'{"ready":false,"chatgpt_authenticated":false,"reason":"auth_required_or_browser_unavailable"}'

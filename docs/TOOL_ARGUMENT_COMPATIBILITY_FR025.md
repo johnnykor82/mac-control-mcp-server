@@ -115,3 +115,16 @@ Root boundaries, absolute-path / traversal rejection, no symlink traversal,
 workspace ownership, size limits and existing-file hash checks remain.
 `jkmac-mcp` is the ChatGPT connection name for the same published server when
 installed on jkmac; updating that installation supplies this handler.
+
+
+## FR-026 — pinned managed ChatBridge upgrade (2026-11-03)
+
+The published ChatBridge beta.11 intentionally idled Chrome but did not
+implement `POST /v1/browser/verify`. Newer beta.12 does. An explicit
+Mac Control installer update first attempts the authenticated verify endpoint;
+on 404 only, it invokes `POST /v1/browser/wake` once and then GET `/ready`
+to confirm a live authenticated composer. Passive status never starts Chrome.
+The managed dependency can be upgraded to the pinned beta.12 release with
+SHA256 verification, existing LaunchAgent ownership checks, ChatBridge's own
+upgrade and rollback, and retained prior installer source. No foreign
+ChatBridge service is modified.

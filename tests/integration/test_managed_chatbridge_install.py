@@ -71,6 +71,28 @@ class ManagedChatBridgeTests(unittest.TestCase):
                 installer.install(Path("unused"))
         ensure.assert_called_once_with(cb.DEFAULT_URL, None, install_root=Path("unused").resolve())
 
+    def test_existing_managed_source_is_upgraded_before_maccontrol_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'data').mkdir()
+            (root / 'data/chatbridge_connection.txt').write_text(cb.DEFAULT_URL)
+            (root / 'deps/chatbridge-source').mkdir(parents=True)
+            with patch.object(installer, 'paths', return_value={
+                    'data': root / 'data', 'root': root, 'release': root / 'releases/new',
+                    'current': root / 'current', 'releases': root / 'releases'}), \
+                 patch.object(installer.sys, 'platform', 'darwin'), \
+                 patch.object(cb, 'ensure', return_value={
+                     'url': cb.DEFAULT_URL, 'status': 'compatible'}), \
+                 patch.object(cb, 'upgrade_managed',
+                              return_value={'status':'upgraded'}) as upgrade, \
+                 patch.object(cb, 'browser_login_status', return_value={
+                     'authenticated': True, 'status': 'ready'}), \
+                 patch.object(installer, 'find_uv',
+                              side_effect=RuntimeError('stop-before-activation')):
+                with self.assertRaisesRegex(RuntimeError, 'stop-before-activation'):
+                    installer.install(root, with_chatbridge=True)
+            upgrade.assert_called_once_with(root, url=cb.DEFAULT_URL)
+
     def test_pinned_release_persisted_under_managed_root(self):
         import tarfile
         from tests.integration.test_chatbridge_bootstrap import archive_bytes
@@ -162,6 +184,97 @@ class ManagedChatBridgeTests(unittest.TestCase):
                     installer.purge(root)
                 uninstall_cb.assert_not_called()
                 self.assertTrue((root / ".mac-control-installer-owned").is_file())
+
+
+class ManagedChatBridgeUpgradeTests(unittest.TestCase):
+    def make_source(self, root, version):
+        source = root / 'deps/chatbridge-source'
+        (source / 'scripts').mkdir(parents=True, exist_ok=True)
+        (source / 'scripts/installer.py').write_text('import sys\n')
+        (source / 'pyproject.toml').write_text(
+            'name = "chatbridge-gateway"\nversion = "' + version + '"\n')
+        return source
+
+    def test_upgrades_owned_source_using_pinned_archive_preserving_previous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old = self.make_source(root, '0.2.0b11')
+            pinned = root / 'pinned'
+            (pinned / 'scripts').mkdir(parents=True)
+            (pinned / 'scripts/installer.py').write_text('import sys\n')
+            (pinned / 'pyproject.toml').write_text(
+                'name = "chatbridge-gateway"\nversion = "0.2.0b12"\n')
+            with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'assert_managed_idle'), \
+                 patch.object(cb, 'download_pinned_source', return_value=pinned), \
+                 patch.object(cb.subprocess, 'run',
+                              return_value=SimpleNamespace(returncode=0)) as runner, \
+                 patch.object(cb, 'verify', return_value={'status':'compatible'}):
+                result = cb.upgrade_managed(root, url=cb.DEFAULT_URL)
+            self.assertEqual(result['status'], 'upgraded')
+            self.assertIn('0.2.0b12', (old / 'pyproject.toml').read_text())
+            self.assertIn('upgrade', runner.call_args.args[0])
+            self.assertIn(cb.MANAGED_LABEL, runner.call_args.args[0])
+            backups = list((root / 'deps').glob('chatbridge-source.previous-*'))
+            self.assertEqual(len(backups), 1)
+            self.assertIn('0.2.0b11', (backups[0] / 'pyproject.toml').read_text())
+
+    def test_busy_chatbridge_is_not_interrupted_by_dependency_upgrade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_source(root, '0.2.0b11')
+            with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'download_pinned_source') as download, \
+                 patch.object(cb.subprocess, 'run') as runner, \
+                 patch.object(cb.urllib.request, 'urlopen', return_value=io.BytesIO(
+                    b'{"active":2,"browser":{"active_requests":1}}')):
+                with self.assertRaisesRegex(RuntimeError, 'active'):
+                    cb.upgrade_managed(root, url=cb.DEFAULT_URL)
+            download.assert_not_called()
+            runner.assert_not_called()
+
+    def test_matching_managed_source_skips_download_and_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_source(root, '0.2.0b12')
+            with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'download_pinned_source') as download, \
+                 patch.object(cb.subprocess, 'run') as runner:
+                result = cb.upgrade_managed(root, url=cb.DEFAULT_URL)
+            self.assertEqual(result['status'], 'current')
+            download.assert_not_called()
+            runner.assert_not_called()
+
+    def test_foreign_managed_service_is_never_touched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_source(root, '0.2.0b11')
+            with patch.object(cb, 'verify_managed_install',
+                              side_effect=PermissionError('foreign')), \
+                 patch.object(cb, 'download_pinned_source') as download, \
+                 patch.object(cb.subprocess, 'run') as runner:
+                with self.assertRaises(PermissionError):
+                    cb.upgrade_managed(root, url=cb.DEFAULT_URL)
+            download.assert_not_called()
+            runner.assert_not_called()
+
+    def test_failed_upgrade_preserves_owned_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_source(root, '0.2.0b11')
+            pinned = root / 'pinned'
+            (pinned / 'scripts').mkdir(parents=True)
+            (pinned / 'scripts/installer.py').write_text('import sys\n')
+            (pinned / 'pyproject.toml').write_text(
+                'name = "chatbridge-gateway"\nversion = "0.2.0b12"\n')
+            with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'assert_managed_idle'), \
+                 patch.object(cb, 'download_pinned_source', return_value=pinned), \
+                 patch.object(cb.subprocess, 'run',
+                              return_value=SimpleNamespace(returncode=1)):
+                with self.assertRaises(RuntimeError):
+                    cb.upgrade_managed(root, url=cb.DEFAULT_URL)
+            self.assertIn('0.2.0b11', (source / 'pyproject.toml').read_text())
 
 
 if __name__ == "__main__":
