@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 import plistlib
 import shutil
 import signal
+import stat
 import struct
 import subprocess
 import tarfile
@@ -106,7 +107,43 @@ def extract_release(archive: Path, destination: Path) -> Path:
     return destination
 
 
+def _download_local_rc(target: Path, source_name: str, expected: str) -> None:
+    """Owner-requested E9 local archive: pin and validate before writing any payload."""
+    if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
+        raise RuntimeError('Local GUI RC requires an explicit 64-character SHA256')
+    source = Path(source_name)
+    if not source.is_absolute() or source.is_symlink():
+        raise RuntimeError('Local GUI RC archive must be an absolute regular file, never a symlink')
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+    try:
+        fd = os.open(source, flags)
+    except OSError:
+        raise RuntimeError('Local GUI RC archive is not a readable regular file') from None
+    try:
+        meta = os.fstat(fd)
+        if not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1:
+            raise RuntimeError('Local GUI RC must be a regular single-linked archive')
+        if meta.st_uid != os.getuid() or meta.st_mode & 0o022:
+            raise RuntimeError('Local GUI RC archive ownership or permissions are unsafe')
+        if meta.st_size <= 0 or meta.st_size > MAX_ARCHIVE:
+            raise RuntimeError('Local GUI RC archive size is invalid')
+        with os.fdopen(fd, 'rb', closefd=False) as stream:
+            payload = stream.read(MAX_ARCHIVE + 1)
+        if len(payload) != meta.st_size:
+            raise RuntimeError('Local GUI RC archive changed while reading')
+        if hashlib.sha256(payload).hexdigest() != expected:
+            raise RuntimeError('Local GUI RC SHA256 mismatch; nothing installed')
+        with target.open('xb') as output:
+            output.write(payload)
+    finally:
+        os.close(fd)
+
+
 def _download(target: Path) -> None:
+    source_name = os.environ.get('MACCONTROL_GUI_RC_ARCHIVE', '')
+    if source_name:
+        return _download_local_rc(target, source_name,
+                                  os.environ.get('MACCONTROL_GUI_RC_SHA256', ''))
     if len(RELEASE_SHA256) != 64 or any(c not in '0123456789abcdef' for c in RELEASE_SHA256):
         raise RuntimeError('Prebuilt GUI release is not published: reviewed SHA256 pin is missing')
     digest = hashlib.sha256()

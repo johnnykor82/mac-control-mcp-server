@@ -139,16 +139,8 @@ def _ssh_env():
 
 
 def _ssh_command(host, remote_command=None):
-    """Resolve either of the two existing owner-approved SSH profile stores."""
-    try:
-        return ssh._command(host,remote_command)
-    except PermissionError as exc:
-        if str(exc) != "Host is not approved":
-            raise
-    # Legacy diagnostic hosts are owner-approved in ssh_targets.json.
-    # The existing _argv validates their host, login, port and key.
-    args = legacy_ssh._argv(host,"identity")[:-1]
-    return [*args,remote_command] if remote_command is not None else args
+    """Share one OpenSSH transport with ssh_exec and SSH diagnostics."""
+    return ssh._command(host, remote_command)
 
 
 def _sftp_argv(host):

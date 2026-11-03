@@ -38,7 +38,7 @@ class StdioBoundaryTests(unittest.TestCase):
         for name in LOCAL_BRIDGE_READ_OPERATIONS:
             self.assertTrue(local[name])
             self.assertNotIn(name,web)
-        self.assertEqual(len(stdio),122)
+        self.assertEqual(len(stdio),119)
         legacy = inspect_existing_handlers()
         for n in LOCAL_MUTATION_OPERATIONS:
             self.assertIn(n,legacy)
@@ -48,7 +48,7 @@ class StdioBoundaryTests(unittest.TestCase):
         sources = {n for n in LOCAL_MUTATION_OPERATIONS}
         http = {t.name for t in asyncio.run(make_server().list_tools())}
         for name in ("ssh_exec", "package_install", "git_pull_ff", "git_push",
-                     "git_fetch", "terminal_access_configure", "gui_request_permissions"):
+                     "git_fetch", "gui_request_permissions"):
             self.assertIn(name, sources)
             self.assertNotIn(name, http)
 

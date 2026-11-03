@@ -25,12 +25,14 @@ executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 | Watcher | Provisioned with default ChatBridge setup | Sign in to ChatGPT; register projects and tasks. |
 | Remote MCP | Setup tools are included | Owner GitHub OAuth App, trusted public HTTPS, and real client authorization. |
 | SSH and downstream MCP connections | Client tools are included | Owner-specific hosts, identities, known hosts, and target configuration. |
-| SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Approved managed SSH profile, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
+| SSH/SFTP file transfers | Upload, download, direct text creation and resumable streaming included in local/authorized remote MCP | Working OpenSSH alias/host, remote Python 3 and SFTP; strict CAS with non-cooperating remote writers is not guaranteed. |
 
-The experimental `background_native` module is not enabled by the normal product
-installation. Historical DEV documents describe additional experiments; they do
-not expand the supported default toolset. GUI tools in the standard product use
-the separately installed native helper.
+The experimental `background_native` module remains disabled in a normal install.
+FR-020 ports historical `background_app_*` into the existing signed
+`MacControlMCPServer.app` over its owner-only IPC, rather than requiring a second
+native executable or separate TCC authorization. Staged compilation and
+unit/security checks are complete, but live owner-TCC E2E, native soak and public
+GUI artifact acceptance are still pending. The seven APIs are not yet released.
 
 ## One place for agent-created work
 
@@ -105,9 +107,8 @@ Arbitrary Git commands remain possible through an explicitly enabled terminal.
 
 ## Terminal: one command or an ongoing session
 
-Terminal access starts disabled unless its private policy explicitly enables it.
-`terminal_capabilities` reports that state. `terminal_access_configure` changes the
-opt-in setting; enabling it authorizes shell execution as the Mac service account.
+Terminal access is available to authenticated Mac Control without an extra local
+policy file. `terminal_capabilities` reports shell and tmux readiness.
 A working directory restricts where a command starts, not what the shell can read.
 
 `terminal_exec` runs a bounded noninteractive zsh command and returns captured
@@ -121,12 +122,10 @@ terminal, retain the session and report its current output and exit status.”
 A terminal that still exists is not proof that its task is finished. Commands,
 including those launched from project scripts, run with the account's privileges.
 
-## Approved commands, test runners, and Homebrew
+## Test runners and Homebrew
 
-For narrower automation, `approved_commands` and `execute_approved` use exact
-owner-configured argument lists from `allowed_commands.json`, without a caller
-supplying a shell string. `project_task` provides specific runners for Python
-compilation, pytest, npm tests, and npm builds in an approved project.
+`project_task` provides runners for Python compilation, pytest, npm tests, and
+npm builds. `terminal_exec` handles arbitrary commands.
 Project tests and build scripts can themselves execute code and contact networks.
 
 The package tools report Homebrew availability and installed formulae, start a
@@ -139,25 +138,19 @@ Installing a formula can execute package installation scripts as the Mac user.
 install the formula, wait for the package job result, and recheck availability.”
 A queued package job is a starting state; inspect `package_job_status` for its end.
 
-## SSH profiles, remote commands, and authentication checks
+## Native OpenSSH, remote commands, and authentication checks
 
-There are two SSH use patterns: fixed diagnostics for locally configured targets,
-and managed SSH profiles for remote shell commands and persistent PTY sessions.
-`ssh_targets` and `ssh_diagnostic` use `ssh_targets.json` and named diagnostic
-commands. Managed profile tools inventory SSH aliases and register/approve profiles;
-`ssh_exec` runs a remote command and `ssh_pty_open` opens an interactive session.
-Interactive SSH shares the terminal session tools and requires terminal opt-in.
+All SSH diagnostics, shell commands, PTY sessions and SFTP operations share
+OpenSSH configuration. Existing aliases in `~/.ssh/config`, `Include` files,
+SSH Agent identities, `ProxyJump` and `known_hosts` work without registering
+the host inside Mac Control. Previously saved profiles are optional and still
+supported; they are never necessary to invoke an SSH alias.
 
-SSH uses the owner's identities and strict host-key checking. A new server must
-have a trusted known-host entry; the tools do not make an unknown host trusted
-just because its address appears in a prompt. Remote commands have the remote
-login user's permissions, which may be extensive.
-`ssh_auth_diagnostics` and `ssh_identity_inspect` inspect authentication metadata,
-file names/permissions, and agent/configuration state without reading private keys.
-
-**Example request:** “Use the already approved staging profile to check disk
-space and the service status. Report findings before changing anything.”
-No SSH credentials or production host inventory is supplied by installation.
+`ssh_exec` runs the remote command, `ssh_diagnostic` runs a named read-only
+diagnostic, and `ssh_pty_open` creates a persistent tmux session. SSH uses
+strict host-key verification and the remote user's effective permissions.
+`ssh_auth_diagnostics` and `ssh_identity_inspect` expose metadata, not keys.
+No credentials or host inventory are copied into the installer.
 
 ## Native macOS GUI and screenshots
 
@@ -169,6 +162,13 @@ Its normal prebuilt installation does not require compiling Swift locally.
 
 macOS Accessibility and Screen Recording permissions are separate owner grants.
 `gui_status` reports permission and helper connectivity information;
+If Screen Recording is not granted, the signed GUI helper requests macOS
+authorization and opens a separate native Mac Control dialog with **Open Settings**
+and **Later**. Choosing Open Settings navigates directly to the Screen Recording /
+Screen & System Audio Recording pane. It never bypasses TCC or marks permission
+as granted until macOS confirms it. The settings dialog runs in a separate
+foreground helper process so the MCP IPC server stays responsive.
+
 `gui_request_permissions` requests the system's permission flow. A prompt may not
 appear, and an agent cannot grant TCC permissions on the owner's behalf.
 Screen captures and Accessibility content may expose any visible private data.
@@ -286,7 +286,7 @@ check actual results, account access, and permissions before depending on a work
 
 ## SSH/SFTP transfer support
 
-The owner-approved managed SSH profiles support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
+Native OpenSSH hosts and aliases support direct MCP text writes, SFTP upload/download and 64-KiB streaming blocks. A configured policy can raise chunk size to 256 KiB and total size to 1 GiB. Transfers stage content outside the destination and verify SHA-256 before publication. Overwrites recheck the destination SHA-256 immediately before atomic rename without remote locks; unrelated writers can still race. A remote Python 3 interpreter is required. See [SSH/SFTP specification](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Independent user workspace (beta.22)
 

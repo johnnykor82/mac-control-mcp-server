@@ -36,5 +36,5 @@ class ProjectTaskEnvironmentTests(unittest.TestCase):
             registry = Registry()
             system_ops.register(registry)
             with patch.object(system_ops, "roots", return_value={"demo": Path(temporary)}):
-                with self.assertRaisesRegex(ValueError, "execute_approved"):
+                with self.assertRaisesRegex(ValueError, "terminal_exec"):
                     registry.tools["project_task"]("demo", "pytest")

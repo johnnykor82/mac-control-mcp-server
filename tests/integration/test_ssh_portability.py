@@ -55,7 +55,7 @@ class SSHPortabilityTests(unittest.TestCase):
         self.assertEqual(result["ssh_entries"][0]["name"], "id_ed25519.pub")
         self.assertEqual(result["home"], str(self.home))
 
-    def test_approved_name_uses_only_validated_profile_for_effective_configuration(self):
+    def test_existing_openssh_alias_uses_native_effective_configuration(self):
         self.run.return_value = subprocess.CompletedProcess([], 0,
             "hostname server.example.test\nuser alice\nport 2222\n"
             "identityfile /owner/key\nproxycommand fake-secret-command\n", "")
@@ -63,9 +63,9 @@ class SSHPortabilityTests(unittest.TestCase):
             result = self.tools["ssh_identity_inspect"]("staging")
         validate.assert_called_once_with("staging", "identity")
         argv = self.run.call_args.args[0]
-        self.assertEqual(argv[:4], ["/usr/bin/ssh", "-G", "-F", "/dev/null"])
-        self.assertEqual(argv[-2:], ["--", "alice@server.example.test"])
-        self.assertEqual(argv[argv.index("-p") + 1], "2222")
+        self.assertEqual(argv[:2], ["/usr/bin/ssh", "-G"])
+        self.assertEqual(argv[-2:], ["--", "staging"])
+        self.assertNotIn("-F", argv)
         self.assertIn("PermitLocalCommand=no", argv)
         self.assertNotIn("id -un", argv)
         self.assertNotIn(str(self.home / ".ssh/config"), argv)
@@ -75,31 +75,38 @@ class SSHPortabilityTests(unittest.TestCase):
         self.assertEqual(result["effective_ssh"]["hostname"], ["server.example.test"])
         self.assertNotIn("proxycommand", result["effective_ssh"])
 
-    def test_unknown_host_or_arbitrary_destination_refuses_before_subprocess(self):
-        for host in ("unknown", "root@server.example.test", "-oProxyCommand=echo", "staging;echo unsafe"):
+    def test_unregistered_alias_is_accepted_but_option_injection_is_not(self):
+        self.run.return_value = subprocess.CompletedProcess([], 0,
+            "hostname other.example.test\nuser alice\nport 22\n", "")
+        self.assertEqual(self.tools["ssh_identity_inspect"]("unregistered")["effective_ssh_exit"], 0)
+        self.assertEqual(self.run.call_args.args[0][-1], "unregistered")
+        self.run.reset_mock()
+        for host in ("root@server.example.test", "-oProxyCommand=echo",
+                     "staging;echo unsafe", ""):
             with self.subTest(host=host):
-                with self.assertRaisesRegex(ValueError, "allowlist"):
+                if not host:
                     self.tools["ssh_identity_inspect"](host)
+                else:
+                    with self.assertRaisesRegex(ValueError, "Invalid host label"):
+                        self.tools["ssh_identity_inspect"](host)
         self.run.assert_not_called()
 
-    def test_invalid_approved_profile_refuses_before_subprocess(self):
+    def test_invalid_saved_profile_refuses_before_subprocess(self):
         self.profiles.write_text(json.dumps({"hosts": {"staging": {
-            "host": "server.example.test", "user": "alice", "port": 0,
+            "kind": "direct", "host": "server.example.test", "user": "alice", "port": 0,
         }}}))
-        with self.assertRaisesRegex(ValueError, "Invalid host"):
-            self.tools["ssh_identity_inspect"]("staging")
+        with patch.object(ssh_manage_ops, "CONFIG", self.profiles):
+            with self.assertRaisesRegex(ValueError, "Invalid saved SSH host"):
+                self.tools["ssh_identity_inspect"]("staging")
         self.run.assert_not_called()
 
-    def test_packaged_interactive_tools_reach_terminal_policy_gate(self):
-        # A top-level import cannot accidentally make the old broken code pass.
-        with patch.dict("sys.modules", {"command_plugins": None}), \
-             patch.object(command_plugins, "_require", side_effect=PermissionError("fixture policy gate")) as require, \
+    def test_interactive_ssh_only_needs_tmux_not_a_local_policy(self):
+        with patch.object(command_plugins, "_tmux_available", return_value=None), \
              patch.object(command_plugins, "_tmux", side_effect=AssertionError("Unexpected tmux")) as tmux:
             for tool in ("ssh_open", "ssh_pty_open"):
                 with self.subTest(tool=tool):
-                    with self.assertRaisesRegex(PermissionError, "fixture policy gate"):
+                    with self.assertRaisesRegex(RuntimeError, "tmux"):
                         self.tools[tool]("staging")
-            self.assertEqual(require.call_count, 2)
             tmux.assert_not_called()
         self.run.assert_not_called()
 

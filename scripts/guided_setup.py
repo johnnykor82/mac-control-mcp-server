@@ -65,7 +65,7 @@ def _gui_call(root, operation):
             "try:\n    v=_call(" + repr(operation) + ", timeout=90)\n"
             "except RuntimeError as error:\n    print(json.dumps({'error':str(error)}))\n"
             "else:\n    print(json.dumps({k:bool(v.get(k)) for k in "
-            "('accessibility_trusted','screen_capture_trusted')}))")
+            "('accessibility_trusted','screen_capture_trusted','settings_assistant_launched')}))")
     result = subprocess.run([str(python), "-c", code], env=env, text=True,
                             capture_output=True, check=True, timeout=100)
     response = json.loads(result.stdout)
@@ -99,6 +99,7 @@ def gui_permissions(root, *, input_fn=input, language=None):
     )
     requested = set()
     legacy_helper = False
+    assistant_launched = False
     while True:
         if state.get("accessibility_trusted") and state.get("screen_capture_trusted"):
             return True
@@ -106,13 +107,15 @@ def gui_permissions(root, *, input_fn=input, language=None):
         if key not in requested and not legacy_helper:
             print(tr("Mac Control will request " + label + " from macOS. A system dialog may not appear.", "Mac Control отправит macOS запрос на " + label + ". Системное окно может не появиться."))
             try:
-                _gui_call(root, operation)
+                response = _gui_call(root, operation)
+                assistant_launched = bool(response.get("settings_assistant_launched"))
             except RuntimeError as error:
                 if str(error) != "Unknown GUI operation":
                     raise
                 # Older deployed helpers only support the combined request.
                 print(tr("The installed older GUI helper supports only a combined request for both permissions.", "Установлен прежний GUI helper: он поддерживает только общий запрос двух разрешений."))
-                _gui_call(root, "request_permissions")
+                response = _gui_call(root, "request_permissions")
+                assistant_launched = bool(response.get("settings_assistant_launched"))
                 legacy_helper = True
             requested.add(key)
             state = _gui_call(root, "status")
@@ -121,13 +124,14 @@ def gui_permissions(root, *, input_fn=input, language=None):
         print(tr(label + " permission is not yet confirmed for MacControlMCPServer.app.", "Разрешение " + label + " пока не подтверждено для MacControlMCPServer.app."))
         print(tr("Enable Mac Control MCP Server in System Settings → Privacy & Security → " + label + ".", "Включите Mac Control MCP Server в Системные настройки → Конфиденциальность и безопасность → " + label + "."))
         print(tr("If the app is missing, click + and select ~/MacControlMCP/apps/MacControlMCPServer.app.", "Если приложения нет в списке, нажмите + и выберите ~/MacControlMCP/apps/MacControlMCPServer.app."))
-        try:
-            opened = subprocess.run(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?" + pane],
-                                    check=False, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if opened.returncode:
+        if not assistant_launched:
+            try:
+                opened = subprocess.run(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?" + pane],
+                                        check=False, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if opened.returncode:
+                    print(tr("Open System Settings → Privacy & Security → " + label + " manually.", "Откройте вручную Системные настройки → Конфиденциальность и безопасность → " + label))
+            except (OSError, subprocess.SubprocessError):
                 print(tr("Open System Settings → Privacy & Security → " + label + " manually.", "Откройте вручную Системные настройки → Конфиденциальность и безопасность → " + label))
-        except (OSError, subprocess.SubprocessError):
-            print(tr("Open System Settings → Privacy & Security → " + label + " manually.", "Откройте вручную Системные настройки → Конфиденциальность и безопасность → " + label))
         answer = input_fn(tr("After granting access, press Enter to check; S to defer: ", "После выдачи прав нажмите Enter для проверки; S — отложить: ")).strip().lower()
         if answer in ("s", "skip", "q"):
             return False
@@ -184,7 +188,10 @@ def setup(root, *, input_fn=input, interactive=None, with_gui=True, language=Non
 def _setup_locked(root, *, input_fn=input, with_gui=True, language=None):
     language = language or detect_language()
     tr = lambda en, ru: text(language, en, ru)
-    if with_gui and not gui_permissions(root, input_fn=input_fn, language=language):
+    if not with_gui:
+        return {"status": "setup_incomplete", "reason": "gui_explicitly_disabled",
+                "next": "Enable GUI and grant Accessibility / Screen Recording in --setup"}
+    if not gui_permissions(root, input_fn=input_fn, language=language):
         return {"status": "pending_gui_permissions", "next": "Grant macOS permissions and run --setup"}
     network = guided_network(root, network=True, input_fn=input_fn, language=language)
     if network.get("status") != "ready_for_oauth":

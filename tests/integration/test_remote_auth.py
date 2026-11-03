@@ -67,7 +67,7 @@ class RemoteAuthTests(unittest.TestCase):
 
     def test_local_http_remains_read_only(self):
         web = asyncio.run(make_server().list_tools())
-        self.assertEqual(len(web), 20)
+        self.assertEqual(len(web), 19)
         self.assertNotIn("terminal_exec", {tool.name for tool in web})
 
 

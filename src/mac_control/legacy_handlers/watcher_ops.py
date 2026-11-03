@@ -22,7 +22,13 @@ VALID_NAME=re.compile(r"^[a-z0-9][a-z0-9_-]{1,55}$")
 
 def _name(s):
     if not isinstance(s,str) or not VALID_NAME.fullmatch(s):
-        raise ValueError("Invalid ID")
+        raise ValueError(
+            "WATCHER_ID_INVALID: project_id/task_id must be 2–56 characters: "
+            "lowercase letters, digits, underscore or hyphen; first character "
+            "must be a lowercase letter or digit. Use watcher_status to inspect "
+            "existing project IDs or watcher_guide for registration rules. "
+            "No Watcher command was executed."
+        )
     return s
 
 def _cli(*args,timeout=45):

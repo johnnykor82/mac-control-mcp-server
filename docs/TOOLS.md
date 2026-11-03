@@ -2,7 +2,7 @@
 
 [Русская версия](TOOLS.ru.md) · [Installation](../README.md) · [Agent workspace convention](../AGENT_WORKSPACE_POLICY.md)
 
-Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **129 tool names** in the full supported configuration: 109 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
+Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **126 tool names** in the full supported configuration: 106 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
 
 The catalog describes the available product surface, not a promise that every tool works immediately after installation. Installed feature flags, local configuration, dependency availability, macOS permissions, and the selected MCP connection determine which tools are advertised and usable. The experimental background-native module is excluded from this count.
 
@@ -67,29 +67,26 @@ The selected project alias must point to the repository root itself. For example
 | `git_pull_ff` | W | Pull the current branch from `origin` only when a fast-forward is possible. | `project="repo"` |
 | `git_push` | W | Push the current branch to the corresponding branch on `origin`. | `project="repo"`; use only when the owner requested publication. |
 
-## Machine diagnostics and approved jobs — 8 tools
+## Machine diagnostics and project jobs — 6 tools
 
-Machine diagnostics need no ChatGPT browser login. Approved commands come from owner-managed `allowed_commands.json`; an empty list means no such commands are configured. `project_task` may execute repository test/build code. Service inspection/restart uses a separate local label allowlist; the legacy default label may not describe this installation, so use `mcp_diagnostics` for Mac Control itself.
+Machine diagnostics need no ChatGPT browser login. `project_task` may execute repository test/build code. Service inspection/restart uses a separate local label allowlist; the legacy default label may not describe this installation, so use `mcp_diagnostics` for Mac Control itself.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
 | `machine_health` | R | Report disk capacity, uptime and memory pressure. | No arguments. |
 | `network_listeners` | R | List listening TCP processes and ports without making network requests. | `limit=50` |
 | `local_http_probe` | R | Probe an approved loopback HTTP port with GET/HEAD, without credentials or redirects. | `port=8000, path="/health", method="GET"` |
-| `approved_commands` | R | List IDs for exact command argument lists configured locally by the owner. | No arguments. |
-| `execute_approved` | W | Run one configured command ID in an approved project; no caller-supplied shell or extra arguments. | `project="repo", command_id="lint"` after that ID is configured. |
 | `project_task` | W | Run `python_compile`, `pytest`, `npm_test` or `npm_build`; pytest uses the project's `.venv/bin/python`. | `project="workspace", task="python_compile", path="projects/demo/main.py"` |
 | `launchd_status` | R | Inspect a locally permitted user LaunchAgent label. | `label=owner_approved_label` |
 | `launchd_restart` | W | Restart an explicitly allowlisted user LaunchAgent. Use the dedicated maintenance restart for Mac Control. | `label=owner_approved_label` |
 
-## Local shell and persistent terminals — 9 tools
+## Local shell and persistent terminals — 8 tools
 
-Shell access is disabled until explicitly enabled through the terminal policy. Noninteractive commands run as the service user; choosing a project is a working-directory choice, not a sandbox. Interactive sessions require `tmux`. Commands and keystrokes can have broad effects, so supply them only for the owner's authorized task.
+Shell access is available through authenticated Mac Control without additional local policy. Noninteractive commands run as the service user; choosing a project is a working-directory choice, not a sandbox. Interactive sessions require `tmux`. Commands and keystrokes can have broad effects, so supply them only for the owner's authorized task.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `terminal_capabilities` | R | Inspect shell availability, terminal policy and interactive-session prerequisites. | No arguments. |
-| `terminal_access_configure` | W | Explicitly enable or disable shell/interactive terminal access. | `enabled=true` only when the owner requests shell access. |
+| `terminal_capabilities` | R | Inspect shell availability and interactive-session prerequisites. | No arguments. |
 | `terminal_exec` | W | Run a bounded noninteractive zsh command in an approved project. | `command="pwd", project="workspace", timeout_seconds=25` |
 | `terminal_open` | W | Create a persistent tmux terminal and return its session ID. | `project="workspace", width=120, height=36` |
 | `terminal_list` | R | List active managed terminal sessions. | No arguments. |
@@ -135,7 +132,13 @@ SSH requires an approved host/profile, existing key or agent authentication, and
 | `ssh_transfer_cancel` | W | Cancel and clean owned staging files. | `transfer_id=returned_transfer_id` |
 
 
-SFTP accepts both owner-approved `ssh_managed_hosts.json` profiles (including SSH config aliases) and the older `ssh_targets.json` diagnostic profiles, without rewriting either file. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
+The ssh_exec command parameter supports up to **65536 UTF-8 bytes** (including multiline
+commands and heredocs). Empty, invalid or oversized arguments fail **before SSH**
+with a specific error and an actionable alternative rather than the ambiguous
+"Invalid remote command". For larger generated source files, prefer ssh_write_text
+(up to 512 KiB) and then a short ssh_exec to run tests or compile.
+
+SFTP uses the standard OpenSSH configuration and aliases directly, like `ssh_exec`; no Mac Control host registration is needed. Previously saved profiles remain optional. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Native macOS app and desktop control — 13 tools
 
@@ -159,12 +162,12 @@ This module requires the installed GUI helper and the relevant macOS Screen Reco
 
 ## Downstream MCP services — 4 tools
 
-Configure approved targets locally in `mcp_targets.json`. Each downstream server has its own authentication, permissions and tool schema. Read discovery first; a tool can be called through the read wrapper only if the downstream metadata explicitly marks it read-only. Optional media arguments use the configured, scoped media mechanism rather than arbitrary file access.
+Mac Control discovers MCP connections from Claude Desktop, Claude CLI, Cursor and VS Code. Connect directly by HTTP(S) URL or one-off stdio `target_spec`; `mcp_targets.json` remains optional. Each server has its own authentication and tool schema. Read discovery first; a tool can be called through the read wrapper only if the downstream metadata explicitly marks it read-only. Optional media arguments use the configured, scoped media mechanism rather than arbitrary file access.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `mcp_targets` | R | List configured downstream MCP target names and transport types. | No arguments. |
-| `mcp_bridge_list` | R | Discover a target's tool names, schemas and read-only declarations. | `target="demo"` after local target configuration. |
+| `mcp_targets` | R | List discovered MCP connections and transport types without credentials. | No arguments. |
+| `mcp_bridge_list` | R | Discover tool names and schemas by URL, existing name or stdio spec. | `target="https://server.example/mcp"` or `target_spec={"type":"stdio",...}`. |
 | `mcp_bridge_read` | R | Invoke a downstream tool explicitly declared read-only. | `target="demo", tool=discovered_read_tool, arguments={}` |
 | `mcp_bridge_call` | W | Invoke an approved downstream tool through the write-capable wrapper. | `target="demo", tool=discovered_tool, arguments=validated_arguments` |
 
@@ -255,8 +258,12 @@ Approved source reads are `scripts/dev_mcp_server.py`, `scripts/setup_remote_ser
 
 ## Choosing the right workflow
 
-For document/code work, use the filesystem and Git families, then a project test/build when requested. Use a terminal only when structured tools do not cover the task and shell access is authorized. For another machine, inspect SSH profiles and diagnostics before remote commands.
+For document/code work, use the filesystem and Git families, then a project test/build when requested. Use a terminal only when structured tools do not cover the task and shell access is authorized. For another machine, inspect OpenSSH aliases and diagnostics before remote commands.
 
 For native application work, check GUI status and inspect the actual window/tree before input. For ordinary websites, use an independent background-browser session. For ChatGPT conversations, use the ChatBridge compatibility family; for persistent handoffs, use Watcher projects and reports. These are distinct session types and their IDs/capabilities are not interchangeable.
 
 When an operation reports an uncertain outcome, inspect its durable request/job/event state before repeating a modifying action. SHA256 conflicts require rereading and reconciling the current file. A missing feature, target alias, permission or login requires that prerequisite to be completed; registering a tool name does not bypass it.
+
+## Guided argument errors / Понятные ошибки аргументов
+
+See [error handling and recovery](TOOL_ARGUMENT_ERRORS.md): validation vs runtime failures, safe alternatives, and unchanged policy enforcement.

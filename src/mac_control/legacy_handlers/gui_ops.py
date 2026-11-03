@@ -34,7 +34,7 @@ def _call(op, timeout=20, **options):
         raise _gui_ipc.GUIIPCError(
             "helper_not_running", "GUI helper not installed", endpoint=BASE / "run" / "maccontrol-gui.sock")
     req = {"op": op, **options}
-    if len(json.dumps(req, ensure_ascii=False)) > MAX_ARGS:
+    if len(json.dumps(req, ensure_ascii=False).encode("utf-8")) > (7900 if op == "native_backend" else 3000):
         raise ValueError("GUI arguments too long")
     endpoint = BASE / "run" / "maccontrol-gui.sock"
     # Auto-reconnect only BEFORE dispatch. Never replay writes after sendall().
@@ -182,7 +182,10 @@ def register(mcp):
                   end_x: float = 0, end_y: float = 0) -> dict:
         """Mouse move, left/right/double click, or drag in global display coordinates."""
         if action not in ("move","left_click","double_click","right_click","drag"):
-            raise ValueError("Unsupported mouse action")
+            raise ValueError(
+                "GUI_MOUSE_ACTION_INVALID: action must be move, left_click, "
+                "double_click, right_click or drag. No mouse event was sent."
+            )
         return _call("mouse",action=action,x=float(x),y=float(y),
                      end_x=float(end_x),end_y=float(end_y))
 

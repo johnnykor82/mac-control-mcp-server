@@ -6,7 +6,7 @@
 
 Mac Control MCP Server is an experimental Model Context Protocol (MCP) server designed for autonomous tasks. It offers powerful control of the owner's Mac, not a restrictive sandbox.
 
-> **Beta release.** The owner confirmed installation and connection on another Mac. Automated Watcher migration tests pass; real notification delivery after upgrading remains a separate acceptance step. This is experimental software.
+> **Beta / E9 acceptance.** On the owner's existing Mac, managed ChatBridge login, Watcher report delivery, public GitHub OAuth, GUI TCC permissions, signed GUI replacement, update and rollback were verified. An independent fresh-Mac installation and CI run for the current unpublished commit are still release gates. This is experimental software.
 
 
 
@@ -40,9 +40,8 @@ Example requests after configuring the relevant modules:
 - **Delayed checks:** “In 15 minutes, check the result and report in this conversation using Watcher.”
 - **Diagnostics:** “Show recent tool failures and Mac Control service status.”
 
-The full configuration with GUI, ChatBridge and Watcher exposes **129 MCP tools**.
-Registration does not replace setup: SSH needs profiles, terminal requires opt-in,
-GUI needs macOS permissions and Watcher needs registered tasks.
+The full configuration with GUI, ChatBridge and Watcher exposes **126 MCP tools**.
+Tool registration is complete by default: SSH uses existing OpenSSH aliases, terminal needs no secondary policy, GUI needs macOS permissions, and Watcher requires authorized ChatBridge. Run `maccontrol doctor` to see readiness.
 [Full English tool catalog](docs/TOOLS.md) · [Каталог на русском](docs/TOOLS.ru.md).
 
 ## Mac Control modules
@@ -51,14 +50,14 @@ GUI needs macOS permissions and Watcher needs registered tasks.
 |---|---|---|
 | **Files and projects** | Directory listing, search, reads, writes, SHA256 checks, backups and recovery. | Workspace or explicitly approved project roots. |
 | **Git** | Status, history, diffs, branches, staging, commits, fetch/pull/push. | An approved project repository and owner credentials for remote Git. |
-| **Terminal** | Persistent PTY sessions, input/output, resize and close. | Explicit local terminal policy opt-in and tmux. |
-| **SSH** | Approved SSH profiles, remote commands, PTYs, SFTP upload/download, UTF-8 write and resumable 100-MiB+ transfers. | Approved profiles, owner keys, known_hosts and applicable policy. |
+| **Terminal** | Persistent PTY sessions, input/output, resize and close. | Installed tmux (provisioned by the standard installer). |
+| **SSH** | OpenSSH aliases, remote commands, PTYs, SFTP upload/download, UTF-8 write and resumable 100-MiB+ transfers. | Existing OpenSSH config, SSH Agent or keys, known_hosts. |
 | **GUI helper** | Windows/displays, Accessibility tree, screenshots, mouse, keyboard and Unicode input. | Installed app and owner-approved Accessibility/Screen Recording. |
 | **ChatBridge browser** | Background sessions, navigation, element actions, DOM snapshots, screenshots and session lifecycle. | Separate ChatBridge and Google Chrome; the owner signs in to sites. |
 | **ChatGPT conversations** | Create, switch, read, send and wait for responses through the browser adapter. | ChatGPT login in ChatBridge's profile and a working web integration. |
 | **Watcher** | Project coordination, executor reports, continuation, delayed checks and delivery acknowledgements. | ChatBridge, exact registered conversations and a running Mac. |
-| **System, services and packages** | Machine/port health, approved commands, service checks/restart and controlled package installation. | Owner-managed allowlists; a package manager when required by the selected action. |
-| **MCP bridge** | Access separately configured downstream MCP servers. | Target configuration, dependencies and authentication. |
+| **System, services and packages** | Machine/port health, terminal commands, service checks/restart and controlled package installation. | OS account privileges; package manager if needed. |
+| **MCP bridge** | Connect discovered or explicitly supplied MCP servers. | Existing client configuration or direct HTTP(S)/stdio endpoint. |
 | **Audit and maintenance** | Invocation metadata, audit search, service logs, diagnostics and owned server restart. | Installed Mac Control; audit omits message and file contents. |
 | **Installer and remote access** | Isolated Python, prebuilt GUI, updates/rollback, GitHub OAuth, HTTPS and Tailscale Funnel. | Owner action for accounts, permissions and public HTTPS publication. |
 
@@ -202,6 +201,9 @@ helpers from the pinned release and verifies SHA256 before extraction. Normal
 installation does not compile helpers or require Apple Command Line Tools.
 The binaries are ad hoc signed, without a Developer ID signature or Apple
 notarization; the signature verifies integrity, not publisher identity.
+The E9 signed GUI RC was verified with an explicitly pinned local archive;
+the default installer still downloads the older pinned beta.11 helper.
+Release-channel binary parity must be resolved before public RC publication.
 Manual developer builds with `scripts/build_mac_control_gui.py` or
 `scripts/package_gui_release.py` still require Apple developer tools and Swift.
 
@@ -305,8 +307,10 @@ published routes. A public probe follows. VPN, WireGuard and Exit Node routing
 are not changed.
 
 A passing probe alone does not verify real OAuth or ChatGPT connectivity.
-The owner confirmed a base connection on another Mac; each installation still
-needs its own real login and tool test, including Watcher delivery after upgrade.
+The owner's E9 installation passed an explicit public OAuth consent and authenticated
+MCP system_info request plus a real managed ChatBridge/Watcher delivery.
+Each new Mac still requires its own live consent and functional acceptance;
+an independent clean-Mac installation is not yet verified.
 See [OAuth setup](docs/GITHUB_OAUTH_SETUP.md), [network setup](docs/REMOTE_ACCESS_GUIDE.md) and [agent instructions](AGENT_INSTALL.md).
 
 ## Security, status and license

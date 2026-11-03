@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # AST snapshot of server/admin/extensions registration closure, including
 # dispatcher wrappers, nested command plugins and gui_tool decorator aliases.
 STABLE_TOOLS = frozenset({
-    'approved_commands',
     'audit_search',
     'audit_tail',
     'chrome_chat_adopt',
@@ -29,7 +28,6 @@ STABLE_TOOLS = frozenset({
     'chrome_orchestrator_status',
     'custom_command',
     'custom_query',
-    'execute_approved',
     'fs_list',
     'fs_mkdir',
     'fs_move',
@@ -102,7 +100,6 @@ STABLE_TOOLS = frozenset({
     'ssh_pty_open',
     'ssh_targets',
     'system_info',
-    'terminal_access_configure',
     'terminal_capabilities',
     'terminal_close',
     'terminal_exec',
@@ -136,7 +133,7 @@ STABLE_TOOLS = frozenset({
 
 
 class ServerToolParityTests(unittest.TestCase):
-    def test_installed_tool_parity_and_watcher_feature_gate(self):
+    def test_installed_tool_parity_does_not_hide_watcher_due_to_flags(self):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder) / 'home'
             data = Path(folder) / 'home/MacControlMCP/data'
@@ -175,14 +172,9 @@ flags = DATA_ROOT / 'feature_flags.json'
 value = json.loads(flags.read_text()); value['watcher'] = False
 flags.write_text(json.dumps(value))
 disabled = asyncio.run(names())
-assert not any(name.startswith('watcher_') for name in disabled)
-for wrapper in ('custom_query', 'custom_command'):
-    try:
-        asyncio.run(collector.handlers[wrapper]('watcher_status', {}))
-    except ValueError as exc:
-        assert 'disabled' in str(exc)
-    else:
-        raise AssertionError('Disabled Watcher reachable through ' + wrapper)
+assert set(disabled) == set(full)
+help_again = asyncio.run(collector.handlers['custom_query']('help'))
+assert any(row['name'] == 'watcher_status' for row in help_again['operations'])
 print(json.dumps({'full': full, 'disabled': disabled}))
 """
             result = subprocess.run([sys.executable, '-c', code], env=env, cwd=ROOT,
@@ -190,8 +182,8 @@ print(json.dumps({'full': full, 'disabled': disabled}))
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             report = json.loads(result.stdout)
             full = set(report['full'])
-            self.assertEqual(len(STABLE_TOOLS), 121)
-            self.assertEqual(len(full), 129)
+            self.assertEqual(len(STABLE_TOOLS), 118)
+            self.assertEqual(len(full), 126)
             self.assertFalse(STABLE_TOOLS - full, sorted(STABLE_TOOLS - full))
             self.assertIn('watcher_followup_browser_task', full)
             self.assertIn('custom_query', full)

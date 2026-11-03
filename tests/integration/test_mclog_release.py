@@ -1,4 +1,4 @@
-"""mclog is packaged with a metadata-only audit pipeline."""
+"""mclog is packaged with the owner-only complete invocation audit pipeline."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +37,7 @@ class MclogReleaseTests(unittest.TestCase):
             self.assertTrue((target / "scripts/mclog.py").is_file())
             self.assertTrue((target / "bin/mclog").stat().st_mode & 0o111)
 
-    def test_no_arguments_or_results_in_audit_records(self):
+    def test_arguments_preserved_but_results_never_logged(self):
         with tempfile.TemporaryDirectory() as temp:
             audit = AuditMiddleware(Path(temp) / "logs")
             redaction_marker = "example_sensitive_value_not_for_logs"
@@ -55,11 +55,104 @@ class MclogReleaseTests(unittest.TestCase):
             self.assertEqual(lines[1]["status"], "ok")
             self.assertEqual(logfile.stat().st_mode & 0o777, 0o600)
             self.assertEqual(logfile.parent.stat().st_mode & 0o777, 0o700)
-            self.assertNotIn(redaction_marker, logfile.read_text())
-            self.assertNotIn("arguments", logfile.read_text())
+            self.assertEqual(lines[0]["arguments"]["command"], f"echo {redaction_marker}")
+            self.assertNotIn("content", lines[1])
             entries, errors = mclog.load(logfile.parent)
             self.assertEqual((len(entries), errors), (1, 0))
             self.assertEqual(entries[0]["status"], "ok")
+
+    def test_argument_info_is_bounded_redacted_and_useful(self):
+        from mac_control.audit_middleware import safe_argument_info
+        marker = 'this_is_a_sensitive_command_unique_83944'
+        payload = {'command': 'echo ' + marker, 'project': 'workspace',
+                   'timeout_seconds': 25, 'api_key': 'ghp_secret',
+                   'data': {'credentials': marker}, 'path': '/tmp/fictional-secret-file'}
+        info = safe_argument_info(payload)
+        encoded = json.dumps(info)
+        self.assertIn('workspace', encoded)
+        self.assertIn('timeout_seconds', encoded)
+        self.assertIn('command', encoded)
+        self.assertNotIn(marker, encoded)
+        self.assertNotIn('ghp_secret', encoded)
+        self.assertNotIn('/tmp/fictional-secret-file', encoded)
+        self.assertLessEqual(len(encoded), 500)
+        self.assertEqual(safe_argument_info({}), {})
+        self.assertEqual(safe_argument_info(None), {})
+        self.assertEqual(safe_argument_info({"action":"private_command_94289"})["action"],
+                         "[строка: 21 симв.]")
+        self.assertEqual(safe_argument_info({"mode":"background"})["mode"], "background")
+        self.assertEqual(safe_argument_info({"operation":"terminal_exec"})["operation"], "terminal_exec")
+        self.assertEqual(safe_argument_info({"api_key":"confidential"})["api_key"], "[скрыто]")
+        self.assertEqual(safe_argument_info({"user_id":12345})["user_id"], "[число]")
+        self.assertEqual(safe_argument_info({"timeout_seconds":25})["timeout_seconds"], 25)
+        self.assertEqual(safe_argument_info({"timeout_seconds":10**1000})["timeout_seconds"],
+                         "[число]")
+        self.assertEqual(safe_argument_info({"data":{"untrusted_secret":"PRIVATE"}})["data"],
+                         "[объект: 1 полей]")
+
+    def test_audit_persists_only_safe_argument_info(self):
+        with tempfile.TemporaryDirectory() as temp:
+            audit = AuditMiddleware(Path(temp) / "logs")
+            marker = "sensitive_content_marker_not_to_log_9323"
+            ctx = SimpleNamespace(message=SimpleNamespace(
+                name="terminal_exec", arguments={"command": "printf " + marker,
+                    "project": "workspace", "timeout_seconds": 20}
+            ))
+            async def run(_):
+                return SimpleNamespace(is_error=False)
+            asyncio.run(audit.on_call_tool(ctx, run))
+            raw=(Path(temp)/"logs/audit.jsonl").read_text()
+            rows=[json.loads(x) for x in raw.splitlines()]
+            self.assertIn(marker, raw)
+            self.assertEqual(rows[0]["arguments"]["command"], "printf " + marker)
+            self.assertIn("argument_info", rows[0])
+            self.assertEqual(rows[0]["argument_info"]["project"], "workspace")
+            self.assertEqual(rows[0]["argument_info"]["timeout_seconds"], 20)
+
+    def test_chatgpt_meta_conversation_ref_is_stable(self):
+        from mac_control.audit_middleware import conversation_ref
+        meta={"openai/session":"opaque-conversation-handle-111"}
+        a=conversation_ref(meta)
+        self.assertRegex(a, r"^[0-9a-f]{10}$")
+        self.assertEqual(a,conversation_ref(meta))
+        self.assertNotEqual(a,conversation_ref({"openai/session":"other-opaque-session"}))
+        for bad in (None,{},{"openai/session":None},{"openai/session":123},
+                    {"openai/session":""},{"openai/session":"x"*1000}):
+            self.assertIsNone(conversation_ref(bad))
+
+    def test_middleware_records_session_without_original_conversation_id(self):
+        with tempfile.TemporaryDirectory() as temp:
+            audit=AuditMiddleware(Path(temp)/"logs")
+            session="opaque-conversation-session-123"
+            context=SimpleNamespace(message=SimpleNamespace(
+                name="terminal_exec", meta={"openai/session":session},
+                arguments={"command":"echo hello", "project":"workspace"}))
+            async def run(_): return SimpleNamespace(is_error=False)
+            asyncio.run(audit.on_call_tool(context,run))
+            rows=[json.loads(x) for x in (Path(temp)/"logs/audit.jsonl").read_text().splitlines()]
+            self.assertEqual(rows[0]["arguments"]["command"],"echo hello")
+            self.assertEqual(rows[0]["chat_ref"],rows[0]["chat_ref"][:10])
+            self.assertNotIn(session,json.dumps(rows))
+
+    def test_oversized_nested_content_and_non_json_number_are_bounded(self):
+        from mac_control.audit_middleware import capture_arguments
+        enormous=10**10000
+        payload={"nested":{"items":["x"*24001], "huge":enormous}}
+        snap=capture_arguments(payload)
+        encoded=json.dumps(snap)
+        self.assertLess(len(encoded),30000)
+        self.assertEqual(snap["nested"]["huge"]["reason"],"integer")
+        self.assertEqual(snap["nested"]["items"][0]["length"],24001)
+
+    def test_large_arguments_are_bounded_and_digest_preserved(self):
+        from mac_control.audit_middleware import capture_arguments
+        text="Z" * 40000
+        data=capture_arguments({"operation":"terminal_exec","arguments":{"command":text}})
+        self.assertEqual(data["operation"],"terminal_exec")
+        shortened=data["arguments"]["command"]
+        self.assertTrue(shortened["truncated"])
+        self.assertEqual(shortened["length"],len(text))
+        self.assertEqual(len(shortened["sha256"]),64)
 
     def test_exceptions_logged_without_contents_and_raised(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -74,7 +167,7 @@ class MclogReleaseTests(unittest.TestCase):
             raw = (Path(temp) / "logs/audit.jsonl").read_text()
             self.assertIn('"status": "exception"', raw)
             self.assertNotIn("SECRET DO NOT LOG", raw)
-            self.assertNotIn("private", raw)
+            self.assertEqual(json.loads(raw.splitlines()[0])["arguments"]["content"], "private")
 
 
 if __name__ == "__main__":

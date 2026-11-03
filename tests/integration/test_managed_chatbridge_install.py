@@ -33,6 +33,7 @@ class ManagedChatBridgeTests(unittest.TestCase):
             self.assertEqual(args[args.index("--prefix") + 1], str(root.resolve() / "deps/chatbridge"))
             self.assertEqual(args[args.index("--state-dir") + 1], str(root.resolve() / "deps/chatbridge-data"))
             self.assertEqual(args[args.index("--port") + 1], "8787")
+            self.assertEqual(args[args.index("--label") + 1], cb.MANAGED_LABEL)
 
     def test_existing_service_must_be_owned_within_same_root(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -41,9 +42,9 @@ class ManagedChatBridgeTests(unittest.TestCase):
             root = home / "MacControlMCP"
             prefix = root / "deps/chatbridge"
             state = root / "deps/chatbridge-data"
-            plist = home / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+            plist = home / ("Library/LaunchAgents/" + cb.MANAGED_LABEL + ".plist")
             plist.parent.mkdir(parents=True)
-            config = {"Label": "net.chatbridge.gateway", "ChatBridgeInstaller": "1",
+            config = {"Label": cb.MANAGED_LABEL, "ChatBridgeInstaller": "1",
                       "WorkingDirectory": str(prefix / "releases/installed"),
                       "EnvironmentVariables": {"CHATBRIDGE_DB": str(state / "state.db")}}
             with patch.object(cb.Path, "home", return_value=home):
@@ -96,10 +97,10 @@ class ManagedChatBridgeTests(unittest.TestCase):
             script = src / "scripts/installer.py"
             script.parent.mkdir(parents=True)
             script.write_text("safe test source")
-            plist = home / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+            plist = home / ("Library/LaunchAgents/" + cb.MANAGED_LABEL + ".plist")
             plist.parent.mkdir(parents=True)
             plist.write_bytes(plistlib.dumps({
-                "Label": "net.chatbridge.gateway",
+                "Label": cb.MANAGED_LABEL,
                 "ChatBridgeInstaller": "1",
                 "WorkingDirectory": str(prefix / "releases/build"),
                 "EnvironmentVariables": {"CHATBRIDGE_DB": str(state / "state.db")}}))
@@ -129,8 +130,7 @@ class ManagedChatBridgeTests(unittest.TestCase):
                 "EnvironmentVariables": {"CHATBRIDGE_DB": str(home / ".chatbridge/state.db")}}))
             with patch.object(Path, "home", return_value=home), \
                  patch.object(installer.subprocess, "run") as runner:
-                with self.assertRaisesRegex(RuntimeError, "outside"):
-                    installer._remove_managed_chatbridge(root)
+                self.assertFalse(installer._remove_managed_chatbridge(root))
                 runner.assert_not_called()
 
     def test_purge_uninstalls_owned_dependency_before_deleting_root(self):

@@ -146,13 +146,16 @@ class ExternalWorkspaceTests(unittest.TestCase):
         self.assertEqual(list((self.external/"projects").glob(".migration-*")),[])
 
     def test_installer_status_and_uninstall_all_preserve_external_data(self):
-        from scripts import install_mac_control as installer
+        from scripts import install_mac_control as installer, setup_network
         wc.provision(self.data,self.root)
+        self.root.chmod(0o700)
+        self.data.chmod(0o700)
         keep=self.external/"projects"/"critical.txt"
         keep.write_text("must survive full removal")
         (self.root/".mac-control-installer-owned").write_text("owned")
         (self.root/"releases").mkdir()
         with patch.object(installer,"DEFAULT_ROOT",self.root), \
+             patch.object(setup_network,"assert_public_route_safe_for_uninstall",return_value=None), \
              patch.object(installer,"_remove_managed_chatbridge",return_value=False), \
              patch.object(installer,"_uninstall_locked",return_value={"removed_releases":0}):
             report=installer.purge(self.root)

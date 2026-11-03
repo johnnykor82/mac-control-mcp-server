@@ -191,9 +191,67 @@ def _call(operation: str, **arguments) -> dict:
         return _error("UNKNOWN_RESULT" if method in ("POST", "DELETE") else "CHATBRIDGE_UNAVAILABLE",
                       "Browser operation not confirmed; do not automatically retry",
                       **({"client_request_id": request_id} if request_id else {}))
-    except (ValueError, TypeError, KeyError):
-        return _error("INVALID_ARGUMENT", "Invalid request or ChatBridge response",
-                      **({"client_request_id": request_id} if request_id else {}))
+    except (ValueError, TypeError, KeyError) as exc:
+        # Only recognized constant internal exceptions are classified as
+        # preflight argument failures. Do not echo arbitrary exception text,
+        # which can contain browser capabilities, payloads or provider data.
+        reason = str(exc)
+        if reason in ("Invalid browser session capability", "Invalid browser session ID"):
+            return _error(
+                "INVALID_ARGUMENT",
+                "session_token must be the capability returned by "
+                "background_browser_create: 32 lowercase hex session ID, "
+                "a dot and an opaque capability; max 256 characters. "
+                "No browser request was sent."
+            )
+        if reason == "Invalid client_request_id":
+            return _error(
+                "INVALID_ARGUMENT",
+                "client_request_id must be 8–180 ASCII letters, digits, "
+                "underscore or hyphen. Reuse it only for an identical "
+                "request; no browser action was sent."
+            )
+        if reason == "session_tokens must be a list":
+            return _error(
+                "INVALID_ARGUMENT",
+                "session_tokens must be a list of capabilities from "
+                "background_browser_create, not a string or mapping. "
+                "No browser request was sent."
+            )
+        if reason == "Invalid ChatBridge URL origin":
+            return _error(
+                "CHATBRIDGE_CONFIGURATION_ERROR",
+                "MACCONTROL_CHATBRIDGE_URL must be a valid HTTP(S) origin "
+                "without path, query, credentials or fragment. Check the "
+                "managed ChatBridge endpoint; no browser request was sent."
+            )
+        if reason == "Browser request too large":
+            return _error(
+                "INVALID_ARGUMENT",
+                "Browser request JSON exceeds 100000 UTF-8 bytes; reduce "
+                "input size and inspect the tool schema before retrying. "
+                "No browser request was sent."
+            )
+        if isinstance(exc, json.JSONDecodeError) or reason in (
+            "ChatBridge returned unexpected content type",
+            "ChatBridge returned non-object JSON",
+            "ChatBridge response exceeds size limit",
+        ):
+            return _error(
+                "INVALID_PROVIDER_RESPONSE",
+                "ChatBridge returned invalid or oversized data. The "
+                "operation may already have changed state; do not "
+                "automatically retry. Inspect ChatBridge status and "
+                "the operation ID.",
+                **({"client_request_id": request_id} if request_id else {}),
+            )
+        return _error(
+            "INVALID_ARGUMENT",
+            "Unable to validate browser request or response. Check required "
+            "tool fields and actual ChatBridge state before retrying; "
+            "a modifying operation may have been executed.",
+            **({"client_request_id": request_id} if request_id else {}),
+        )
 
 
 def register(mcp):

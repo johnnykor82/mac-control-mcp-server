@@ -1,7 +1,7 @@
-"""Terminal operations. Disabled until the Mac owner creates terminal_policy.json.
+"""Terminal operations running as the Mac Control service account.
 
-Arbitrary shell commands run as the macOS account running this server.
-Working-directory selection is not a sandbox. Do not enable on an untrusted MCP.
+Working-directory selection is not a sandbox. Access is governed by the
+platform, GitHub OAuth and macOS privileges, not by a second policy file.
 """
 from ..runtime_paths import DATA_ROOT
 from ..tmux_runtime import locate as locate_tmux
@@ -19,7 +19,6 @@ from pathlib import Path
 from .fs_ops import roots, WORKSPACE
 
 BASE = DATA_ROOT
-POLICY = BASE / "terminal_policy.json"
 RUNTIME = BASE / "run"
 SOCKET = RUNTIME / "tmux.sock"
 MAX_TEXT = 16_000
@@ -50,21 +49,9 @@ KEYS = {
 TMUX = locate_tmux()
 SHELL = "/bin/zsh"
 
-def _enabled():
-    if POLICY.is_symlink() or not POLICY.is_file():
-        return False
-    info = POLICY.stat()
-    if info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise PermissionError("terminal_policy.json must be owner-only (chmod 600)")
-    policy = json.loads(POLICY.read_text(encoding="utf-8"))
-    return policy.get("enabled") is True
-
 def _require():
-    if not _enabled():
-        raise PermissionError(
-            "Terminal disabled. Owner must explicitly create "
-            f"{POLICY} with enabled: true"
-        )
+    """Compatibility for SSH adapters: no additional terminal approval gate."""
+    return None
 
 def _environment():
     root = roots()["workspace"]
@@ -113,13 +100,27 @@ def _tmux(args, *, timeout=8, env=None):
 
 def _session(session):
     if not isinstance(session, str) or not session.startswith("mc-"):
-        raise ValueError("Invalid session ID")
+        raise ValueError(
+            "TERMINAL_SESSION_INVALID: session must be mc- followed by "
+            "exactly 16 lowercase hexadecimal characters. Use "
+            "terminal_list to obtain a valid session ID. No terminal "
+            "keys were sent."
+        )
     tail = session[3:]
     if len(tail) != 16 or any(c not in "0123456789abcdef" for c in tail):
-        raise ValueError("Invalid session ID")
+        raise ValueError(
+            "TERMINAL_SESSION_INVALID: session must be mc- followed by "
+            "exactly 16 lowercase hexadecimal characters. Use "
+            "terminal_list to obtain a valid session ID. No terminal "
+            "keys were sent."
+        )
     check = _tmux(["has-session", "-t", f"={session}"])
     if check.returncode:
-        raise ValueError("Unknown or expired session")
+        raise ValueError(
+            "TERMINAL_SESSION_NOT_FOUND: this session is absent or expired. "
+            "Use terminal_list to find active sessions; do not assume the "
+            "previous terminal operation succeeded. No terminal keys were sent."
+        )
     return session
 
 def _screen(session, lines):
@@ -138,14 +139,8 @@ def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def terminal_capabilities() -> dict:
         """Show terminal availability and local opt-in status."""
-        try:
-            enabled = _enabled()
-            error = None
-        except Exception as exc:
-            enabled, error = False, str(exc)
         return {
-            "enabled": enabled, "policy": str(POLICY),
-            "policy_error": error,
+            "enabled": True,
             "tmux_path": _tmux_available(), "shell": SHELL,
             "user": ENVIRONMENT["USER"],
             "projects": sorted(roots()),
@@ -158,8 +153,21 @@ def register(mcp):
     def terminal_exec(command: str, project: str = "workspace", timeout_seconds: int = 25) -> dict:
         """Run arbitrary noninteractive zsh command with bounded time and captured output."""
         _require()
-        if not command or len(command) > 8000 or "\x00" in command:
-            raise ValueError("Invalid command")
+        if not isinstance(command, str) or not command or "\x00" in command:
+            raise ValueError(
+                "TERMINAL_COMMAND_INVALID: command must be non-empty shell "
+                "text without NUL characters. Check the command argument "
+                "and supported project via terminal_capabilities. "
+                "No shell command was executed."
+            )
+        if len(command) > 8000:
+            raise ValueError(
+                f"TERMINAL_COMMAND_TOO_LONG: command contains {len(command)} "
+                "characters; maximum for terminal_exec is 8000 characters. "
+                "For large generated scripts use fs_write(project, path, content) "
+                "under an approved project, then a short terminal_exec command "
+                "to execute or check that file. No shell command was executed."
+            )
         cwd = _cwd(project)
         timeout = max(1, min(int(timeout_seconds), 120))
         _runtime()
@@ -227,12 +235,30 @@ def register(mcp):
         if _tmux_available() is None:
             return _tmux_error()
         session = _session(session)
-        if len(text) > 4000 or "\x00" in text:
-            raise ValueError("Invalid terminal text")
-        if key and key not in KEYS:
-            raise ValueError("Unsupported key")
+        if not isinstance(text, str) or "\x00" in text:
+            raise ValueError(
+                "TERMINAL_TEXT_INVALID: text must be a string without NUL "
+                "characters. No terminal keys were sent."
+            )
+        if len(text) > 4000:
+            raise ValueError(
+                f"TERMINAL_TEXT_TOO_LONG: text contains {len(text)} characters; "
+                "maximum for terminal_send is 4000 characters. For generated "
+                "scripts use fs_write(project, path, content) under an "
+                "approved project, then a short terminal_exec. "
+                "No terminal keys were sent."
+            )
+        if not isinstance(key, str) or (key and key not in KEYS):
+            raise ValueError(
+                "TERMINAL_KEY_INVALID: key must be one of "
+                + ", ".join(sorted(KEYS))
+                + ". No terminal keys were sent."
+            )
         if not text and not key:
-            raise ValueError("Supply text or key")
+            raise ValueError(
+                "TERMINAL_SEND_EMPTY: supply nonempty text or a supported key "
+                "(e.g. Enter or C-c). No terminal keys were sent."
+            )
         if text:
             r = _tmux(["send-keys", "-t", f"{session}:0.0", "-l", "--", text])
             if r.returncode:

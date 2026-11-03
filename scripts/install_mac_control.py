@@ -41,7 +41,7 @@ COPY_FILES = ("README.md", "README.ru.md", "AGENT_INSTALL.md",
               "docs/INSTALL_CONTENTS.md", "docs/MCLOG.md", "docs/PUBLIC_RELEASE_GATES.md",
               "docs/RELEASE_NOTES_BETA.md", "docs/CHATBRIDGE_BROWSER_MIGRATION.md",
               "docs/CHATGPT_SETUP.ru.md", "docs/CAPABILITIES.md", "docs/CAPABILITIES.ru.md",
-              "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/WATCHER_GUIDE.md",
+              "docs/TOOLS.md", "docs/TOOLS.ru.md", "docs/TOOL_ARGUMENT_ERRORS.md", "docs/TOOL_ARGUMENT_COMPATIBILITY_FR025.md", "docs/CHATGPT_LINK_ROUTING_DIAGNOSTICS.md", "docs/WATCHER_GUIDE.md",
               "docs/WATCHER_GUIDE.ru.md", "docs/WORKSPACE_MIGRATION.md",
               "docs/WORKSPACE_MIGRATION.ru.md", "docs/DIAGNOSTICS_FIX.md",
               "docs/DIAGNOSTICS_FIX.ru.md", "docs/SPEC_SHARED_FUNNEL.md",
@@ -106,7 +106,7 @@ def smoke(release: Path, data: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(release / "src") + os.pathsep + str(release),
            "MAC_CONTROL_DATA_ROOT": str(data), "PYTHONNOUSERSITE": "1"}
     statement = ("from mac_control.legacy_adapter import inspect_existing_handlers; "
-                 "x=inspect_existing_handlers(); assert len(x) == 109; "
+                 "x=inspect_existing_handlers(); assert len(x) == 106; "
                  "from scripts.dev_mcp_server import make_server; "
                  "assert make_server(include_mutations=True)")
     run([str(py), "-P", "-B", "-c", statement], cwd=release,
@@ -535,6 +535,32 @@ def _save_chatbridge_key(data: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+
+def _ensure_required_tmux(provision) -> dict:
+    """Provision required PTY support as part of the standard installer."""
+    return provision(approved=True, interactive=False)
+
+
+
+def _validate_bundle(with_chatbridge: bool, with_watcher: bool,
+                     existing_chatbridge: bool = False) -> None:
+    """Watcher cannot be provisioned without ChatBridge, new or existing."""
+    if with_watcher and not (with_chatbridge or existing_chatbridge):
+        raise RuntimeError("Watcher requires ChatBridge; configure ChatBridge first")
+
+
+def _bundle_ready(bridge_present: bool, auth: dict, watcher_status: str) -> bool:
+    """One readiness condition for the ChatBridge+Watcher installation."""
+    return (bridge_present and auth.get("authenticated") is True
+            and watcher_status == "running")
+
+
+def _release_venv_command(uv: str, release: Path) -> list[str]:
+    """Prefer an isolated uv-managed Python to a potentially writable system runtime."""
+    return [uv, "venv", "--managed-python", "--python", "3.13",
+            str(release / ".venv")]
+
+
 def install(root: Path, with_chatbridge: bool = True, with_gui: bool | None = None,
             chatbridge_source: Path | None = None,
             chatbridge_url: str | None = None, with_watcher: bool = True,
@@ -554,15 +580,34 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     info = paths(root)
     if sys.platform != "darwin":
         raise RuntimeError("Install is supported on macOS only")
+    connection_file = info.get("data", root / "data") / "chatbridge_connection.txt"
+    if connection_file.is_symlink():
+        raise RuntimeError("Refusing symlink ChatBridge connection file")
+    existing_bridge = connection_file.is_file()
+    _validate_bundle(with_chatbridge, with_watcher, existing_bridge)
     provider_url = chatbridge_url or os.environ.get("MACCONTROL_CHATBRIDGE_URL", "http://127.0.0.1:8787")
+    chatbridge_auth = {"authenticated": False, "status": "not_configured"}
     if with_chatbridge:
         try:
-            from scripts.setup_chatbridge_dependency import ensure
+            from scripts.setup_chatbridge_dependency import ensure, browser_login_status
         except ModuleNotFoundError:
-            from setup_chatbridge_dependency import ensure
-        ensure(provider_url, chatbridge_source, install_root=root)
+            from setup_chatbridge_dependency import ensure, browser_login_status
+        bridge_info = ensure(provider_url, chatbridge_source, install_root=root)
+        if isinstance(bridge_info, dict):
+            provider_url = bridge_info.get("url", provider_url)
+            chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
+            if not chatbridge_auth["authenticated"]:
+                print("ChatBridge needs sign-in in the managed Chrome profile; "
+                      "finish login, then rerun --setup.", file=sys.stderr)
     elif chatbridge_source is not None or chatbridge_url is not None:
         raise RuntimeError("ChatBridge options cannot be used with --without-chatbridge")
+    elif existing_bridge:
+        try:
+            from scripts.setup_chatbridge_dependency import browser_login_status
+        except ModuleNotFoundError:
+            from setup_chatbridge_dependency import browser_login_status
+        provider_url = connection_file.read_text().strip()
+        chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
     uv = find_uv()
     if not uv:
         raise RuntimeError("uv missing: install uv from https://docs.astral.sh/uv/getting-started/installation/")
@@ -586,7 +631,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         created = True
         try:
             copy_source(dest)
-            run([uv, "venv", "--python", "3.13", str(dest / ".venv")], timeout=180)
+            run(_release_venv_command(uv, dest), timeout=180)
             run([uv, "pip", "install", "--python", str(dest / ".venv/bin/python"),
                  "-r", str(dest / "requirements/dev-frozen.txt")], timeout=600)
             smoke(dest, data)
@@ -595,6 +640,17 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             raise
     else:
         smoke(dest, data)
+    # Do not change the active release or stop an existing Watcher until
+    # ChatBridge has passed the authenticated browser readiness check.
+    if with_watcher and not chatbridge_auth["authenticated"]:
+        return {
+            "status": "setup_incomplete",
+            "reason": "chatbridge_login_required",
+            "chatbridge_auth": chatbridge_auth,
+            "release": str(dest), "current": str(info["current"]),
+            "watcher": "pending_chatbridge_auth",
+            "next": "Sign in through ChatBridge's managed Chrome, then resume setup",
+        }
     if with_chatbridge:
         _save_chatbridge_key(data)
         # ChatBridge is an independent prerequisite and the ONLY browser owner.
@@ -604,7 +660,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         if not isinstance(original, dict):
             raise ValueError("Invalid feature flags")
         original["background_browser"] = True
-        original["watcher"] = with_watcher
+        original["watcher"] = with_watcher and chatbridge_auth["authenticated"]
         connection = data / "chatbridge_connection.txt"
         if connection.is_symlink():
             raise RuntimeError("Refusing symlink ChatBridge connection file")
@@ -680,14 +736,14 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     elif cli_commands.get("path") == "added_to_zprofile":
         print("CLI commands registered. Open a new Terminal or run: source ~/.zprofile",
               file=sys.stderr)
-    # PTY needs tmux; install through Homebrew only after owner approval.
+    # PTY needs tmux; the standard install automatically provisions it.
     try:
         from scripts.setup_tmux_dependency import ensure as ensure_tmux
     except ModuleNotFoundError as exc:
         if exc.name != "scripts":
             raise
         from setup_tmux_dependency import ensure as ensure_tmux
-    tmux_status = ensure_tmux(approved=install_tmux,interactive=sys.stdin.isatty())
+    tmux_status = _ensure_required_tmux(ensure_tmux)
     if not tmux_status["available"]:
         print("Interactive terminal unavailable: " + tmux_status["remedy"],
               file=sys.stderr)
@@ -706,9 +762,15 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         cleanup = {"status": "skipped", "reason": type(exc).__name__}
         print("Release cleanup skipped; installed version remains active.", file=sys.stderr)
     pointer = info["current"]
-    return {"status": "installed", "watcher": watcher_status,
+    bridge_present = with_chatbridge or existing_bridge
+    gui_installed = gui_status != "skipped" or preserve_gui
+    ready = (tmux_status["available"] and gui_installed
+             and _bundle_ready(bridge_present, chatbridge_auth, watcher_status))
+    return {"status": "installed" if ready else "setup_incomplete",
+            "watcher": watcher_status,
             "release_cleanup": cleanup,
             "tmux": tmux_status,
+            "chatbridge_auth": chatbridge_auth,
             "workspace": workspace_info, "release": str(dest),
             "current": str(pointer), "data": str(data),
             "created_new_release": created, "browser_provider": "chatbridge" if with_chatbridge else "existing_configuration_preserved",
@@ -748,7 +810,7 @@ def _remove_managed_chatbridge(root: Path) -> bool:
     # A separate ChatBridge on the host is not owned by this installation.
     if not any(path.exists() or path.is_symlink() for path in (source, prefix, state)):
         return False
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + cb.MANAGED_LABEL + ".plist")
     if not plist.exists() and not plist.is_symlink():
         return False
     cb.verify_managed_install(root)
@@ -757,7 +819,8 @@ def _remove_managed_chatbridge(root: Path) -> bool:
         raise RuntimeError("Managed ChatBridge installer is missing; refusing to orphan the service")
     completed = subprocess.run(
         [sys.executable, str(script), "uninstall", "--prefix", str(prefix),
-         "--state-dir", str(state), "--remove-app", "--purge-data", "--yes"],
+         "--state-dir", str(state), "--label", cb.MANAGED_LABEL,
+         "--remove-app", "--purge-data", "--yes"],
         cwd=source, check=False, timeout=180, capture_output=True, text=True)
     if completed.returncode:
         raise RuntimeError("Managed ChatBridge could not be uninstalled; its service was preserved or needs inspection")

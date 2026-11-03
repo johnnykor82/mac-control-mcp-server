@@ -1,0 +1,15 @@
+{
+  "requirements": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 17, 18, 19],
+  "removed_commands": ["approved_commands", "execute_approved"],
+  "states": ["READY", "INCOMPLETE"],
+  "scenarios": {
+    "clean": {"port_8787": "free", "chatbridge_authenticated": false, "tcc": "pending"},
+    "foreign_port": {"port_8787": "occupied_by_other_app", "expect": "preserve_foreign_process"},
+    "compatible_bridge": {"port_8787": "chatbridge_compatible", "expect": "reuse_if_owned"},
+    "ssh_alias": {"config": "Host nl-vps\\n  HostName example.invalid\\n  ProxyJump bastion", "registration_required": false},
+    "mcp_dynamic": {"transport": ["http", "stdio"], "registration_required": false},
+    "tcc_denied": {"screen": false, "accessibility": false, "expect": "INCOMPLETE"},
+    "tcc_granted": {"screen": true, "accessibility": true},
+    "cli_conflict": {"mclog": "third_party_symlink", "expect": "no_silent_overwrite"}
+  }
+}

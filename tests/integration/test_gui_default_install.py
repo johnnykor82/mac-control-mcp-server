@@ -107,7 +107,7 @@ class GuiInstallTests(unittest.TestCase):
         app = managed_app(root, home)
         (root / "data/feature_flags.json").write_text('{"native_gui": true}')
         with patch.object(installer, "source_id", return_value="next-release"):
-            result = installer.install(root, with_chatbridge=False, with_gui=False)
+            result = installer.install(root, with_chatbridge=False, with_watcher=False, with_gui=False)
         self.assertEqual(result["native_gui"], "reused")
         self.assertTrue(app.exists())
         self.assertTrue(json.loads((root / "data/feature_flags.json").read_text())["native_gui"])
@@ -153,7 +153,7 @@ def provision(tmp_path, monkeypatch):
 
 def check_default_installs_gui_and_clipboard_without_start(provision):
     root, home, commands = provision
-    installer.install(root, with_chatbridge=False)
+    installer.install(root, with_chatbridge=False, with_watcher=False)
     assert any(c[0] == "prebuilt_gui_replace" for c in commands)
     assert any(c[0] == "prebuilt_clipboard" for c in commands)
     assert not any(c[0] in ("open", "/usr/bin/open", "launchctl") for c in commands)
@@ -163,7 +163,7 @@ def check_update_reuses_app_but_provisions_clipboard(provision):
     root, home, commands = provision
     app = managed_app(root, home)
     before = (app / "Contents/MacOS" / gui.EXEC_NAME).read_bytes()
-    result = installer.install(root, with_chatbridge=False)
+    result = installer.install(root, with_chatbridge=False, with_watcher=False)
     assert result["native_gui"] == "reused"
     assert (app / "Contents/MacOS" / gui.EXEC_NAME).read_bytes() == before
     assert not any(c[0] == "prebuilt_gui_replace" for c in commands)
@@ -174,10 +174,10 @@ def check_update_reuses_app_but_provisions_clipboard(provision):
 def check_explicit_rebuild_and_opt_out(provision):
     root, home, commands = provision
     managed_app(root, home)
-    installer.install(root, with_chatbridge=False, with_gui=True)
+    installer.install(root, with_chatbridge=False, with_watcher=False, with_gui=True)
     assert any(c[0] == "prebuilt_gui_replace" for c in commands)
     commands.clear()
-    installer.install(root, with_chatbridge=False, with_gui=False)
+    installer.install(root, with_chatbridge=False, with_watcher=False, with_gui=False)
     assert not any(c[0] == "prebuilt_gui_replace" for c in commands)
     assert any(c[0] == "prebuilt_clipboard" for c in commands)
 
@@ -194,7 +194,7 @@ def unknown_or_damaged_app_refused(provision, damage):
     with patch.object(gui.subprocess, "run", side_effect=(
             subprocess.CalledProcessError(1, "codesign") if damage == "signature" else None)):
         with unittest.TestCase().assertRaises((RuntimeError, subprocess.CalledProcessError)):
-            installer.install(root, with_chatbridge=False, with_gui=True)
+            installer.install(root, with_chatbridge=False, with_watcher=False, with_gui=True)
     assert app.exists()
 
 

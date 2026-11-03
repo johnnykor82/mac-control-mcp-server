@@ -10,7 +10,7 @@ import argparse
 from fastmcp import FastMCP
 from mac_control.operations import system_info
 from mac_control.dev_enabled_operations import register_preview_operations
-from mac_control import background_browser_ops, background_native_ops, workspace_policy, maintenance_ops
+from mac_control import background_browser_ops, background_native_ops, workspace_policy, maintenance_ops, account_profile
 from mac_control.audit_middleware import AuditMiddleware
 from mac_control.runtime_paths import DATA_ROOT
 import os
@@ -18,13 +18,17 @@ import os
 
 def make_server(*, include_mutations: bool = False, auth=None) -> FastMCP:
     mcp = FastMCP("Mac Control MCP Server", auth=auth, instructions=workspace_policy.instructions())
-    # An installed, owner-scoped server emits a metadata-only audit log.
+    # Owner-scoped audit records bounded actual arguments locally; remote audit API stays metadata-only.
     # Uninstalled read-only DEV preview creates no public-install files.
     if os.environ.get("MAC_CONTROL_DATA_ROOT"):
         mcp.add_middleware(AuditMiddleware(DATA_ROOT / "logs"))
     mcp.tool(
         annotations={"readOnlyHint": True, "openWorldHint": False}
     )(system_info)
+    if auth is not None:
+        # Authenticated remote service only. Never claim an account identity
+        # for local unauthenticated/stdio tools.
+        account_profile.register(mcp)
     register_preview_operations(mcp, include_mutations=include_mutations)
     if include_mutations:
         workspace_policy.register(mcp)

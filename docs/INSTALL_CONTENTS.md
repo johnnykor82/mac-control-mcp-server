@@ -19,12 +19,12 @@ The portable second Mac is the intended independent acceptance-test host.
 | Owner data/configuration and recoverable backups | ~/MacControlMCP/data | Preserved on uninstall |
 | Installer lifecycle: plan/install/setup/update/rollback/status/uninstall | install_mac_control.py | Test-verified |
 | Read-only public IP and transport capability diagnosis | setup_network.py | Tests; not external connectivity proof |
-| Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Unit-tested, public E2E pending |
-| Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Guarded tests, external validation pending |
+| Owner-guided GitHub OAuth App creation and authorization checks | setup_github_oauth.py / test_github_oauth_login.py | Public authenticated MCP system_info passed on owner's E9 Mac; independent host pending |
+| Tailscale Funnel guide and explicitly authorized enable action | setup_network.py | Owner E9 shared 13-route Funnel verified unchanged on update/rollback; independent host pending |
 | Prebuilt universal native GUI helper (macOS 14+, Apple Silicon/Intel) | ~/MacControlMCP/apps/MacControlMCPServer.app | Pinned SHA256 download; install if absent, reuse verified owner-managed app; TCC owner approval required |
 | Prebuilt universal Unicode clipboard helper | ~/MacControlMCP/releases/<version>/build/gui_clipboard_paste | Provisioned from the same pinned native archive without compilation |
 | Interactive connection wizard | guided_setup.py | TCC, network selection, OAuth, service and public checks; ChatGPT manual |
-| Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Configured after OAuth by setup; live remote E2E pending |
+| Remote MCP owner login autostart | ~/Library/LaunchAgents/org.maccontrol.mcpserver.remote.plist | Public OAuth and authenticated tool call passed on owner's E9 Mac |
 | Smoke test for installed MCP file ops and optional browser | mac_control_smoke.py | Tested |
 
 The source release copies only files listed in `scripts/install_manifest.txt`;
@@ -43,13 +43,88 @@ public source export and provenance review remain prerequisites.
 | --- | --- |
 | GUI permissions | Normal native helper installation needs no Apple Command Line Tools. Setup requests missing Accessibility/Screen Recording grants sequentially; a system popup is not guaranteed, and only the owner grants access in Settings. |
 | Manual developer builds | scripts/build_mac_control_gui.py and scripts/package_gui_release.py still require Apple developer tools and Swift. |
-| ChatBridge HTTP Browser API | Independent runtime dependency, automatically installed from SHA256-pinned published release into ~/MacControlMCP/deps/{chatbridge-source,chatbridge,chatbridge-data} when missing. A compatible service is reused only when installed within that root. --without-chatbridge skips setup; --chatbridge-source must point into the managed deps path. Full uninstall --all removes this managed dependency through its own installer, not Tailscale. |
+| ChatBridge HTTP Browser API | Required standard-install dependency, automatically installed from SHA256-pinned published release into ~/MacControlMCP/deps/{chatbridge-source,chatbridge,chatbridge-data} when missing. A compatible service is reused only when installed within that root. --without-chatbridge skips setup; --chatbridge-source must point into the managed deps path. Full uninstall --all removes this managed dependency through its own installer, not Tailscale. |
 | GitHub OAuth App | Owner creates an app in own GitHub Developer settings; enters Client Secret privately in local Terminal |
 | Public HTTPS route | Direct public domain with trusted TLS and TCP 443 reverse proxy to 127.0.0.1:3201, or Tailscale Funnel without public IP. Owner configures direct DNS/TLS/proxy/router and verifies inbound HTTPS. Never expose port 3201 externally. |
 | Tailscale GUI app, account and MagicDNS/Funnel approval | External; reuse an existing App Store or Standalone install, leave VPN/Exit Node unchanged |
 | mclog / maccontrol CLI | Registered in `~/.local/bin` without sudo; when required, `~/.zprofile` adds the directory to PATH. Both commands follow the active Mac Control installation; uninstall removes only owned wrappers. |
 | Watcher | Included with default ChatBridge installation; owned user LaunchAgent, private SQLite state, no separate browser/Python environment. Projects are registered by the owner. |
 | Downstream SSH and other adapters | Owner-specific credentials and destinations must be configured separately. |
+
+## Complete readiness report and explicit OAuth evidence (E8)
+
+`maccontrol doctor` returns JSON with statuses for installation, workspace,
+terminal, tmux, SSH/SFTP, MCP Bridge, GUI/TCC, ChatBridge, Watcher, CLI and OAuth.
+No component omission, network availability alone or OAuth metadata preflight
+may cause a false `READY`. All mandatory components must report `ready`.
+Every failure identifies its reason and an action to resume setup.
+
+`maccontrol setup` resumes guided configuration. A successful real GitHub OAuth
+browser test records an owner-only, atomic `data/oauth-acceptance.json` marker
+bound to the tested URL and release pointer. Failed/aborted tests do not record
+acceptance. No keys, cookies or tokens are written to the marker.
+
+## Installed tool discovery and mclog conflicts (E7)
+
+All shipped MCP tools remain visible even if a component has not yet been
+configured. A missing ChatBridge/Watcher/GUI dependency is an actionable
+runtime diagnostic, not a hidden feature flag. The existing
+`feature_flags.json` is retained for component status.
+
+When `~/.local/bin/mclog` already exists and is not owned by this release,
+installation preserves it and reports `mclog_resolution: approval_required`.
+After explicit owner approval `resolve_mclog_conflict(approved=True)` moves
+the old launcher to `mclog-legacy` (only when unused) and registers the new
+one. No automatic overwrite, symlink dereference, or deletion occurs.
+The direct path `~/MacControlMCP/current/bin/mclog` remains available.
+
+## GUI and macOS privacy permissions (E6)
+
+The standard installer includes the signed GUI helper. The interactive setup
+calls native Accessibility and Screen Recording permission requests, opens
+the corresponding macOS System Settings pages, and checks the actual trusted
+flags after the owner acts. If native prompting is no longer shown by macOS,
+a separate foreground Mac Control permission assistant displays **Open Settings**
+and **Later**; the first button navigates to the correct Screen Recording pane
+without searching manually. The guided setup does not open a second settings
+window while this assistant is active. Screen Recording permission refresh may require
+restarting only the owned helper. Explicit `--without-gui` remains a
+diagnostic opt-out, but its setup status is `setup_incomplete` rather
+than a successful full installation. Privacy/TCC permissions cannot be
+granted by the installer, and the final on-device test requires the owner.
+
+## Required ChatBridge + Watcher bundle (E5)
+
+A standard installation treats ChatBridge and Watcher as one dependency.
+Watcher is enabled only after ChatBridge reports a usable authenticated
+ChatGPT browser via `/ready`. If login is missing, installation reports
+`setup_incomplete` and preserves an existing active release and Watcher
+without switching pointers. The Watcher must report `running` to qualify
+for the bundle readiness gate; the installer never labels an unstarted
+Watcher as fully ready. Diagnostic opt-out installations remain incomplete.
+
+## ChatBridge installation and authenticated readiness (E4)
+
+The Mac Control installer detects a compatible owned ChatBridge instance. If the
+default loopback port 8787 is occupied by another service, it selects an unused
+loopback port without stopping the foreign service and saves the actual URL
+in `data/chatbridge_connection.txt`.
+
+ChatBridge's managed installer starts its dedicated Chrome profile. The owner
+signs into ChatGPT in that browser. On subsequent setup runs, the installer
+reads the actual port from its own managed LaunchAgent, so it never tries to
+replace that service with a new instance. A compatible but unrelated
+ChatBridge is not adopted by the managed installer; it receives a separate
+local port instead. The Mac Control installer then checks
+ChatBridge `GET /ready`, which probes the real authenticated composer;
+`/health` or Browser API capabilities alone do not establish readiness.
+An HTTP 200 response alone does not suffice: the JSON body must contain
+`ready: true` and `chatgpt_authenticated: true`. ChatBridge's mock transport
+may return HTTP 200 without authentication, and must not qualify.
+Until `/ready` succeeds, setup status is `setup_incomplete` and the installer
+must offer a resume path. Existing authenticated sessions do not need
+another login. Browser authorization and first-login visual acceptance still
+require manual verification during release acceptance.
 
 ## Interactive setup and owner responsibilities
 
@@ -58,7 +133,9 @@ Sequential requests and status checks for missing TCC grants, public-IP question
 GitHub OAuth, owner-scoped remote MCP LaunchAgent, local 401/issuer checks,
 explicit Funnel `PUBLISH` when needed, and public discovery/authentication probe.
 The owner manually adds the server in ChatGPT and completes OAuth. Public probes
-do not establish real OAuth or ChatGPT E2E; those release checks remain pending.
+alone do not establish real OAuth; the E9 owner-host acceptance separately
+verified public GitHub consent, a successful MCP system_info request and
+a Watcher report delivered through ChatBridge. A fresh-host acceptance remains pending.
 
 `--update` reuses the verified app without replacement; `--with-gui` explicitly
 replaces it from the pinned prebuilt release and can require new TCC approval. `--without-gui` skips a new app and

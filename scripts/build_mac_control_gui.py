@@ -18,6 +18,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "src/mac_control/assets/gui_agent.swift"
 CAPTURE = ROOT / "scripts/dev_gui_window_capture.swift.part"
+NATIVE = ROOT / "scripts/dev_gui_native_background.swift.part"
 BUNDLE = "org.maccontrol.mcpserver.gui"
 APP_NAME = "MacControlMCPServer.app"
 EXEC_NAME = "MacControlMCPServer"
@@ -84,12 +85,14 @@ def build(install_root: Path) -> Path:
     fragment = CAPTURE.read_text()
     if fragment.count('let allowed=try GUI_RUNTIME_PATHS.get().capturePrefix') != 1:
         raise RuntimeError("GUI capture fragment lacks runtime capture path anchor")
+    native_fragment = NATIVE.read_text()
+    if native_fragment.count('func nativeTask(') != 1:
+        raise RuntimeError("Native GUI source fragment is incomplete")
     source = source.replace(
         "func postMouse(_ kind: CGEventType",
-        fragment + "\nfunc postMouse(_ kind: CGEventType")
+        fragment + "\n" + native_fragment + "\nfunc postMouse(_ kind: CGEventType")
     source = source.replace('case "capture": return try await capture(req)',
-                            'case "capture": return try await capture(req)\n'
-                            '    case "capture_window": return try await captureOwnedWindow(req)')
+                            '    case "capture": return try await capture(req)\n    case "capture_window": return try await captureOwnedWindow(req)\n    case "native_backend":\n        var nativeRequest=req\n        nativeRequest["op"]=argument(req,"native_op")\n        return try await nativeTask(nativeRequest)')
     output = ROOT / "build" / APP_NAME
     if output.exists() or output.is_symlink():
         shutil.rmtree(output) if output.is_dir() and not output.is_symlink() else output.unlink()

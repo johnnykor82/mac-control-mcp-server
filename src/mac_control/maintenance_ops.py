@@ -28,6 +28,11 @@ from .legacy_handlers import fs_ops
 from .legacy_adapter import inspect_existing_handlers
 
 MAX_FILE = 256 * 1024
+# Legacy agents commonly pass a path relative to the approved workspace.
+# Accept only known generated-workspace folders, not arbitrary project roots.
+WORKSPACE_RELATIVE_PREFIXES = frozenset({
+    'projects', 'scratch', 'artifacts', 'downloads', 'shared',
+})
 MAX_ARGUMENT_BYTES = 128 * 1024
 MAX_LOG_BYTES = 8 * 1024 * 1024
 RELEASE_ROOT = Path(__file__).resolve().parents[2]
@@ -97,13 +102,35 @@ def _workspace_path(name: str, *, write: bool = False) -> Path:
             relative = Path("workspace") / relative.relative_to(fs_ops.roots()["workspace"])
         except ValueError:
             raise PermissionError('Path is outside the user workspace') from None
-    if (not relative.parts or relative.parts[0] != 'workspace'
-            or len(relative.parts) < 2 or '..' in relative.parts):
-        raise PermissionError('Only workspace/<file> is writable')
+    # Normalize only the already-approved workspace-relative convention.
+    # Both maintenance.write_file(path='workspace/projects/x') and the
+    # legacy fs_write(project='workspace', path='projects/x') now address
+    # precisely the same file. Do not accept paths under separately
+    # configured approved project roots here.
+    if '..' in relative.parts:
+        raise PermissionError('Workspace path traversal is denied')
+    if relative.parts and relative.parts[0] != 'workspace':
+        if (relative.parts[0] in WORKSPACE_RELATIVE_PREFIXES
+                and len(relative.parts) >= 2):
+            relative = Path('workspace') / relative
+        elif (relative.parts[0].startswith('.')
+              or relative.as_posix() in READ_ONLY_FILES):
+            raise PermissionError('Hidden or shipped-source writes are denied')
+        else:
+            raise ValueError(
+                'WORKSPACE_PATH_FORMAT_INVALID: write_file(path=...) accepts '
+                'workspace/projects/<file> or projects/<file> (also scratch/, '
+                'artifacts/, downloads/, shared/); fs_write requires '
+                "project='workspace', path='projects/<file>'. "
+                'Check the actual tool signature before retrying. '
+                'Policy or safety denials must not be bypassed.')
+    if not relative.parts or relative.parts[0] != 'workspace' or len(relative.parts) < 2:
+        raise PermissionError('Only workspace/<file> or an approved workspace-relative subpath is writable')
     _no_symlinks(fs_ops.roots()['workspace'])
-    # Reuse the existing sensitive/hidden/generated path denylist. No new
-    # project root or credentials configuration can be written through aliases.
-    _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix())
+    # Read-only paths can include dotfiles; mutation paths retain the existing
+    # name denylist. Aliases cannot write outside the configured workspace.
+    _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix(),
+                                  read_only=not write)
     if target == fs_ops.roots()['workspace'] or target.is_dir():
         raise ValueError('Expected a workspace file')
     if target.exists() and target.stat().st_nlink != 1:
@@ -283,20 +310,20 @@ def register(mcp) -> None:
 
     @readonly
     def list_workspace(path: str = 'workspace', limit: int = 100) -> dict:
-        """List non-sensitive entries under workspace, without following symlinks."""
+        """List entries including hidden files under workspace; no symlinks."""
         relative = Path(path)
         if relative.is_absolute() or not relative.parts or relative.parts[0] != 'workspace' or '..' in relative.parts:
             raise ValueError('Only workspace-relative paths are allowed')
         _no_symlinks(fs_ops.roots()['workspace'])
         nested = Path(*relative.parts[1:]).as_posix()
-        base, directory = fs_ops.target_for('workspace', nested)
+        base, directory = fs_ops.target_for('workspace', nested, read_only=True)
         if not directory.is_dir():
             raise NotADirectoryError(path)
         limit = max(1, min(int(limit), 200))
         entries = []
         for entry in sorted(directory.iterdir(), key=lambda item: item.name):
             try:
-                fs_ops.target_for('workspace', entry.relative_to(base).as_posix())
+                fs_ops.target_for('workspace', entry.relative_to(base).as_posix(), read_only=True)
             except (ValueError, PermissionError):
                 continue
             if entry.is_symlink():
@@ -360,7 +387,7 @@ def register(mcp) -> None:
 
     @readonly
     def read_file(path: str) -> dict:
-        """Read UTF-8 workspace text or explicit read-only shipped source (256 KiB)."""
+        """Read workspace text using workspace/projects/... or projects/...; shipped source is allowlisted."""
         try:
             data = _read(_read_target(path), MAX_FILE)
             content = data.decode('utf-8')
@@ -375,7 +402,7 @@ def register(mcp) -> None:
 
     @mutation
     def write_file(path: str, content: str, expected_sha256: str | None = None) -> dict:
-        """Write workspace UTF-8 text atomically with existing-file SHA256 and backup."""
+        """Write workspace text: workspace/projects/... or projects/...; existing files need SHA256 and backup."""
         data = content.encode('utf-8')
         if len(data) > MAX_FILE:
             raise ValueError('Content exceeds 256 KiB')
@@ -414,9 +441,11 @@ def register(mcp) -> None:
                          start_new_session=True, close_fds=True)
         return {'status': 'restart_scheduled', 'delay_seconds': 3, 'message': 'Reconnect after restart'}
 
+    from .argument_guidance import guided_validation_error
+
     async def execute(operation: str, arguments: dict[str, Any] | None, read_only: bool):
         if not isinstance(operation, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,79}', operation):
-            raise ValueError('Invalid operation')
+            raise ValueError('VALIDATION_ERROR: operation must match [a-z][a-z0-9_]{0,79}; call custom_query(operation=\'help\') to list allowed operations.')
         arguments = {} if arguments is None else arguments
         if not isinstance(arguments, dict) or not all(isinstance(key, str) for key in arguments):
             raise TypeError('arguments must be a JSON object')
@@ -434,14 +463,21 @@ def register(mcp) -> None:
                                    for name, found in sorted(entries.items())],
                     'dynamic_plugin': None, 'security': 'Frozen shipped handlers; no workspace executable imports'}
         if operation not in entries:
-            raise ValueError('Unknown or disabled operation; call help')
+            raise ValueError('VALIDATION_ERROR: unknown or disabled operation; call custom_query(operation=\'help\') to list available operations. Do not retry disabled tools by another route.')
         found = entries[operation]
         if read_only and not found.read_only:
             raise PermissionError('State-changing operation requires custom_command')
-        inspect.signature(found.handler).bind(**arguments)
-        result = found.handler(**arguments)
-        if inspect.isawaitable(result):
-            result = await result
+        try:
+            inspect.signature(found.handler).bind(**arguments)
+        except TypeError as error:
+            detail = guided_validation_error(operation, found.handler, error, signature=True)
+            raise TypeError(str(detail)) from None
+        try:
+            result = found.handler(**arguments)
+            if inspect.isawaitable(result):
+                result = await result
+        except ValueError as error:
+            raise guided_validation_error(operation, found.handler, error) from None
         if operation in ('mcp_bridge_read', 'mcp_bridge_call') and isinstance(result, list):
             return result
         return {'operation': operation, 'result': result}

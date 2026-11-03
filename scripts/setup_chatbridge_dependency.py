@@ -26,6 +26,7 @@ RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b11"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 DEFAULT_URL = "http://127.0.0.1:8787"
+MANAGED_LABEL = "net.chatbridge.gateway.maccontrol"
 
 
 def local_origin(url: str):
@@ -59,6 +60,100 @@ def verify(url: str = DEFAULT_URL) -> dict:
             "mac_control_browser_provider": "chatbridge", "versioned_api": "v1"}
 
 
+
+def select_endpoint(preferred: str = DEFAULT_URL, *, reuse_compatible: bool = True) -> str:
+    """Reuse a compatible service or select an unused loopback port."""
+    requested = local_origin(preferred)
+    port = requested.port or 80
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            if reuse_compatible:
+                try:
+                    verify(preferred)
+                    return preferred
+                except urllib.error.HTTPError as error:
+                    if error.code == 401:
+                        raise RuntimeError("Existing ChatBridge requires its API key") from None
+                except (urllib.error.URLError, TimeoutError, ValueError, RuntimeError):
+                    pass
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as available:
+                available.bind(("127.0.0.1", 0))
+                return "http://127.0.0.1:" + str(available.getsockname()[1])
+    return preferred
+
+
+def browser_login_status(url: str = DEFAULT_URL, *, verify_idle: bool = False) -> dict:
+    """Check real composer. Only owner-triggered install may wake an idle Chrome."""
+    local_origin(url)
+    headers = ({"Authorization": "Bearer " + os.environ["MACCONTROL_CHATBRIDGE_API_KEY"]}
+               if os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY") else {})
+
+    def outcome(payload: dict) -> dict:
+        if (isinstance(payload, dict) and payload.get("ready") is True
+                and payload.get("chatgpt_authenticated") is True):
+            return {"authenticated": True, "status": "ready", "url": url}
+        return {"authenticated": False, "status": "unverified", "url": url,
+                "next": "Inspect managed Chrome readiness before considering login"}
+
+    def error_body(error):
+        try:
+            with error:
+                data = json.load(error)
+            return data if isinstance(data, dict) else {}
+        except (ValueError, OSError, TypeError):
+            return {}
+
+    def unavailable():
+        return {"authenticated": False, "status": "unavailable", "url": url,
+                "next": "Check ChatBridge service and retry setup"}
+
+    request = urllib.request.Request(url.rstrip("/") + "/ready", headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=35) as response:
+            if getattr(response, "status", 200) != 200:
+                raise RuntimeError("Unexpected ChatBridge readiness response")
+            return outcome(json.load(response))
+    except urllib.error.HTTPError as error:
+        if error.code == 503:
+            detail = error_body(error)
+            reason = detail.get("reason")
+            if reason == "browser_idle":
+                if not verify_idle:
+                    return {"authenticated": False, "status": "browser_idle",
+                            "url": url, "next": "Use explicit browser verification during installer update"}
+                probe = urllib.request.Request(url.rstrip("/") + "/v1/browser/verify",
+                                               headers=headers, method="POST")
+                try:
+                    with urllib.request.urlopen(probe, timeout=80) as response:
+                        return outcome(json.load(response))
+                except urllib.error.HTTPError as failure:
+                    if failure.code == 404:
+                        return {"authenticated": False, "status": "browser_idle", "url": url,
+                                "next": "Upgrade ChatBridge to a version with /v1/browser/verify"}
+                    if failure.code == 503:
+                        error_body(failure)
+                        return {"authenticated": False, "status": "unverified",
+                                "url": url, "next": "Browser verification failed; inspect ChatBridge logs"}
+                    raise
+                except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+                    return unavailable()
+            if reason in ("browser_unavailable", "browser_start_failed"):
+                return unavailable()
+            if reason in ("provider_cooldown", "provider_rate_limited"):
+                return {"authenticated": False, "status": "cooldown", "url": url,
+                        "next": "Wait for provider cooldown and retry"}
+            if reason in ("auth_required", "login_required"):
+                return {"authenticated": False, "status": "login_required",
+                        "url": url, "next": "Sign in to the managed Chrome profile"}
+            return {"authenticated": False, "status": "unverified",
+                    "url": url, "next": "Inspect ChatBridge readiness response; a 503 is not proof of logout"}
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return unavailable()
+
+
 def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
     root = install_root.expanduser().resolve()
     return (root / "deps/chatbridge-source", root / "deps/chatbridge",
@@ -68,7 +163,7 @@ def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
 def verify_managed_install(install_root: Path) -> None:
     """An available external ChatBridge cannot silently break consolidation."""
     _, prefix, state = managed_paths(install_root)
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
     if not plist.is_file() or plist.is_symlink():
         raise RuntimeError("ChatBridge endpoint is running without a managed LaunchAgent; stop it before installing Mac Control")
     try:
@@ -79,12 +174,26 @@ def verify_managed_install(install_root: Path) -> None:
         database = Path(variables["CHATBRIDGE_DB"]).resolve()
     except (OSError, KeyError, ValueError, TypeError):
         raise RuntimeError("Cannot verify existing ChatBridge installation ownership") from None
-    if (data.get("Label") != "net.chatbridge.gateway"
+    if (data.get("Label") != MANAGED_LABEL
             or data.get("ChatBridgeInstaller") != "1"
             or workdir.parent != prefix / "releases"
             or database != state / "state.db"):
         raise RuntimeError("ChatBridge is installed outside ~/MacControlMCP; remove or migrate it first")
 
+
+
+def owned_endpoint(install_root: Path) -> str | None:
+    """Reuse the actual bound port of this installation, not a guessed free port."""
+    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
+    if not plist.exists() and not plist.is_symlink():
+        return None
+    verify_managed_install(install_root)
+    with plist.open("rb") as stream:
+        env = plistlib.load(stream).get("EnvironmentVariables", {})
+    port = env.get("CHATBRIDGE_PORT")
+    if not isinstance(port, str) or not port.isdecimal() or not 1 <= int(port) <= 65535:
+        raise RuntimeError("Owned ChatBridge port missing or invalid; inspect its LaunchAgent")
+    return "http://127.0.0.1:" + port
 
 def install(source: Path, *, url: str = DEFAULT_URL,
             install_root: Path | None = None) -> dict:
@@ -102,7 +211,7 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     if 'name = "chatbridge-gateway"' not in manifest:
         raise RuntimeError("Source is not the expected ChatBridge distribution")
     # Let ChatBridge own its application and state lifecycle inside Mac Control's deps.
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     environment = dict(os.environ)
     client_key = environment.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
     server_key = environment.get("CHATBRIDGE_API_KEY", "")
@@ -113,7 +222,8 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     extra = []
     if install_root is not None:
         _, prefix, state = managed_paths(install_root)
-        extra = ["--prefix", str(prefix), "--state-dir", str(state)]
+        extra = ["--prefix", str(prefix), "--state-dir", str(state),
+                 "--label", MANAGED_LABEL]
     try:
         # Preserve terminal input/output: ChatBridge owns interactive uv consent/login guidance.
         proc = subprocess.run([sys.executable, str(source / "scripts/installer.py"),
@@ -132,17 +242,19 @@ def install(source: Path, *, url: str = DEFAULT_URL,
     return result
 
 
-def assert_installable(url: str) -> None:
+def assert_installable(url: str, *, label: str = "net.chatbridge.gateway") -> None:
     """Refuse existing service ownership or an occupied port before any setup."""
     parsed = local_origin(url)
-    plist = Path.home() / "Library/LaunchAgents/net.chatbridge.gateway.plist"
+    plist = Path.home() / ("Library/LaunchAgents/" + label + ".plist")
     if plist.exists() or plist.is_symlink():
         raise RuntimeError("ChatBridge LaunchAgent already exists; inspect or upgrade it independently")
     state = Path.home() / ".chatbridge"
-    if state.is_symlink() or (state.exists() and (not state.is_dir() or any(state.iterdir()))):
+    if label == "net.chatbridge.gateway" and (
+            state.is_symlink() or
+            (state.exists() and (not state.is_dir() or any(state.iterdir())))):
         raise RuntimeError("Existing ChatBridge state found; recover/start it independently, then rerun Mac Control")
     try:
-        loaded = subprocess.run(["/bin/launchctl", "print", "gui/" + str(os.getuid()) + "/net.chatbridge.gateway"],
+        loaded = subprocess.run(["/bin/launchctl", "print", "gui/" + str(os.getuid()) + "/" + label],
                                 capture_output=True, timeout=5, check=False)
     except subprocess.TimeoutExpired:
         raise RuntimeError("Could not confirm ChatBridge service ownership; setup stopped") from None
@@ -203,7 +315,7 @@ def extract_release(archive: Path, destination: Path) -> Path:
 
 
 def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
         root = Path(temporary)
         archive = root / "release.tar.gz"
@@ -254,6 +366,9 @@ def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> 
 
 def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Path | None = None) -> dict:
     """Reuse a compatible endpoint; only a refused connection permits fresh setup."""
+    if install_root is not None:
+        url = owned_endpoint(install_root) or select_endpoint(
+            url, reuse_compatible=False)
     try:
         result = verify(url)
         if install_root is not None:
@@ -274,7 +389,7 @@ def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Pat
             raise RuntimeError("ChatBridge probe failed; inspect the endpoint before installation") from None
     except (TimeoutError, ValueError):
         raise RuntimeError("ChatBridge probe timed out or returned invalid data; existing service preserved") from None
-    assert_installable(url)
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     if install_root is not None and source is None:
         existing, _, _ = managed_paths(install_root)
         if existing.is_dir() and (existing / "scripts/installer.py").is_file():

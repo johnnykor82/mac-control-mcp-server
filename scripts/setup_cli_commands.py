@@ -98,7 +98,41 @@ def register(root: Path, *, home: Path | None = None,
     for name in ("mclog", "maccontrol"):
         status[name] = _ensure_wrapper(user_bin / name, wrapper(root, name))
     status["path"] = _ensure_profile(home, user_bin, environ or os.environ)
+    if status["mclog"] == "conflict":
+        status["mclog_resolution"] = resolve_mclog_conflict(root, home=home)
     return status
+
+
+
+def resolve_mclog_conflict(root: Path, *, home: Path | None = None,
+                           approved: bool = False) -> dict:
+    """Move a legacy launcher only after explicit owner approval."""
+    root = root.expanduser().resolve()
+    home = (home or Path.home()).expanduser().resolve()
+    current = home / ".local/bin/mclog"
+    legacy = home / ".local/bin/mclog-legacy"
+    expected = wrapper(root, "mclog")
+    if not (current.exists() or current.is_symlink()):
+        return {"status": "no_conflict", "new": str(current)}
+    if current.is_file() and not current.is_symlink():
+        if _regular_owner_file(current) and current.read_text(encoding="utf-8") == expected:
+            return {"status": "already_registered", "new": str(current)}
+    if not approved:
+        return {"status": "approval_required", "old": str(current),
+                "preserve_as": str(legacy), "new": str(current)}
+    if (legacy.exists() or legacy.is_symlink()
+            or current.lstat().st_uid != os.getuid()
+            or not (current.is_symlink() or _regular_owner_file(current))):
+        return {"status": "conflict", "reason": "unsafe_existing_launcher_or_backup"}
+    current.rename(legacy)
+    try:
+        if _ensure_wrapper(current, expected) != "registered":
+            raise RuntimeError("Could not register new mclog")
+    except BaseException:
+        if not current.exists() and not current.is_symlink():
+            legacy.rename(current)
+        raise
+    return {"status": "migrated", "old": str(legacy), "new": str(current)}
 
 
 def unregister(root: Path, *, home: Path | None = None) -> dict:

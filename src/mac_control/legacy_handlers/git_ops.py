@@ -93,7 +93,12 @@ def register(mcp):
     def git_create_branch(project: str, name: str) -> dict:
         """Create a new local branch; does not switch worktree or contact remote."""
         if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_./-]{0,79}", name):
-            raise ValueError("Invalid branch name")
+            raise ValueError(
+                "GIT_BRANCH_NAME_INVALID: name must be 1–80 characters; "
+                "first must be an ASCII letter, followed by ASCII letters, "
+                "digits, underscore, dot, slash or hyphen. The Git backend "
+                "may impose additional ref-name rules. No Git command ran."
+            )
         return git(project, ["branch", name])
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})

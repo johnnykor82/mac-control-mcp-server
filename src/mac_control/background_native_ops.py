@@ -4,13 +4,12 @@ Session capabilities bind the owner to the bundle ID, PID, and launch time.
 The native helper always validates the current AX tree and window fingerprint.
 """
 from __future__ import annotations
-import base64,fcntl,hashlib,hmac,json,os,re,secrets,subprocess,time
+import base64,fcntl,hashlib,hmac,json,os,re,secrets,time
 from pathlib import Path
 from fastmcp.tools.base import ToolResult
 from mcp.types import ImageContent
 from .runtime_paths import DATA_ROOT
 ROOT=DATA_ROOT/'background-native'
-BINARY=Path(__file__).resolve().parents[2]/'build/dev_native_background'
 FLAG=DATA_ROOT/'feature_flags.json'
 SESSION=re.compile(r'[0-9a-f]{40}\.[0-9a-f]{64}\Z')
 
@@ -31,19 +30,24 @@ def store(path,obj):
     fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
     with os.fdopen(fd,'w') as file:file.write(data)
 
-def helper(op,**parameters):
-    if not BINARY.is_file() or BINARY.is_symlink():return error('DEPENDENCY_MISSING','Native Dev binary missing')
+def helper(op, **parameters):
+    """Use only the already-signed GUI Helper's owner-only IPC and macOS TCC."""
+    from .legacy_handlers import gui_ops
+    if op not in ('apps', 'frontmost', 'windows', 'elements', 'action'):
+        return error('UNKNOWN_ACTION', 'Unsupported native operation')
+    request={'native_op':op, **parameters}
+    if len(json.dumps(request,ensure_ascii=False).encode())>7800:
+        return error('INVALID_ARGUMENT','Native request exceeds GUI IPC bound')
     try:
-        request=json.dumps({'op':op,**parameters},ensure_ascii=False)
-        if len(request)>30000:return error('INVALID_ARGUMENT','Native request exceeds limit')
-        proc=subprocess.run([str(BINARY)],input=request+'\n',capture_output=True,text=True,
-            timeout=12,env={'HOME':str(Path.home()),'PATH':'/usr/bin:/bin:/opt/homebrew/bin'})
-        if proc.returncode or len(proc.stdout)>160000:return error('HELPER_FAILED','Native helper unavailable')
-        response=json.loads(proc.stdout)
-        if response.get('ok'):
-            return {'ok':True,'result':response['result']}
-        return error(response.get('code','NATIVE_ERROR'),response.get('message','Native API unavailable'))
-    except (OSError,ValueError,subprocess.TimeoutExpired):return error('HELPER_FAILED','Native helper unavailable')
+        result=gui_ops._call('native_backend',timeout=20,**request)
+        return {'ok':True,'result':result}
+    except (RuntimeError,OSError,ValueError) as exc:
+        message=str(exc)[:280]
+        match=re.match(r'([A-Z_]+):\s*(.*)',message)
+        if match:
+            return error(match.group(1),match.group(2))
+        return error('GUI_UNAVAILABLE',message)
+
 
 def begin(bundle_id):
     if not isinstance(bundle_id,str) or not re.fullmatch(r'[A-Za-z0-9.-]{3,180}',bundle_id):

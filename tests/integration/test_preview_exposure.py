@@ -35,7 +35,7 @@ class PreviewExposureTests(unittest.TestCase):
 
     def test_all_names_unchanged_and_no_write_tools(self):
         frozen = inspect_existing_handlers()
-        self.assertEqual(len(READ_ONLY_PREVIEW_OPERATIONS), 19)
+        self.assertEqual(len(READ_ONLY_PREVIEW_OPERATIONS), 18)
         self.assertTrue(READ_ONLY_PREVIEW_OPERATIONS.issubset(set(frozen)))
         for name in READ_ONLY_PREVIEW_OPERATIONS:
             self.assertTrue(frozen[name].read_only)

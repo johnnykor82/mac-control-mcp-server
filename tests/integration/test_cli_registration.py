@@ -63,6 +63,7 @@ class CliRegistrationTests(unittest.TestCase):
         existing.write_text("# my profile\nexport TEST=1\n")
         result = self.register()
         self.assertEqual(result["mclog"], "conflict")
+        self.assertEqual(result["mclog_resolution"]["status"], "approval_required")
         self.assertIn("FOREIGN", foreign.read_text())
         self.assertEqual(result["maccontrol"], "registered")
         self.assertTrue(existing.read_text().startswith("# my profile\nexport TEST=1\n"))

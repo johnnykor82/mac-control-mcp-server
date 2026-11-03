@@ -30,7 +30,7 @@ Mac Control MCP Server предоставляет авторизованному
 - **Установка и обслуживание:** версии, обновление, откат, удаление с сохранением данных.
 - **Открытые исходники:** MIT License, © 2026 Ivan Konstantinov.
 
-**Что ещё проверить перед Beta:** независимую установку на другом Mac, реальный вход через GitHub OAuth, внешний Funnel, разрешения Accessibility/Screen Recording и чистоту публичного Git-репозитория. Это пока не подтверждение промышленной готовности.
+**Что ещё проверить перед Beta:** независимую чистую установку на другом Mac, GitHub Actions для соответствующего исходного коммита, зависимости и права распространения. Публичный GitHub OAuth, Funnel, Accessibility/Screen Recording, ChatBridge/Watcher и откат подтверждены на текущем Mac в рамках E9. Это пока не подтверждение готовности публичного выпуска.
 
 ## v0.1.0-beta.16 — production tool parity and portable Watcher
 
@@ -248,3 +248,124 @@ Mac Control MCP Server предоставляет авторизованному
 - No OAuth secrets, live Funnel routes or active Mac services changed as
   part of developing this fix. Existing owner OAuth configuration is retained
   by the installer and is read when setup resumes.
+
+
+## Local full-capability installer candidate (unreleased)
+
+This worktree remains local; it is not a published release. The candidate
+includes native OpenSSH aliases for SSH/SFTP, an authenticated terminal with
+automatic tmux provisioning, dynamic MCP targets, ChatBridge login readiness,
+ChatBridge+Watcher bundle gates, GUI/TCC guided setup, unchanged visibility
+of shipped tools, owner-approved mclog migration, and `maccontrol doctor`.
+
+The tool inventory is 106 compatibility handlers, 126 local MCP tools with
+background browser enabled. Previously documented 109/129 counts applied
+before the removal of retired command-allowlist tools.
+
+**Acceptance is not complete** until real browser login, macOS TCC approval,
+GitHub OAuth MCP authentication, owned Watcher browser delivery, and a fully
+green isolated install/update/rollback have been verified. Internal planning
+and approval documents remain outside the source checkout.
+
+
+## FR-021 v2 — owner-only forensic audit and ChatGPT conversation correlation (candidate)
+
+- `mclog` reads full local tool-invocation argument snapshots rather than
+  only irreversible type/length summaries. Only the terminal presentation
+  masks known secret-looking keys/values. Long inputs have SHA-256 digests,
+  lengths and bounded previews; tool response bodies remain unlogged.
+- A client-provided MCP `_meta["openai/session"]` can produce a stable
+  anonymized `chat_ref` and an optional «ЧАТ» column. This identifies
+  the ChatGPT conversation **when the client sends metadata**; it is not
+  a title, identity proof, or permission factor.
+- The local source JSONL remains 0600 (directory 0700; daily 7-day
+  rotation). Remote `audit_tail`/`audit_search` remain metadata-only.
+- Versioned source candidate only; active MCP/legacy service and OAuth
+  credentials are not changed by testing or publication of source.
+
+
+## FR-022 — actionable SSH argument validation (candidate)
+
+- The old 5000-character ssh_exec validator rejected a 5027-character
+  heredoc (verified in owner legacy audit) with only "Invalid remote command".
+- New ssh_exec accepts up to 65536 UTF-8 bytes; longer inputs return
+  SSH_COMMAND_TOO_LONG with actual byte count and next steps:
+  ssh_write_text or ssh_upload followed by short ssh_exec.
+- Empty or non-string commands return SSH_COMMAND_INVALID with guidance.
+  Invalid calls do not contact SSH and never echo command contents in errors.
+- The change is to the new Mac Control MCP only; old Mac Control and remote
+  VPN hosts are not modified.
+
+## FR-023 — guided parameter errors (candidate)
+
+- Guide arguments for 106 frozen handlers, plus custom_command/custom_query.
+- Preserve TypeError for nested signature errors and specific SSH error codes.
+- Unclassified ValueError may follow side effects: inspect state before retry.
+- Policy/runtime failures are not rewritten and live services are unchanged.
+
+
+## FR-024 — fix false ChatBridge login_required on idle Chrome (candidate)
+
+- Passive /ready HTTP 503 browser_idle means the managed Chrome was closed
+  after 300s inactivity; the user may still be authenticated.
+- Read-only status reports browser_idle without waking the browser. Only
+  owner-initiated install/update calls explicit POST /v1/browser/verify and
+  requires live ready=true and chatgpt_authenticated=true.
+- Generic HTTP 503, browser unavailable, provider cooldown and an
+  unverified login are distinct. No weakened Watcher readiness gate.
+- Requires ChatBridge local release with POST /v1/browser/verify; older
+  versions display an upgrade instruction rather than claiming a logout.
+
+## FR-025 — MCP input contract audit and actionable errors (candidate)
+
+- Inventory all 133 actual tool schemas (106 frozen + 27 maintenance or
+  optional), plus 20 shared-handler modules and ambiguous error backlog.
+  Schema and report regeneration have offline tests without execution.
+- Replace opaque local terminal and PTY errors with exact length/format limits
+  and safe, actual alternative tool names. No shell/PTY side effects from
+  invalid input and no expanded command limits.
+- Watcher IDs, Git branch names and GUI mouse actions now explain accepted
+  syntax or enumerated choices before dispatch.
+- Background ChatBridge Browser API distinguishes malformed arguments from
+  service configuration and invalid upstream responses, preserving prior
+  INVALID_ARGUMENT code for caller input and no-retry for uncertain outcomes.
+- Existing authorization, workspace policy and service lifecycle unchanged.
+
+## FR-025.1 — ChatGPT linked-account routing triage (candidate)
+
+- Document and test that link_id is owned by ChatGPT's connection wrapper,
+  not the FastMCP server schemas for ssh_exec, terminal_exec or custom_command.
+- Distinguish platform eligibility and safety rejections from server argument
+  validation and SSH execution. Do not retry a platform-blocked command
+  with another tool or interpret MCP status=ok as SSH exit_code=0.
+- Include the operator runbook CHATGPT_LINK_ROUTING_DIAGNOSTICS.md in the
+  immutable release payload alongside TOOL_ARGUMENT_ERRORS.md.
+- Improve mcp_bridge target-name, missing-target and URL diagnostics with
+  exact safe alternatives and no leaked caller argument values.
+- No platform eligibility or OpenAI safety policy can be changed by this
+  local Mac Control update. Production remains unchanged in this candidate.
+- Document optional refresh of the app's published/frozen MCP tool snapshot
+  where supported, since stale approved schemas can produce parameter
+  mismatches even while local FastMCP schemas are correct.
+
+## FR-025.2 — GitHub OAuth profile identity for multi-account ChatGPT (candidate)
+
+- Add an authenticated, remote-only, read-only get_profile tool with
+  OpenAI profile metadata and an explicit structured output schema.
+- Stable id is the authenticated, immutable GitHub provider subject,
+  not a session token, mutable GitHub login or MCP client_id.
+- Missing or unauthorized subject fails closed. Local anonymous MCP
+  tool schemas and existing OAuth settings are unchanged.
+- This helps ChatGPT identify existing linked accounts after reconnect;
+  historical duplicate connection records remain managed by ChatGPT.
+
+## FR-025.3 — compatible Mac Control workspace arguments (candidate)
+
+- write_file/read_file now accept familiar projects/<file> (and other
+  known workspace subfolders) as equivalent to workspace/projects/<file>.
+- fs_write(project, path) and all 106 frozen operation schemas stay
+  unchanged; invalid ambiguous file paths receive safe preflight guidance.
+- SHA256 CAS, atomic backup, 256 KiB maintenance limit, sensitive-path,
+  traversal, symlink and external-root restrictions are preserved.
+- Regression tests cover the exact jkmac A08 path without touching
+  any Android audit project or its user files.

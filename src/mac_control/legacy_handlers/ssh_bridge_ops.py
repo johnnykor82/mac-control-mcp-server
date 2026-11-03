@@ -32,67 +32,36 @@ def _profiles():
     return profiles
 
 def _argv(name, command_id):
-    data = _profiles().get(name)
-    if not isinstance(data, dict):
-        raise ValueError("SSH host not in owner-managed allowlist")
+    """Resolve diagnostics through the same OpenSSH profile as SSH and SFTP."""
     if command_id not in COMMANDS:
         raise ValueError("Unknown diagnostic command")
-    host = data.get("host")
-    login = data.get("user")
-    port = data.get("port", 22)
-    if (not isinstance(host, str) or not SAFE_HOST.fullmatch(host)
-        or not isinstance(login, str) or not SAFE_LOGIN.fullmatch(login)
-        or not isinstance(port, int) or not 1 <= port <= 65535):
-        raise ValueError("Invalid host settings")
-    argv = [
-        SSH, "-F", "/dev/null", "-T", "-p", str(port),
-        "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=yes",
-        "-o", "ConnectTimeout=6",
-        "-o", "ForwardAgent=no",
-        "-o", "ClearAllForwardings=yes",
-        "-o", "PermitLocalCommand=no",
-        "-o", "RequestTTY=no",
-        "-o", "ServerAliveInterval=5",
-        "-o", "NumberOfPasswordPrompts=0",
-        "-o", "LogLevel=ERROR",
-    ]
-    key = data.get("identity_file")
-    if key:
-        path = Path(key).expanduser()
-        # Owner-selected key path; not included in output or logs.
-        if not path.is_file() or not path.is_absolute():
-            raise ValueError("Configured SSH identity not found")
-        argv.extend(["-i", str(path), "-o", "IdentitiesOnly=yes"])
-    # options terminated before destination; host has a restrictive grammar
-    argv.extend(["--", f"{login}@{host}", COMMANDS[command_id]])
-    return argv
+    from .ssh_manage_ops import _command
+    return _command(name, COMMANDS[command_id])
+
 
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def ssh_targets() -> dict:
         """List SSH servers and diagnostic command names configured locally by owner."""
+        from .ssh_manage_ops import _inventory
+        saved = _profiles()
         return {
-            "hosts": [
-                {"name": name, "host": data.get("host"),
-                 "user": data.get("user"), "port": data.get("port", 22)}
-                for name, data in _profiles().items() if isinstance(data, dict)
-            ],
+            "hosts": [{"name": name} for name in sorted(set(_inventory()) | set(saved))],
             "diagnostics": list(COMMANDS),
-            "config": str(CONFIG),
+            "source": "OpenSSH config; saved profiles optional",
         }
+
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def ssh_open(host: str) -> dict:
         """Open interactive SSH PTY with strict known-host checking and owner-approved host.
 
         Uses same tmux socket as terminal_read/terminal_send/terminal_close.
-        Local terminal policy must explicitly be enabled.
+        Uses the owner's existing OpenSSH settings without host registration.
         """
         import secrets
         from . import command_plugins
-        command_plugins._require()
-        if command_plugins.TMUX is None:
+        if command_plugins._tmux_available() is None:
             raise RuntimeError("tmux is not installed")
         # Validation is shared with the read-only SSH diagnostic.
         ssh_args = _argv(host, "identity")[:-1]

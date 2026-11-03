@@ -11,6 +11,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import stat
+import secrets
 from pathlib import Path
 import sys
 
@@ -26,7 +29,7 @@ async def verify_login(endpoint: str) -> dict:
     auth = OAuth(mcp_url=endpoint, scopes=["read:user"],
                  client_name="Mac Control MCP Server Setup Verification",
                  callback_timeout=180)
-    async with Client(endpoint, auth=auth, init_timeout=35, timeout=30) as client:
+    async with Client(endpoint, auth=auth, init_timeout=210, timeout=30) as client:
         result = await client.call_tool("system_info", {})
         if result.is_error:
             raise RuntimeError("Authenticated MCP system_info returned an error")
@@ -52,6 +55,25 @@ def main() -> int:
     print("A web browser will open for an explicit GitHub OAuth login.")
     print("Log in as the allowed GitHub owner and approve the requested read:user scope.")
     report = asyncio.run(verify_login(endpoint))
+    if report.get("github_oauth_login_verified") is True and report.get("status") == "authenticated_mcp_success":
+        data = args.root.expanduser().resolve() / "data"
+        if not data.is_dir() or data.is_symlink():
+            raise RuntimeError("Installed data directory unavailable")
+        marker = data / "oauth-acceptance.json"
+        if marker.is_symlink():
+            raise RuntimeError("OAuth acceptance path is a symlink")
+        temp = data / (".oauth-acceptance-" + secrets.token_hex(8))
+        record = {"authenticated_mcp_success": True, "endpoint": endpoint,
+                  "release": str((args.root.expanduser().resolve() / "current").resolve())}
+        descriptor = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump(record, output)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temp, marker)
+        finally:
+            temp.unlink(missing_ok=True)
     print(json.dumps(report, indent=2))
     return 0
 
