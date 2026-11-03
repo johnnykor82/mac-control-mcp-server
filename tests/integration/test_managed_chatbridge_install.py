@@ -91,7 +91,7 @@ class ManagedChatBridgeTests(unittest.TestCase):
                               side_effect=RuntimeError('stop-before-activation')):
                 with self.assertRaisesRegex(RuntimeError, 'stop-before-activation'):
                     installer.install(root, with_chatbridge=True)
-            upgrade.assert_called_once_with(root, url=cb.DEFAULT_URL)
+            upgrade.assert_called_once_with(root.resolve(), url=cb.DEFAULT_URL)
 
     def test_pinned_release_persisted_under_managed_root(self):
         import tarfile
