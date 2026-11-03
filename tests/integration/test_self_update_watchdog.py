@@ -16,7 +16,7 @@ class SelfUpdateTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="bf16-fixture-")
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name) / "MacControlMCP"
+        self.root = (Path(temporary.name) / "MacControlMCP").resolve()
         self.data = self.root / "data/run"
         self.data.mkdir(parents=True)
         self.release_a = self.root / "releases/aaa"
