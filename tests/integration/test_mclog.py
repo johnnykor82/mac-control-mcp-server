@@ -58,6 +58,32 @@ class MacLogTests(unittest.TestCase):
         self.assertEqual(mclog.display_args({"tool":"terminal_exec","argument_info":{}},80),"нет")
         self.assertNotIn("null",mclog.display_args({"tool":"terminal_exec","arguments":None},80))
 
+    def test_raw_arguments_override_legacy_info(self):
+        row={"tool":"terminal_exec",
+             "arguments":{"command":"echo real-command","project":"workspace"},
+             "argument_info":{"command":"[команда: 17 симв.]"}}
+        self.assertIn("real-command",mclog.display_args(row,160))
+        self.assertNotIn("команда:",mclog.display_args(row,160))
+
+    def test_chat_column_shows_only_when_chat_metadata_present(self):
+        from unittest.mock import patch
+        class Screen:
+            def __init__(self,w): self.w=w;self.rows={}
+            def getmaxyx(self): return (15,self.w)
+            def erase(self): self.rows.clear()
+            def addnstr(self,y,x,text,n,style=0): self.rows[y]=text[:n]
+            def refresh(self): pass
+        e={"started":dt.datetime.now(dt.timezone.utc),"tool":"terminal_exec",
+           "status":"ok","chat_ref":"0123456789","arguments":{"command":"echo hello"}}
+        for width in (44,80,115):
+            screen=Screen(width)
+            with patch.object(mclog.curses,"color_pair",return_value=0):
+                mclog.draw(screen,[e],0,Path("/tmp"),dt.datetime.now(dt.timezone.utc),0)
+            t="\n".join(screen.rows.values())
+            self.assertNotIn("КЛИЕНТ",t)
+            self.assertIn("ЧАТ",t) if width>=95 else self.assertNotIn("ЧАТ",t)
+            if width>=95:self.assertIn("Чат 01234567",t)
+
     def test_incremental_partial_and_rotation(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

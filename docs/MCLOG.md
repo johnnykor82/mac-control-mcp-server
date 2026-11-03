@@ -29,8 +29,9 @@ For a custom root, invoke that installation's `current/bin/mclog`. The viewer al
 - Average duration and hourly activity / Средняя длительность и почасовая нагрузка.
 - Scrollable history of tool names, timestamps and statuses / История инструментов, времени и статусов.
 - Historical audit files across log rotation / Данные из ротируемого архива журналов.
-- Columns / Столбцы: ВРЕМЯ, КОМАНДА, АРГУМЕНТЫ, ИТОГ. The empty client column has been removed / Пустой столбец «Клиент» удалён.
-- New tool calls show bounded *safe argument metadata* / Новые вызовы показывают ограниченное безопасное описание аргументов.
+- Columns / Столбцы: ВРЕМЯ, КОМАНДА, АРГУМЕНТЫ, ИТОГ; optional ЧАТ on sufficiently wide terminals when ChatGPT supplies a conversation reference. The empty КЛИЕНТ column remains removed.
+- New tool calls show their **actual arguments** from the owner-only audit, with viewer-side truncation and display redaction; nested `custom_command`/`custom_query` parameters are supported.
+- A chat marker such as `Чат 01234567` is a repeatable, anonymized **conversation identifier**, not the conversation title. If ChatGPT omits `_meta["openai/session"]`, no chat attribution is shown.
 
 ### Keyboard / Клавиши
 
@@ -44,14 +45,39 @@ For a custom root, invoke that installation's `current/bin/mclog`. The viewer al
 
 ## Security and data handling / Безопасность
 
-The public Mac Control MCP Server produces an owner-only audit log with **tool name, start/end times, outcome, duration and a bounded, redacted argument description** for new calls. The argument summary records only approved enum names, safe numerical settings, value type and length or hidden markers; it never stores raw shell command text, arbitrary string values, file paths or content, typed messages, screenshots, response bodies or credentials. Secret-bearing parameter names are masked. This is a deliberately non-reversible summary, not an argument-replay log. Older installations may use different policies.
+The local Mac Control audit is the diagnostic **source of truth**: new
+`tool_start` records preserve the actually supplied MCP argument JSON, including
+shell command texts, paths and nested parameters. A bounded snapshot limits
+individual fields, depth and total record size; truncated content keeps a
+preview, original length and SHA-256. The log also retains the time,
+tool/request ID, status, and duration. It never logs tool response bodies.
+Because arguments can contain credentials and private data, the raw JSONL
+should be treated as private owner data; the viewer masks common credential
+fields and inline token patterns **only in its terminal presentation**.
 
+To correlate calls from a single ChatGPT conversation, the server hashes the
+optional client-supplied `_meta["openai/session"]` into a stable short
+`chat_ref`. This is **not** an authorization identity, actual conversation
+title, browser tab title or guarantee of provenance. It may be absent for
+other clients or ChatGPT versions.
+
+Remote `audit_tail` and `audit_search` intentionally project only metadata:
+raw arguments are available in the local owner-only file, not automatically
+in remote tool responses. For a complete forensic inspection, read the local
+JSONL with user-owned tools.
 The installed data directory and log files are private to the macOS account (directories `0700`, files `0600`). Daily rotation retains up to seven archived files. Uninstall preserves the owner data directory and audit history.
 
 ### Limitations / Ограничения
 
-Before this change, tool parameters were never written, so historical rows show «—» (no stored argument information). New calls with no parameters show «нет», and new calls with parameters display only a redacted structural summary (for example: `command=[команда: 48 симв.], project=workspace`). The word `null` is not displayed for missing parameters.
+Historical records from older MCP versions that contain no parameters
+show `—`, and explicit empty arguments show `нет`. The original legacy
+Mac Control logs that already contain actual `arguments` remain supported,
+as do the intermediate `argument_info` records from FR-021 v1.
+After updating the running MCP, only **future** requests gain complete
+audit records; previous calls cannot be reconstructed.
 
-The MCP server does not receive a verified ChatGPT conversation title in tool-call metadata, so the client column is removed rather than presenting a guessed identity. This release does not map ChatBridge browser tabs to unrelated MCP calls.
-
+The screen intentionally removes the empty `КЛИЕНТ` column. Its optional
+`ЧАТ` column is shown only when a recognizable ChatGPT conversation
+reference is recorded and the terminal is wide enough. Chat names are not
+sent by the ChatGPT MCP client.
 **No automatic telemetry or external reporting.** All inspection is local.

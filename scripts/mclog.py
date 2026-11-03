@@ -137,12 +137,14 @@ def load(log_dir):
 
 
 def display_args(event, limit=80):
-    """New logs include only redacted metadata; old records may omit all args."""
+    """Prefer actual locally stored call parameters; retain old audit fallbacks."""
+    if "arguments" in event and event.get("arguments") is not None:
+        payload = event["arguments"]
+        return safe_args(payload, limit) if payload != {} else "нет"
     if "argument_info" in event:
         payload = event["argument_info"]
         return safe_args(payload, limit) if isinstance(payload, dict) and payload else "нет"
-    payload = event.get("arguments")
-    return safe_args(payload, limit) if payload is not None and payload != {} else ("нет" if payload == {} else "—")
+    return "—"
 
 
 def is_error(event):
@@ -205,9 +207,12 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
     line(header_y - 1,
          f" {'ТОЛЬКО ОШИБКИ' if errors_only else 'ВСЕ ЗАПРОСЫ'} | e — фильтр | ↑↓ / PgUp / PgDn — история | g — наверх | q — выход",
          curses.A_DIM)
+    has_chat = width >= 95 and any(isinstance(e.get("chat_ref"), str) and e["chat_ref"] for e in events)
+    chat_width = 12 if has_chat else 0
+    chat_header = f" {'ЧАТ':{chat_width}}" if has_chat else ""
     cmd_width = max(12, min(32, width // 4))
-    args_width = max(10, width - 20 - cmd_width)
-    line(header_y, f" {'ВРЕМЯ':8} {'КОМАНДА':{cmd_width}} {'АРГУМЕНТЫ':{args_width}} ИТОГ",
+    args_width = max(10, width - 20 - cmd_width - (chat_width + 1 if has_chat else 0))
+    line(header_y, f" {'ВРЕМЯ':8}{chat_header} {'КОМАНДА':{cmd_width}} {'АРГУМЕНТЫ':{args_width}} ИТОГ",
          curses.color_pair(4) | bold)
     filtered = [e for e in events if is_error(e)] if errors_only else events
     visible = max(0, height - header_y - 2)
@@ -225,9 +230,13 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
         if command in ("custom_command", "custom_query") and isinstance(payload, dict) and payload.get("operation"):
             command = str(payload["operation"])
             payload = payload.get("arguments") or {}
-        args = display_args(event, args_width)
+        args = (safe_args(payload, args_width) if
+                command != str(event.get("tool", "?")) and isinstance(payload, dict)
+                else display_args(event, args_width))
         tm = event["started"].astimezone().strftime("%H:%M:%S")
-        row = f" {tm:8} {command[:cmd_width]:{cmd_width}} {args:{args_width}} {result}"
+        chat = event.get("chat_ref", "")
+        chat_part = f" {('Чат ' + chat[:8]) if isinstance(chat, str) and chat else '—':{chat_width}}" if has_chat else ""
+        row = f" {tm:8}{chat_part} {command[:cmd_width]:{cmd_width}} {args:{args_width}} {result}"
         line(header_y + 1 + i, row, curses.color_pair(color))
     line(height - 1,
          f" {offset+1 if filtered else 0}–{min(len(filtered), offset + visible)} из {len(filtered)} | «—» — параметры не записаны | обновление 2 с",

@@ -18,7 +18,7 @@ import os
 
 def make_server(*, include_mutations: bool = False, auth=None) -> FastMCP:
     mcp = FastMCP("Mac Control MCP Server", auth=auth, instructions=workspace_policy.instructions())
-    # Owner-scoped audit records tool metadata and bounded redacted argument shapes.
+    # Owner-scoped audit records bounded actual arguments locally; remote audit API stays metadata-only.
     # Uninstalled read-only DEV preview creates no public-install files.
     if os.environ.get("MAC_CONTROL_DATA_ROOT"):
         mcp.add_middleware(AuditMiddleware(DATA_ROOT / "logs"))

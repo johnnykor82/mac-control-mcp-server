@@ -266,3 +266,19 @@ before the removal of retired command-allowlist tools.
 GitHub OAuth MCP authentication, owned Watcher browser delivery, and a fully
 green isolated install/update/rollback have been verified. Internal planning
 and approval documents remain outside the source checkout.
+
+
+## FR-021 v2 — owner-only forensic audit and ChatGPT conversation correlation (candidate)
+
+- `mclog` reads full local tool-invocation argument snapshots rather than
+  only irreversible type/length summaries. Only the terminal presentation
+  masks known secret-looking keys/values. Long inputs have SHA-256 digests,
+  lengths and bounded previews; tool response bodies remain unlogged.
+- A client-provided MCP `_meta["openai/session"]` can produce a stable
+  anonymized `chat_ref` and an optional «ЧАТ» column. This identifies
+  the ChatGPT conversation **when the client sends metadata**; it is not
+  a title, identity proof, or permission factor.
+- The local source JSONL remains 0600 (directory 0700; daily 7-day
+  rotation). Remote `audit_tail`/`audit_search` remain metadata-only.
+- Versioned source candidate only; active MCP/legacy service and OAuth
+  credentials are not changed by testing or publication of source.

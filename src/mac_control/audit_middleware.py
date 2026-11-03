@@ -1,12 +1,15 @@
-"""Minimal, credential-safe audit trail for the separately installed MCP Server.
+"""Owner-only forensic invocation audit for the separate MCP server.
 
-Only bounded, value-redacted argument descriptions are retained.
-Never log raw arguments, messages, response content, tokens or exception text.
+Persist bounded actual tool arguments and anonymized conversation correlation,
+but never tool response bodies, exception text or HTTP request headers.
+Arguments themselves may contain secrets, as authorized by the local owner.
+The local audit file is owner-only and rotated daily.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import hashlib
 import logging
 import math
 import re
@@ -97,6 +100,79 @@ def safe_argument_info(arguments: object) -> dict:
     return result
 
 
+# Preserve diagnostic values in an owner-only JSONL file; protect log stability
+# against giant writes and cyclic/unusual data returned by extensions.
+_MAX_AUDIT_STRING = 24000
+_MAX_AUDIT_EVENT = 192000
+_MAX_AUDIT_DEPTH = 10
+_MAX_AUDIT_ITEMS = 150
+
+
+def _capture_value(value, depth=0):
+    if depth >= _MAX_AUDIT_DEPTH:
+        return {"truncated": True, "reason": "depth"}
+    if isinstance(value, str):
+        if len(value) > _MAX_AUDIT_STRING:
+            return {
+                "preview": value[:_MAX_AUDIT_STRING],
+                "truncated": True,
+                "length": len(value),
+                "sha256": hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest(),
+            }
+        return value
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return (value if value.bit_length() <= 8192 else {
+            "truncated": True, "reason": "integer", "bits": value.bit_length()
+        })
+    if isinstance(value, float):
+        return value if math.isfinite(value) else str(value)
+    if isinstance(value, dict):
+        result = {}
+        for key, item in list(value.items())[:_MAX_AUDIT_ITEMS]:
+            result[str(key)[:120]] = _capture_value(item, depth+1)
+        if len(value) > _MAX_AUDIT_ITEMS:
+            result["_audit_omitted_entries"] = len(value) - _MAX_AUDIT_ITEMS
+        return result
+    if isinstance(value, (list, tuple)):
+        items = [_capture_value(x, depth+1) for x in value[:_MAX_AUDIT_ITEMS]]
+        if len(value) > _MAX_AUDIT_ITEMS:
+            items.append({"_audit_omitted_entries": len(value)-_MAX_AUDIT_ITEMS})
+        return items
+    return {"_audit_non_json_type": type(value).__name__[:80]}
+
+
+def capture_arguments(arguments):
+    """Capture actual input values with size-limited forensic preview fallback."""
+    if arguments is None:
+        return {}
+    result = _capture_value(arguments)
+    if not isinstance(result, dict):
+        return {"_audit_unexpected_argument_type": type(arguments).__name__[:80]}
+    serialized = json.dumps(result, ensure_ascii=False, default=str)
+    if len(serialized.encode("utf-8",errors="replace")) > _MAX_AUDIT_EVENT:
+        return {
+            "_audit_truncated": True,
+            "preview": serialized[:_MAX_AUDIT_EVENT//2],
+            "length": len(serialized),
+            "sha256": hashlib.sha256(serialized.encode("utf-8",errors="replace")).hexdigest(),
+        }
+    return result
+
+
+def conversation_ref(meta):
+    """Anonymous best-effort conversation correlation, never authorization."""
+    if not isinstance(meta, dict):
+        return None
+    opaque = meta.get("openai/session")
+    if not isinstance(opaque, str) or not (1 <= len(opaque) <= 512):
+        return None
+    if any(ch.isspace() or ord(ch)<32 for ch in opaque):
+        return None
+    return hashlib.sha256(("chatgpt-session:" + opaque).encode()).hexdigest()[:10]
+
+
 class AuditMiddleware(Middleware):
     def __init__(self, log_dir: Path):
         self.log_dir = Path(log_dir)
@@ -142,12 +218,19 @@ class AuditMiddleware(Middleware):
     async def on_call_tool(self, context, call_next):
         started = time.monotonic()
         request_id = uuid.uuid4().hex
-        # Tool name is registered; only a bounded summary of argument shapes is retained.
+        # Capture actual MCP input arguments locally. Only the anonymized
+        # conversation fingerprint (if supplied) is retained from client _meta.
         name = str(context.message.name)[:100]
-        self._record({
+        arguments = getattr(context.message, "arguments", None)
+        record = {
             "event": "tool_start", "id": request_id, "tool": name,
-            "argument_info": safe_argument_info(getattr(context.message, "arguments", None)),
-        })
+            "arguments": capture_arguments(arguments),
+            "argument_info": safe_argument_info(arguments),
+        }
+        chat = conversation_ref(getattr(context.message, "meta", None))
+        if chat:
+            record["chat_ref"] = chat
+        self._record(record)
         try:
             result = await call_next(context)
         except BaseException:
