@@ -25,6 +25,26 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
         self.assertIn("src/mac_control/audit_middleware.py", source)
         self.assertIn("src/mac_control/account_profile.py", source)
 
+    def test_self_update_runtime_modules_are_copied_into_installed_release(self):
+        payload = {path.relative_to(ROOT).as_posix() for path in installer.install_sources()}
+        for name in ('src/mac_control/self_update.py',
+                     'scripts/self_update_watchdog.py'):
+            self.assertIn(name, payload)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'snapshot'
+            installer.copy_source(target)
+            for name in ('src/mac_control/self_update.py',
+                         'scripts/self_update_watchdog.py'):
+                self.assertTrue((target / name).is_file(), name)
+            env = {**os.environ, 'PYTHONPATH': str(target / 'src') + os.pathsep + str(target)}
+            proc = subprocess.run([sys.executable, '-P', '-B', '-c',
+                'from mac_control import self_update; '
+                'from scripts import self_update_watchdog; '
+                'assert callable(self_update.start); '
+                'assert callable(self_update_watchdog.run_transaction)'],
+                cwd=target, env=env, capture_output=True, text=True, timeout=20)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+
     def test_copied_release_runs_in_an_isolated_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "isolated-release"

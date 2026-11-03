@@ -466,3 +466,11 @@ and approval documents remain outside the source checkout.
 - Preserves that service's current LaunchAgent label, port, Chrome profile, SQLite, credentials and settings. Applies the pinned ChatBridge upgrade **to the existing label** using standalone ChatBridge's own idle check, prior plist backup and failed-upgrade rollback. No new second service or profile is created.
 - Foreign ChatBridge services and ambiguous launchctl/ownership remain protected; BF-15 inactive duplicate quarantine is unchanged. New installations still use `net.chatbridge.gateway.maccontrol`; no standalone ChatBridge installer changes.
 - After a successful ordinary `maccontrol update`, inspect LaunchAgent status, ChatBridge source version and browser readiness; request activity can delay the safe upgrade until the service is idle.
+
+
+## beta.35 — BF-17 installed-payload fix and validated ChatBridge joint upgrade
+
+- Corrected the **installed release** manifest to include `src/mac_control/self_update.py` and `scripts/self_update_watchdog.py`. Beta.33 and beta.34 contained these files in GitHub source archives but omitted them from the installer-copied runtime payload; `self_update_start` was registered but unavailable at runtime.
+- Added a regression that calls actual `copy_source()` and imports the self-update supervisor modules from the isolated installed copy.
+- Includes beta.34's strict owner-verified historical running `net.chatbridge.gateway` label support. The Mac Control updater can now refresh an owner-managed ChatBridge b11→b12 without creating a conflicting `.maccontrol` service.
+- On previously installed beta.33, bootstrap with `maccontrol update --without-chatbridge` to receive the corrected installed self-update modules; then run `maccontrol update` to upgrade owner-managed ChatBridge under the historical label. Maintain independent verified backup and live idle preflight.
