@@ -78,3 +78,13 @@ denials are not rewritten or retried via alternate tools.
 
 See TOOL_ARGUMENT_COMPATIBILITY_FR025.md for the overlap matrix,
 explicit A08 examples and validation vs policy boundary.
+
+
+## FR-025.4 — hidden paths are readable (owner-approved)
+
+Read-only fs and maintenance tools expose hidden files and directories inside
+approved project roots. A hidden name alone is no longer a PermissionError.
+For mutation tools, sensitive/hidden name denial remains unchanged.
+Root containment, relative fs paths, symlink and traversal checks remain.
+Do not treat read permission as authorization to write or to bypass an
+upstream tool/platform block.

@@ -41,7 +41,7 @@ def roots():
                 result[name] = root.resolve()
     return result
 
-def target_for(project: str, path: str, require_file=False):
+def target_for(project: str, path: str, require_file=False, *, read_only=False):
     allowed = roots()
     if project not in allowed:
         raise ValueError("Project is not enabled; available: " + ", ".join(sorted(allowed)))
@@ -49,11 +49,14 @@ def target_for(project: str, path: str, require_file=False):
     p = Path(path)
     if p.is_absolute() or ".." in p.parts or not path or "\x00" in path:
         raise ValueError("Relative non-traversing path required")
+    # The hidden/sensitive name denylist protects mutations only. Read tools
+    # may inspect any file under an already approved root, including dotfiles.
     for part in p.parts:
-        if part in DENY or any(part.startswith(x) for x in DENY_PREFIX):
-            raise PermissionError("Blocked sensitive or generated path")
-        if part.startswith(".") and part != ".github" and part != ".":
-            raise PermissionError("Hidden paths are not exposed")
+        if not read_only:
+            if part in DENY or any(part.startswith(x) for x in DENY_PREFIX):
+                raise PermissionError("Blocked sensitive or generated path")
+            if part.startswith(".") and part != ".github" and part != ".":
+                raise PermissionError("Hidden paths are not exposed")
     current = base
     for part in p.parts:
         current = current / part
@@ -110,8 +113,8 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def fs_list(project: str = "workspace", path: str = ".", limit: int = 100) -> dict:
-        """List non-sensitive directory entries in one approved project."""
-        base, directory = target_for(project, path)
+        """List directory entries, including dotfiles, in an approved project."""
+        base, directory = target_for(project, path, read_only=True)
         if not directory.is_dir():
             raise NotADirectoryError(path)
         limit = max(1, min(limit, 300))
@@ -120,7 +123,7 @@ def register(mcp):
             if len(items) >= limit:
                 break
             try:
-                target_for(project, str(entry.relative_to(base)))
+                target_for(project, str(entry.relative_to(base)), read_only=True)
             except (ValueError, PermissionError):
                 continue
             if entry.is_symlink():
@@ -136,7 +139,7 @@ def register(mcp):
         Large files are never placed directly into the tool's JSON response.
         The existing MCP bridge validates target media_root before reading.
         """
-        _, file = target_for(project, path)
+        _, file = target_for(project, path, read_only=True)
         st = file.stat()
         result = {"path": path, "directory": file.is_dir(), "bytes": st.st_size,
                   "modified_epoch": st.st_mtime, "mode": oct(stat.S_IMODE(st.st_mode))}
@@ -153,7 +156,7 @@ def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def fs_read(project: str, path: str, start_line: int = 1, max_lines: int = 250) -> dict:
         """Read numbered lines from a small UTF-8 file in an approved project."""
-        _, file = target_for(project, path, require_file=True)
+        _, file = target_for(project, path, require_file=True, read_only=True)
         data = read_bytes(file)
         text = data.decode("utf-8")
         lines = text.splitlines()
@@ -256,7 +259,7 @@ def register(mcp):
     def fs_search(project: str, pattern: str, path: str = ".",
                   max_matches: int = 80) -> dict:
         """Search UTF-8 files by literal substring; bounded directory scan and output."""
-        base, folder = target_for(project, path)
+        base, folder = target_for(project, path, read_only=True)
         if not pattern or len(pattern) > 160:
             raise ValueError("Search text must be 1–160 characters")
         max_matches = max(1, min(int(max_matches), 150))
@@ -267,7 +270,7 @@ def register(mcp):
             if current.is_dir():
                 for child in sorted(current.iterdir(), reverse=True):
                     try:
-                        target_for(project, str(child.relative_to(base)))
+                        target_for(project, str(child.relative_to(base)), read_only=True)
                     except (ValueError, PermissionError):
                         continue
                     if not child.is_symlink():

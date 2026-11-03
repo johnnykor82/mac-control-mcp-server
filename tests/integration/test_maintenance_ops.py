@@ -176,7 +176,8 @@ class MaintenanceTests(unittest.TestCase):
         (self.workspace / '.env').write_text('secret')
         (self.workspace / 'id_rsa').write_text('secret')
         (self.workspace / 'link').symlink_to(self.root)
-        self.assertEqual([x['name'] for x in self.tools['list_workspace']()['entries']], ['artifacts', 'downloads', 'normal.txt', 'projects', 'scratch', 'shared'])
+        # FR-025.4: name-based read restrictions are removed; symlinks still denied.
+        self.assertEqual([x['name'] for x in self.tools['list_workspace']()['entries']], ['.env', 'artifacts', 'downloads', 'id_rsa', 'normal.txt', 'projects', 'scratch', 'shared'])
         for path in ('workspace/../logs', 'other', '/tmp'):
             with self.assertRaises((ValueError, PermissionError)):
                 self.tools['list_workspace'](path)

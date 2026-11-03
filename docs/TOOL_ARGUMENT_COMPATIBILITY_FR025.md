@@ -73,3 +73,19 @@ has 512 KiB; the higher limit must not be silently borrowed.
 - tests/integration/test_maintenance_ops.py exercises the exact A08 path
   in isolated workspace fixtures, canonical path, cross-tool content,
   SHA256 CAS, backup and rejected outside/symlink/traversal paths.
+
+
+## FR-025.4 — full hidden-file READ (2026-11-03)
+
+With explicit owner approval, all *read-only* filesystem operations (`fs_read`,
+`fs_list`, `fs_stat`, `fs_search`, maintenance `read_file`, `list_workspace`)
+expose hidden names under existing approved project roots, including `.planning`,
+`.git`, `.venv`, `.env`, `.ssh` and other dotfiles. Do not assume a hidden name
+implies denied reading. This does not grant access outside approved roots or
+permit traversal or symlink following. Existing size and text-only limits apply.
+
+**Write permissions did not expand**: `fs_write`, `fs_replace`, `fs_move`,
+`fs_trash`, `fs_restore`, `fs_mkdir`, and maintenance `write_file` still
+reject protected/hidden targets; CAS hashes and automatic backups remain.
+Platform/provider authorization failures never trigger alternate-tool retries.
+Regression suite: `tests/integration/test_hidden_read_fr025.py`.

@@ -127,9 +127,10 @@ def _workspace_path(name: str, *, write: bool = False) -> Path:
     if not relative.parts or relative.parts[0] != 'workspace' or len(relative.parts) < 2:
         raise PermissionError('Only workspace/<file> or an approved workspace-relative subpath is writable')
     _no_symlinks(fs_ops.roots()['workspace'])
-    # Reuse the existing sensitive/hidden/generated path denylist. No new
-    # project root or credentials configuration can be written through aliases.
-    _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix())
+    # Read-only paths can include dotfiles; mutation paths retain the existing
+    # name denylist. Aliases cannot write outside the configured workspace.
+    _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix(),
+                                  read_only=not write)
     if target == fs_ops.roots()['workspace'] or target.is_dir():
         raise ValueError('Expected a workspace file')
     if target.exists() and target.stat().st_nlink != 1:
@@ -309,20 +310,20 @@ def register(mcp) -> None:
 
     @readonly
     def list_workspace(path: str = 'workspace', limit: int = 100) -> dict:
-        """List non-sensitive entries under workspace, without following symlinks."""
+        """List entries including hidden files under workspace; no symlinks."""
         relative = Path(path)
         if relative.is_absolute() or not relative.parts or relative.parts[0] != 'workspace' or '..' in relative.parts:
             raise ValueError('Only workspace-relative paths are allowed')
         _no_symlinks(fs_ops.roots()['workspace'])
         nested = Path(*relative.parts[1:]).as_posix()
-        base, directory = fs_ops.target_for('workspace', nested)
+        base, directory = fs_ops.target_for('workspace', nested, read_only=True)
         if not directory.is_dir():
             raise NotADirectoryError(path)
         limit = max(1, min(int(limit), 200))
         entries = []
         for entry in sorted(directory.iterdir(), key=lambda item: item.name):
             try:
-                fs_ops.target_for('workspace', entry.relative_to(base).as_posix())
+                fs_ops.target_for('workspace', entry.relative_to(base).as_posix(), read_only=True)
             except (ValueError, PermissionError):
                 continue
             if entry.is_symlink():
