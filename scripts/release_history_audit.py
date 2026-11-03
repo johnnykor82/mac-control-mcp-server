@@ -12,7 +12,12 @@ from pathlib import Path
 import subprocess
 import sys
 
-from release_audit import PATTERNS
+try:
+    from scripts.release_audit import PATTERNS
+except ModuleNotFoundError as exc:
+    if exc.name != 'scripts':
+        raise
+    from release_audit import PATTERNS
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BLOB_BYTES = 2 * 1024 * 1024
