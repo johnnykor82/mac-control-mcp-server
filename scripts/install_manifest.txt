@@ -64,6 +64,7 @@ scripts/test_github_oauth_login.py
 scripts/workspace_migration.py
 src/mac_control/__init__.py
 src/mac_control/__main__.py
+src/mac_control/account_profile.py
 src/mac_control/argument_guidance.py
 src/mac_control/assets/gui_agent.swift
 src/mac_control/audit_middleware.py

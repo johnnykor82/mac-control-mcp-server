@@ -23,6 +23,7 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
         self.assertIn("docs/CHATGPT_LINK_ROUTING_DIAGNOSTICS.md", source)
         self.assertIn("scripts/mclog.py", source)
         self.assertIn("src/mac_control/audit_middleware.py", source)
+        self.assertIn("src/mac_control/account_profile.py", source)
 
     def test_copied_release_runs_in_an_isolated_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -38,7 +39,12 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
                 "from mac_control.legacy_adapter import inspect_existing_handlers; "
                 "assert len(inspect_existing_handlers()) == 106; "
                 "from scripts.doctor_mac_control import REQUIRED_COMPONENTS; "
-                "assert 'chatbridge' in REQUIRED_COMPONENTS"],
+                "assert 'chatbridge' in REQUIRED_COMPONENTS; "
+                "from scripts.dev_mcp_server import make_server; import asyncio; "
+                "remote=asyncio.run(make_server(auth=object()).list_tools()); "
+                "local=asyncio.run(make_server().list_tools()); "
+                "assert 'get_profile' in {t.name for t in remote}; "
+                "assert 'get_profile' not in {t.name for t in local}"],
                 cwd=tmp, env=environment, capture_output=True, text=True, timeout=25)
             self.assertEqual(completed.returncode, 0, completed.stderr)
 
