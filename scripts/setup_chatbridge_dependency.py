@@ -121,6 +121,8 @@ def browser_login_status(url: str = DEFAULT_URL, *, verify_idle: bool = False) -
         if error.code == 503:
             detail = error_body(error)
             reason = detail.get("reason")
+            if not reason and isinstance(detail.get("error"), dict):
+                reason = detail["error"].get("code")
             if reason == "browser_idle":
                 if not verify_idle:
                     return {"authenticated": False, "status": "browser_idle",
@@ -162,6 +164,7 @@ def browser_login_status(url: str = DEFAULT_URL, *, verify_idle: bool = False) -
                 return unavailable()
             if reason in ("provider_cooldown", "provider_rate_limited"):
                 return {"authenticated": False, "status": "cooldown", "url": url,
+                        "reason": reason,
                         "next": "Wait for provider cooldown and retry"}
             if reason in ("auth_required", "login_required"):
                 return {"authenticated": False, "status": "login_required",

@@ -474,3 +474,12 @@ and approval documents remain outside the source checkout.
 - Added a regression that calls actual `copy_source()` and imports the self-update supervisor modules from the isolated installed copy.
 - Includes beta.34's strict owner-verified historical running `net.chatbridge.gateway` label support. The Mac Control updater can now refresh an owner-managed ChatBridge b11→b12 without creating a conflicting `.maccontrol` service.
 - On previously installed beta.33, bootstrap with `maccontrol update --without-chatbridge` to receive the corrected installed self-update modules; then run `maccontrol update` to upgrade owner-managed ChatBridge under the historical label. Maintain independent verified backup and live idle preflight.
+
+
+## beta.36 — BF-18: Mac Control-only update survives owned ChatBridge provider cooldown
+
+- `maccontrol update --without-chatbridge` now correctly distinguishes a managed ChatBridge `/ready` HTTP 503 `error.code=provider_rate_limited` from a real `login_required`. No provider cooldown is treated as authenticated.
+- On existing installations only, Mac Control may activate its release during cooldown when its configured ChatBridge URL exactly matches a running installer-owned service and its **already running** owned Watcher. Owner marker, release roots, both SQLite and Chrome paths, LaunchAgent label/program/PID, port, and loaded launchd state must match. Returns `readiness_deferred=provider_cooldown`; actual authentication remains unverified until provider recovery.
+- Unknown/foreign/legacy endpoints, missing Watcher, mismatch of data/profile, true logout and other 503 failures retain the fail-closed readiness gate. A `--with-chatbridge` upgrade still requires full ChatGPT login readiness.
+- The independent Legacy ChatBridge and the managed Mac Control ChatBridge keep their own ports/profiles/databases; neither service is started/stopped or modified during `--without-chatbridge`. The Watcher and MCP may restart on Mac Control release activation.
+- Diagnoses an openclaw server with legacy 8788 and managed 59496: rate-limit on managed 59496 had blocked beta35 activation despite both instances running.

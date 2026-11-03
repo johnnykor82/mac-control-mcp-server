@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import os
+import plistlib
 from pathlib import Path
 import shutil
 import stat
@@ -555,6 +556,76 @@ def _bundle_ready(bridge_present: bool, auth: dict, watcher_status: str) -> bool
             and watcher_status == "running")
 
 
+
+def _defer_owned_chatbridge_cooldown(root: Path, provider_url: str,
+                                      auth: dict, *, with_watcher: bool) -> bool:
+    """Allow a preexisting owner's MacControl-only update during cooldown.
+
+    Prove the configured provider is the loaded, installer-owned ChatBridge.
+    Never probe a second Legacy service or treat cooldown as authentication.
+    """
+    if not with_watcher or auth.get('status') != 'cooldown':
+        return False
+    root = Path(root).expanduser().resolve()
+    marker, pointer = root / '.mac-control-installer-owned', root / 'current'
+    if (not marker.is_file() or marker.is_symlink()
+            or marker.stat().st_uid != os.getuid() or not pointer.is_symlink()):
+        return False
+    try:
+        old_release = _verified_release(root, pointer.resolve())
+        if not _watcher_enabled(root, old_release):
+            return False
+        if _watcher_service_module().status(root).get('status') != 'running':
+            return False
+        try:
+            from scripts.setup_chatbridge_dependency import (
+                managed_service_label, managed_paths, owned_endpoint,
+                verify_managed_install)
+        except ModuleNotFoundError:
+            from setup_chatbridge_dependency import (
+                managed_service_label, managed_paths, owned_endpoint,
+                verify_managed_install)
+        verify_managed_install(root)
+        if provider_url.rstrip('/') != owned_endpoint(root):
+            return False
+        label = managed_service_label(root)
+        plist = Path.home() / 'Library/LaunchAgents' / (label + '.plist')
+        if not plist.is_file() or plist.is_symlink():
+            return False
+        info = plist.stat()
+        if info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o022:
+            return False
+        with plist.open('rb') as stream:
+            service = plistlib.load(stream)
+        _, prefix, data = managed_paths(root)
+        variables = service['EnvironmentVariables']
+        workdir = Path(service['WorkingDirectory']).expanduser().resolve()
+        program = service['ProgramArguments'][0]
+        if (service.get('Label') != label
+                or service.get('ChatBridgeInstaller') != '1'
+                or workdir.parent != (prefix / 'releases').resolve()
+                or Path(variables['CHATBRIDGE_DB']).expanduser().resolve()
+                   != (data / 'state.db').resolve()
+                or Path(variables['CHATBRIDGE_CHROME_PROFILE']).expanduser().resolve()
+                   != (data / 'chrome-profile').resolve()
+                or Path(program).expanduser().resolve()
+                   != (workdir / '.venv/bin/python').resolve()):
+            return False
+        result = subprocess.run(['/bin/launchctl', 'print',
+                                 f'gui/{os.getuid()}/{label}'],
+                                capture_output=True, text=True,
+                                check=False, timeout=5)
+        output = result.stdout
+        return (result.returncode == 0
+                and f'path = {plist}' in output
+                and f'program = {program}' in output
+                and re.search(r'^\s*state = running$', output, re.MULTILINE) is not None
+                and re.search(r'^\s*pid = [1-9][0-9]*$', output, re.MULTILINE) is not None)
+    except (OSError, ValueError, KeyError, IndexError, TypeError,
+            RuntimeError, plistlib.InvalidFileException,
+            subprocess.SubprocessError):
+        return False
+
 def _release_venv_command(uv: str, release: Path) -> list[str]:
     """Prefer an isolated uv-managed Python to a potentially writable system runtime."""
     return [uv, "venv", "--managed-python", "--python", "3.13",
@@ -619,6 +690,14 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             from setup_chatbridge_dependency import browser_login_status
         provider_url = connection_file.read_text().strip()
         chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
+    # Existing, loaded, proven owner-managed ChatBridge may be in transient
+    # provider cooldown. An explicit Mac Control-only update preserves it and
+    # must not be misreported as a logout. New installs and foreign services
+    # retain the strict authenticated readiness gate.
+    auth_deferred = (not with_chatbridge and existing_bridge
+                     and _defer_owned_chatbridge_cooldown(
+                         root, provider_url, chatbridge_auth,
+                         with_watcher=with_watcher))
     uv = find_uv()
     if not uv:
         raise RuntimeError("uv missing: install uv from https://docs.astral.sh/uv/getting-started/installation/")
@@ -653,14 +732,16 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         smoke(dest, data)
     # Do not change the active release or stop an existing Watcher until
     # ChatBridge has passed the authenticated browser readiness check.
-    if with_watcher and not chatbridge_auth["authenticated"]:
+    if with_watcher and not chatbridge_auth["authenticated"] and not auth_deferred:
+        cooldown = chatbridge_auth.get("status") == "cooldown"
         return {
             "status": "setup_incomplete",
-            "reason": "chatbridge_login_required",
+            "reason": "chatbridge_provider_cooldown" if cooldown else "chatbridge_login_required",
             "chatbridge_auth": chatbridge_auth,
             "release": str(dest), "current": str(info["current"]),
             "watcher": "pending_chatbridge_auth",
-            "next": "Sign in through ChatBridge's managed Chrome, then resume setup",
+            "next": (chatbridge_auth.get("next") if cooldown else
+                     "Sign in through ChatBridge's managed Chrome, then resume setup"),
         }
     if with_chatbridge:
         _save_chatbridge_key(data)
@@ -776,8 +857,10 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     bridge_present = with_chatbridge or existing_bridge
     gui_installed = gui_status != "skipped" or preserve_gui
     ready = (tmux_status["available"] and gui_installed
-             and _bundle_ready(bridge_present, chatbridge_auth, watcher_status))
+             and (_bundle_ready(bridge_present, chatbridge_auth, watcher_status)
+                  or (auth_deferred and bridge_present and watcher_status == "running")))
     return {"status": "installed" if ready else "setup_incomplete",
+            **({"readiness_deferred": "provider_cooldown"} if auth_deferred else {}),
             "watcher": watcher_status,
             "release_cleanup": cleanup,
             "tmux": tmux_status,

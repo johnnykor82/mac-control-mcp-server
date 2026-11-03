@@ -474,3 +474,6 @@ After bootstrapping beta.33 using the normal `maccontrol update` CLI, the authen
 
 
 **BF-17 historical-label compatibility:** when an older Mac Control provisioned a live `net.chatbridge.gateway` under its exact managed `~/MacControlMCP/deps/chatbridge` release/state roots, ordinary `maccontrol update` preserves that label and upgrades the owner-proven ChatBridge in place. SQLite, Chrome profile and port stay unchanged. Unknown or foreign owners are never adopted; new installations still use `net.chatbridge.gateway.maccontrol`.
+
+
+**BF-18 provider cooldown:** On an existing owner-proven Mac Control + Watcher installation, `maccontrol update --without-chatbridge` may complete during a temporary ChatGPT provider rate limit. It reports `readiness_deferred=provider_cooldown` and does **not** claim ChatGPT authentication. A foreign or Legacy ChatBridge cannot satisfy the ownership check; neither ChatBridge instance is changed by the Mac Control-only update. New installations, real login failure and `--with-chatbridge` keep their strict readiness requirements.

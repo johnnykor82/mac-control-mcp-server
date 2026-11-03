@@ -86,7 +86,8 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
         self.assertTrue(starts, "Enabled watcher was not started")
         self.assertEqual(starts[-1][1], target)
 
-    def install(self, *, with_chatbridge=True, with_watcher=True, authenticated=True):
+    def install(self, *, with_chatbridge=True, with_watcher=True,
+                authenticated=True, auth_status=None):
         paths = {"root": self.root, "data": self.data, "releases": self.root / "releases",
                  "release": self.new, "current": self.root / "current"}
         with patch.object(installer, "paths", return_value=paths), \
@@ -96,7 +97,7 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
                    return_value={"status": "compatible", "url": "http://127.0.0.1:8787"}), \
              patch("scripts.setup_chatbridge_dependency.browser_login_status",
                    return_value={"authenticated": authenticated,
-                                 "status": "ready" if authenticated else "login_required"}):
+                                 "status": auth_status or ("ready" if authenticated else "login_required")}):
             return installer.install(self.root, with_chatbridge=with_chatbridge,
                                      with_gui=False, with_watcher=with_watcher)
 
@@ -183,6 +184,32 @@ class WatcherInstallLifecycleTests(unittest.TestCase):
                 self.install()
         self.assertEqual((self.root / "current").resolve(), self.old)
         self.assertEqual((self.root / "previous").resolve(), self.older)
+        self.assert_database_preserved()
+
+    def test_owned_managed_provider_cooldown_does_not_block_mac_only_activation(self):
+        (self.data / 'chatbridge_connection.txt').write_text('http://127.0.0.1:59496')
+        with patch.object(installer, '_defer_owned_chatbridge_cooldown',
+                          return_value=True) as proof:
+            result=self.install(with_chatbridge=False, authenticated=False,
+                                auth_status='cooldown')
+        proof.assert_called_once_with(self.root,'http://127.0.0.1:59496',
+                                     {'authenticated':False,'status':'cooldown'},
+                                     with_watcher=True)
+        self.assertEqual(result['readiness_deferred'],'provider_cooldown')
+        self.assertEqual((self.root / 'current').resolve(), self.new)
+        self.assert_target_started(self.new)
+        self.assertFalse(result['chatbridge_auth']['authenticated'])
+        self.assert_database_preserved()
+
+    def test_unverified_owned_cooldown_still_blocks_and_preserves_watcher(self):
+        (self.data / 'chatbridge_connection.txt').write_text('http://127.0.0.1:59496')
+        with patch.object(installer, '_defer_owned_chatbridge_cooldown',return_value=False):
+            result=self.install(with_chatbridge=False,authenticated=False,
+                                auth_status='cooldown')
+        self.assertEqual(result['status'],'setup_incomplete')
+        self.assertEqual(result['reason'],'chatbridge_provider_cooldown')
+        self.assertEqual((self.root/'current').resolve(),self.old)
+        self.watcher.stop_if_installed.assert_not_called()
         self.assert_database_preserved()
 
     def test_missing_browser_login_preserves_running_previous_watcher(self):

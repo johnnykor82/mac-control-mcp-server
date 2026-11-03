@@ -153,5 +153,93 @@ class RequiredReadinessTests(unittest.TestCase):
         self.assertEqual(state["status"], "unverified")
 
 
+class ManagedCooldownPreservationTests(unittest.TestCase):
+    def test_nested_provider_cooldown_not_treated_as_logout(self):
+        body=b'{"error":{"code":"provider_rate_limited"},"rate_limit":{"retry_after":67}}'
+        def unavailable(request, timeout):
+            raise urllib.error.HTTPError(request.full_url,503,"cooldown",{},io.BytesIO(body))
+        with patch.object(bridge.urllib.request,'urlopen',side_effect=unavailable):
+            result=bridge.browser_login_status('http://127.0.0.1:59496',verify_idle=True)
+        self.assertEqual(result['status'],'cooldown')
+        self.assertFalse(result['authenticated'])
+        self.assertEqual(result.get('reason'),'provider_rate_limited')
+
+    def test_unrelated_503_remains_unverified(self):
+        body=b'{"error":{"code":"unknown_failure"}}'
+        def unavailable(request, timeout):
+            raise urllib.error.HTTPError(request.full_url,503,"unavailable",{},io.BytesIO(body))
+        with patch.object(bridge.urllib.request,'urlopen',side_effect=unavailable):
+            result=bridge.browser_login_status('http://127.0.0.1:59496',verify_idle=True)
+        self.assertEqual(result['status'],'unverified')
+
+    def fixture(self, root):
+        import os,plistlib
+        root = Path(root).resolve()
+        root.mkdir(parents=True,exist_ok=True)
+        home=root.parent
+        release=root/'releases/old'
+        release.mkdir(parents=True,exist_ok=True)
+        (release/'bin').mkdir()
+        (release/'bin/mac-control-stdio-mcp.sh').write_text('test')
+        (root/'current').symlink_to(release)
+        marker=root/'.mac-control-installer-owned'
+        marker.write_text('owned')
+        marker.chmod(0o600)
+        data=root/'data'
+        data.mkdir()
+        (data/'feature_flags.json').write_text('{"watcher":true}')
+        prefix=root/'deps/chatbridge/releases/b11'
+        prefix.mkdir(parents=True)
+        agents=home/'Library/LaunchAgents'
+        agents.mkdir(parents=True)
+        plist=agents/(bridge.MANAGED_LABEL+'.plist')
+        env={'CHATBRIDGE_DB':str(root/'deps/chatbridge-data/state.db'),
+             'CHATBRIDGE_CHROME_PROFILE':str(root/'deps/chatbridge-data/chrome-profile'),
+             'CHATBRIDGE_PORT':'59496'}
+        program=str(prefix/'.venv/bin/python')
+        plist.write_bytes(plistlib.dumps({'Label':bridge.MANAGED_LABEL,
+                  'ChatBridgeInstaller':'1','WorkingDirectory':str(prefix),
+                  'EnvironmentVariables':env,'ProgramArguments':[program,'-m','chatbridge']}))
+        plist.chmod(0o600)
+        status=(f'path = {plist}\nstate = running\nprogram = {program}\npid = 123456\n')
+        from types import SimpleNamespace
+        return home,root,plist,SimpleNamespace(returncode=0,stdout=status,stderr='')
+
+    def test_owner_verified_managed_cooldown_allows_deferred_mac_only_update(self):
+        import tempfile
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as d:
+            home,root,plist,response=self.fixture(Path(d)/'MacControlMCP')
+            watcher=Mock();watcher.status.return_value={'status':'running'}
+            with patch.object(bridge.Path,'home',return_value=home), \
+                 patch.object(installer,'_watcher_service_module',return_value=watcher), \
+                 patch.object(installer,'_watcher_enabled',return_value=True), \
+                 patch.object(bridge.subprocess,'run',return_value=response):
+                self.assertTrue(installer._defer_owned_chatbridge_cooldown(
+                    root,'http://127.0.0.1:59496',{'status':'cooldown'},with_watcher=True))
+                self.assertFalse(installer._defer_owned_chatbridge_cooldown(
+                    root,'http://127.0.0.1:8788',{'status':'cooldown'},with_watcher=True))
+                self.assertFalse(installer._defer_owned_chatbridge_cooldown(
+                    root,'http://127.0.0.1:59496',{'status':'login_required'},with_watcher=True))
+                watcher.status.return_value={'status':'stopped'}
+                self.assertFalse(installer._defer_owned_chatbridge_cooldown(
+                    root,'http://127.0.0.1:59496',{'status':'cooldown'},with_watcher=True))
+
+    def test_foreign_managed_plist_cannot_defer_readiness(self):
+        import tempfile,plistlib
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as d:
+            home,root,plist,response=self.fixture(Path(d)/'MacControlMCP')
+            data=plistlib.loads(plist.read_bytes());data['EnvironmentVariables']['CHATBRIDGE_CHROME_PROFILE']=str(home/'.chatbridge/chrome-profile')
+            plist.write_bytes(plistlib.dumps(data))
+            watcher=Mock();watcher.status.return_value={'status':'running'}
+            with patch.object(bridge.Path,'home',return_value=home), \
+                 patch.object(installer,'_watcher_service_module',return_value=watcher), \
+                 patch.object(installer,'_watcher_enabled',return_value=True), \
+                 patch.object(bridge.subprocess,'run',return_value=response):
+                self.assertFalse(installer._defer_owned_chatbridge_cooldown(
+                    root,'http://127.0.0.1:59496',{'status':'cooldown'},with_watcher=True))
+
+
 if __name__ == "__main__":
     unittest.main()
