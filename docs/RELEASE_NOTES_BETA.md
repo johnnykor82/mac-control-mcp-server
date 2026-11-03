@@ -302,3 +302,16 @@ and approval documents remain outside the source checkout.
 - Preserve TypeError for nested signature errors and specific SSH error codes.
 - Unclassified ValueError may follow side effects: inspect state before retry.
 - Policy/runtime failures are not rewritten and live services are unchanged.
+
+
+## FR-024 — fix false ChatBridge login_required on idle Chrome (candidate)
+
+- Passive /ready HTTP 503 browser_idle means the managed Chrome was closed
+  after 300s inactivity; the user may still be authenticated.
+- Read-only status reports browser_idle without waking the browser. Only
+  owner-initiated install/update calls explicit POST /v1/browser/verify and
+  requires live ready=true and chatgpt_authenticated=true.
+- Generic HTTP 503, browser unavailable, provider cooldown and an
+  unverified login are distinct. No weakened Watcher readiness gate.
+- Requires ChatBridge local release with POST /v1/browser/verify; older
+  versions display an upgrade instruction rather than claiming a logout.

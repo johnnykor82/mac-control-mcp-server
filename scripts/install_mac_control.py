@@ -595,7 +595,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         bridge_info = ensure(provider_url, chatbridge_source, install_root=root)
         if isinstance(bridge_info, dict):
             provider_url = bridge_info.get("url", provider_url)
-            chatbridge_auth = browser_login_status(provider_url)
+            chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
             if not chatbridge_auth["authenticated"]:
                 print("ChatBridge needs sign-in in the managed Chrome profile; "
                       "finish login, then rerun --setup.", file=sys.stderr)
@@ -607,7 +607,7 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
         except ModuleNotFoundError:
             from setup_chatbridge_dependency import browser_login_status
         provider_url = connection_file.read_text().strip()
-        chatbridge_auth = browser_login_status(provider_url)
+        chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
     uv = find_uv()
     if not uv:
         raise RuntimeError("uv missing: install uv from https://docs.astral.sh/uv/getting-started/installation/")

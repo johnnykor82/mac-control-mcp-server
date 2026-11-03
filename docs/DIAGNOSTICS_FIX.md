@@ -41,3 +41,14 @@ resulting executable via `tmux -V` and returns `installed_with_warnings`
 with `available=true` if functional, preserving the Homebrew diagnostics.
 The historical Homebrew error text was not captured in beta.23, so its exact
 cause is unknown.
+
+
+### ChatBridge idle readiness and Mac Control installer (FR-024)
+
+Managed ChatBridge can intentionally idle-close Chrome after five minutes.
+Passive GET /ready returns 503 with reason=browser_idle and
+chatgpt_authenticated=null. This is **not** a login failure. The owner
+install/update flow issues POST /v1/browser/verify only when this precise
+reason is reported and accepts success only after a real editor is verified.
+Normal status polling never reopens Chrome. If not verified, inspect the
+ChatBridge managed profile and endpoint, not general Chrome login.

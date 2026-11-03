@@ -84,33 +84,74 @@ def select_endpoint(preferred: str = DEFAULT_URL, *, reuse_compatible: bool = Tr
     return preferred
 
 
-def browser_login_status(url: str = DEFAULT_URL) -> dict:
-    """Probe a real authenticated ChatGPT composer, never only /health."""
+def browser_login_status(url: str = DEFAULT_URL, *, verify_idle: bool = False) -> dict:
+    """Check real composer. Only owner-triggered install may wake an idle Chrome."""
     local_origin(url)
-    key = os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY", "")
-    request = urllib.request.Request(
-        url.rstrip("/") + "/ready",
-        headers=({"Authorization": "Bearer " + key} if key else {}),
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            if getattr(response, "status", 200) != 200:
-                raise RuntimeError("Unexpected ChatBridge readiness response")
-            payload = json.load(response)
-            if (not isinstance(payload, dict)
-                    or payload.get("ready") is not True
-                    or payload.get("chatgpt_authenticated") is not True):
-                return {"authenticated": False, "status": "unverified", "url": url,
-                        "next": "Use real ChatGPT transport and sign in through managed Chrome"}
+    headers = ({"Authorization": "Bearer " + os.environ["MACCONTROL_CHATBRIDGE_API_KEY"]}
+               if os.environ.get("MACCONTROL_CHATBRIDGE_API_KEY") else {})
+
+    def outcome(payload: dict) -> dict:
+        if (isinstance(payload, dict) and payload.get("ready") is True
+                and payload.get("chatgpt_authenticated") is True):
             return {"authenticated": True, "status": "ready", "url": url}
-    except urllib.error.HTTPError as error:
-        if error.code == 503:
-            return {"authenticated": False, "status": "login_required",
-                    "url": url, "next": "Sign in through ChatBridge's managed Chrome window"}
-        raise
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return {"authenticated": False, "status": "unverified", "url": url,
+                "next": "Inspect managed Chrome readiness before considering login"}
+
+    def error_body(error):
+        try:
+            with error:
+                data = json.load(error)
+            return data if isinstance(data, dict) else {}
+        except (ValueError, OSError, TypeError):
+            return {}
+
+    def unavailable():
         return {"authenticated": False, "status": "unavailable", "url": url,
                 "next": "Check ChatBridge service and retry setup"}
+
+    request = urllib.request.Request(url.rstrip("/") + "/ready", headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=35) as response:
+            if getattr(response, "status", 200) != 200:
+                raise RuntimeError("Unexpected ChatBridge readiness response")
+            return outcome(json.load(response))
+    except urllib.error.HTTPError as error:
+        if error.code == 503:
+            detail = error_body(error)
+            reason = detail.get("reason")
+            if reason == "browser_idle":
+                if not verify_idle:
+                    return {"authenticated": False, "status": "browser_idle",
+                            "url": url, "next": "Use explicit browser verification during installer update"}
+                probe = urllib.request.Request(url.rstrip("/") + "/v1/browser/verify",
+                                               headers=headers, method="POST")
+                try:
+                    with urllib.request.urlopen(probe, timeout=80) as response:
+                        return outcome(json.load(response))
+                except urllib.error.HTTPError as failure:
+                    if failure.code == 404:
+                        return {"authenticated": False, "status": "browser_idle", "url": url,
+                                "next": "Upgrade ChatBridge to a version with /v1/browser/verify"}
+                    if failure.code == 503:
+                        error_body(failure)
+                        return {"authenticated": False, "status": "unverified",
+                                "url": url, "next": "Browser verification failed; inspect ChatBridge logs"}
+                    raise
+                except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+                    return unavailable()
+            if reason in ("browser_unavailable", "browser_start_failed"):
+                return unavailable()
+            if reason in ("provider_cooldown", "provider_rate_limited"):
+                return {"authenticated": False, "status": "cooldown", "url": url,
+                        "next": "Wait for provider cooldown and retry"}
+            if reason in ("auth_required", "login_required"):
+                return {"authenticated": False, "status": "login_required",
+                        "url": url, "next": "Sign in to the managed Chrome profile"}
+            return {"authenticated": False, "status": "unverified",
+                    "url": url, "next": "Inspect ChatBridge readiness response; a 503 is not proof of logout"}
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return unavailable()
 
 
 def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
