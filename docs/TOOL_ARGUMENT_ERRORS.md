@@ -65,3 +65,16 @@ ssh_exec, terminal_exec or custom_command handler. See
 CHATGPT_LINK_ROUTING_DIAGNOSTICS.md for account-eligibility,
 unexpected-field and safety-block troubleshooting; none is a reason
 to retry a blocked SSH request via another tool.
+
+## FR-025.3 — cross-tool path compatibility
+
+The maintenance write_file and read_file accept both canonical
+workspace/projects/... and the common workspace-relative projects/...
+form. fs_write and fs_read retain project=workspace + path=projects/...
+schemas. No migration of unrelated approved project roots and no
+privilege widening. A missing or ambiguous workspace path returns
+WORKSPACE_PATH_FORMAT_INVALID before dispatch; true policy/permission
+denials are not rewritten or retried via alternate tools.
+
+See TOOL_ARGUMENT_COMPATIBILITY_FR025.md for the overlap matrix,
+explicit A08 examples and validation vs policy boundary.

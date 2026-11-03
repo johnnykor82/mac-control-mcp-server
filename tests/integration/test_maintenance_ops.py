@@ -72,6 +72,82 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(read('workspace/example.txt')['content'], 'two')
         self.assertEqual(list((self.data / 'backups/fs_recovery').iterdir())[0].read_text(), 'one')
 
+    def test_fr025_a08_workspace_alias_writes_same_file_as_canonical(self):
+        # Both accepted spellings MUST be the exact same approved file.
+        alias = 'projects/android-license-audit/reports/INITIAL_AUDIT.md'
+        canonical = 'workspace/' + alias
+        writer = self.tools['write_file']
+        reader = self.tools['read_file']
+        result = writer(alias, '# audit v1')
+        self.assertTrue((self.workspace / alias).is_file())
+        self.assertEqual(reader(canonical)['content'], '# audit v1')
+        self.assertEqual(reader(alias)['content'], '# audit v1')
+        with self.assertRaises(ValueError):
+            writer(canonical, '# audit v2')  # missing CAS hash
+        updated = writer(canonical, '# audit v2', result['sha256'])
+        self.assertTrue(updated['backup'])
+        self.assertEqual((self.workspace / alias).read_text(), '# audit v2')
+
+    def test_fr025_a08_fs_write_and_write_file_interoperate_with_cas(self):
+        # fs_write(project,path) and write_file(path) resolve the same root.
+        alias = 'projects/android-license-audit/reports/INITIAL_AUDIT.md'
+        writer = self.tools['write_file']
+        first = writer(alias, '# initial')
+        registry = Registry()
+        fs_ops.register(registry)
+        second = registry.tools['fs_write']('workspace', alias, '# revised',
+                                            first['sha256'])
+        self.assertEqual(second['project'], 'workspace')
+        self.assertEqual(self.tools['read_file']('workspace/' + alias)['content'],
+                         '# revised')
+        with self.assertRaises(ValueError):
+            registry.tools['fs_write']('workspace', alias, '# stale', first['sha256'])
+
+    def test_fr025_unknown_relative_path_has_actionable_preflight_error(self):
+        for path in ('reports/INITIAL_AUDIT.md', 'unrecognized/a.txt'):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                ValueError, 'WORKSPACE_PATH_FORMAT_INVALID'
+            ) as raised:
+                self.tools['write_file'](path, '# no write')
+            message = str(raised.exception)
+            self.assertIn('write_file', message)
+            self.assertIn('fs_write', message)
+            self.assertIn('project=', message)
+            self.assertNotIn(path, message)
+        self.assertFalse((self.workspace / 'reports/INITIAL_AUDIT.md').exists())
+
+    def test_fr025_all_known_workspace_alias_prefixes_are_equivalent(self):
+        writer, reader = self.tools['write_file'], self.tools['read_file']
+        from mac_control.maintenance_ops import WORKSPACE_RELATIVE_PREFIXES
+        self.assertEqual(WORKSPACE_RELATIVE_PREFIXES, {
+            'projects', 'scratch', 'artifacts', 'downloads', 'shared'
+        })
+        for prefix in sorted(WORKSPACE_RELATIVE_PREFIXES):
+            alias = f'{prefix}/compat-contract/test.txt'
+            with self.subTest(prefix=prefix):
+                result = writer(alias, prefix)
+                self.assertTrue((self.workspace / alias).is_file())
+                self.assertEqual(reader('workspace/' + alias)['content'], prefix)
+                self.assertEqual(reader(alias)['sha256'], result['sha256'])
+
+    def test_fr025_alias_still_rejects_traversal_hidden_external_symlink(self):
+        writer = self.tools['write_file']
+        for path in (
+            'projects/../outside.txt',
+            'projects/a/../../outside.txt',
+            'projects/.env',
+            'projects/.ssh/id_rsa',
+            '/tmp/workspace/projects/report.md',
+        ):
+            with self.subTest(path=path), self.assertRaises(PermissionError):
+                writer(path, '# forbidden')
+        outside = self.root / 'outside.txt'
+        outside.write_text('leave intact')
+        (self.workspace / 'projects' / 'linked').symlink_to(self.root)
+        with self.assertRaises(PermissionError):
+            writer('projects/linked/outside.txt', '# forbidden')
+        self.assertEqual(outside.read_text(), 'leave intact')
+
     def test_sensitive_paths_symlinks_and_release_writes_are_denied(self):
         for name in ('workspace/../remote_auth.json', 'workspace/.env',
                      'workspace/.ssh/id_rsa', 'extensions.py', '/etc/passwd'):

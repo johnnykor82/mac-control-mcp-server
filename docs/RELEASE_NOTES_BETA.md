@@ -358,3 +358,14 @@ and approval documents remain outside the source checkout.
   tool schemas and existing OAuth settings are unchanged.
 - This helps ChatGPT identify existing linked accounts after reconnect;
   historical duplicate connection records remain managed by ChatGPT.
+
+## FR-025.3 — compatible Mac Control workspace arguments (candidate)
+
+- write_file/read_file now accept familiar projects/<file> (and other
+  known workspace subfolders) as equivalent to workspace/projects/<file>.
+- fs_write(project, path) and all 106 frozen operation schemas stay
+  unchanged; invalid ambiguous file paths receive safe preflight guidance.
+- SHA256 CAS, atomic backup, 256 KiB maintenance limit, sensitive-path,
+  traversal, symlink and external-root restrictions are preserved.
+- Regression tests cover the exact jkmac A08 path without touching
+  any Android audit project or its user files.
