@@ -457,6 +457,7 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             (pinned / 'pyproject.toml').write_text(
                 'name = "chatbridge-gateway"\nversion = "0.2.0b12"\n')
             with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'managed_service_label', return_value=cb.MANAGED_LABEL), \
                  patch.object(cb, 'assert_managed_idle'), \
                  patch.object(cb, 'download_pinned_source', return_value=pinned), \
                  patch.object(cb.subprocess, 'run',
@@ -520,6 +521,7 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             (pinned / 'pyproject.toml').write_text(
                 'name = "chatbridge-gateway"\nversion = "0.2.0b12"\n')
             with patch.object(cb, 'verify_managed_install'), \
+                 patch.object(cb, 'managed_service_label', return_value=cb.MANAGED_LABEL), \
                  patch.object(cb, 'assert_managed_idle'), \
                  patch.object(cb, 'download_pinned_source', return_value=pinned), \
                  patch.object(cb.subprocess, 'run',
