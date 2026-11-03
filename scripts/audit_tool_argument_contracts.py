@@ -106,8 +106,88 @@ async def audit() -> dict:
     }
 
 
+def render_markdown(data: dict) -> str:
+    from mac_control.argument_guidance import _KNOWN_REASONS
+
+    tools = data["tools"]
+    families = Counter(t["name"].split("_", 1)[0] for t in tools)
+    counts = Counter()
+    unclassified = set()
+    for module in data["module_inventory"]:
+        counts.update(module["exception_sites"])
+        for message in module["static_value_errors"]:
+            if (message.lower().startswith((
+                    "invalid", "unknown", "unsupported", "missing"))
+                    and message not in _KNOWN_REASONS):
+                unclassified.add((module["module"], message))
+    lines = [
+        "# FR-025 — инвентаризация ошибок аргументов Mac Control MCP",
+        "",
+        "Автоматически воспроизводимый аудит исходников и схем MCP; без вызова",
+        "инструментов, доступа к пользовательским аргументам и изменения production.",
+        "",
+        f"- Всего: **{len(tools)}** инструментов (106 frozen, {len(tools)-106} дополнительных).",
+        "- Опциональные background-инструменты зарегистрированы только в памяти.",
+        "- Статические исключения из 20 модулей: " + ", ".join(
+            f"{name}={count}" for name, count in sorted(counts.items())) + ".",
+        f"- Не классифицированных статических сообщений: **{len(unclassified)}**.",
+        "- Статические raise-сайты не являются доказательством ошибки параметра;",
+        "  ошибки среды, зависимости и после побочного эффекта проверяются отдельно.",
+        "",
+        "## Семейства",
+        "",
+        "| Семейство | Инструментов |",
+        "| --- | ---: |",
+    ]
+    lines += [f"| {name} | {size} |" for name, size in sorted(families.items())]
+    lines += [
+        "", "## Реестр схем MCP", "",
+        "| Инструмент | Обязательные поля | Полей всего | Источник |",
+        "| --- | --- | ---: | --- |",
+    ]
+    for item in tools:
+        name = item["name"]
+        required = ", ".join(item["required"]) or "—"
+        lines.append(
+            f"| {name} | {required} | {len(item['parameters'])} | "
+            + ("frozen" if item["frozen"] else "additional") + " |"
+        )
+    lines += [
+        "", "## Общие валидаторы вызываемых модулей", "",
+        "| Модуль | ValueError | PermissionError | RuntimeError | TypeError |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for mod in data["module_inventory"]:
+        c = mod["exception_sites"]
+        if not any(c.values()):
+            continue
+        lines.append(
+            f"| {mod['module']} | {c.get('ValueError', 0)} | "
+            f"{c.get('PermissionError', 0)} | {c.get('RuntimeError', 0)} | "
+            f"{c.get('TypeError', 0)} |"
+        )
+    lines += [
+        "", "## Backlog: необходима классификация", "",
+        "Не все сообщения являются ошибками аргументов; не предлагать",
+        "повтор без оценки этапа выполнения.",
+        "", "| Модуль | Сообщение |", "| --- | --- |",
+    ]
+    for module, message in sorted(unclassified):
+        lines.append(f"| {module} | {message.replace('|', ' ')} |")
+    return "\n".join(lines) + "\n"
+
+
 def main():
-    print(json.dumps(asyncio.run(audit()), ensure_ascii=False, indent=2))
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--format", choices=["json", "markdown"], default="json")
+    args = parser.parse_args()
+    data = asyncio.run(audit())
+    if args.format == "markdown":
+        print(render_markdown(data), end="")
+    else:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

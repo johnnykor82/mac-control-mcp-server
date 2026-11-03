@@ -315,3 +315,18 @@ and approval documents remain outside the source checkout.
   unverified login are distinct. No weakened Watcher readiness gate.
 - Requires ChatBridge local release with POST /v1/browser/verify; older
   versions display an upgrade instruction rather than claiming a logout.
+
+## FR-025 — MCP input contract audit and actionable errors (candidate)
+
+- Inventory all 133 actual tool schemas (106 frozen + 27 maintenance or
+  optional), plus 20 shared-handler modules and ambiguous error backlog.
+  Schema and report regeneration have offline tests without execution.
+- Replace opaque local terminal and PTY errors with exact length/format limits
+  and safe, actual alternative tool names. No shell/PTY side effects from
+  invalid input and no expanded command limits.
+- Watcher IDs, Git branch names and GUI mouse actions now explain accepted
+  syntax or enumerated choices before dispatch.
+- Background ChatBridge Browser API distinguishes malformed arguments from
+  service configuration and invalid upstream responses, preserving prior
+  INVALID_ARGUMENT code for caller input and no-retry for uncertain outcomes.
+- Existing authorization, workspace policy and service lifecycle unchanged.

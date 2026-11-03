@@ -1,17 +1,14 @@
 # FR-025 — инвентаризация ошибок аргументов Mac Control MCP
 
-Фактический каталог инструментов на 2026-11-03. Только регистрация
-FastMCP и статическое чтение исходников. Никакие операции инструментов
-не вызывались; feature flags в production не менялись.
+Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
+инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **133** (замороженные 106; дополнительно 27).
-- Для полноты зарегистрированы также отключаемые background-инструменты
-  исключительно в памяти; на production ничего не включалось.
-- Источники исключений: статические raise внутри зарегистрированного
-  обработчика; валидация в вызываемых helper-функциях и FastMCP
-  будет проверена на следующем этапе, поэтому это не полный подсчёт ошибок.
-- Статические типы исключений: {'ValueError': 53, 'RuntimeError': 17, 'FileNotFoundError': 2, 'PermissionError': 6}.
-- Требуют ручной оценки (не автоматически считаются дефектами): **6** сообщений.
+- Всего: **133** инструментов (106 frozen, 27 дополнительных).
+- Опциональные background-инструменты зарегистрированы только в памяти.
+- Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=130.
+- Не классифицированных статических сообщений: **31**.
+- Статические raise-сайты не являются доказательством ошибки параметра;
+  ошибки среды, зависимости и после побочного эффекта проверяются отдельно.
 
 ## Семейства
 
@@ -44,7 +41,7 @@ FastMCP и статическое чтение исходников. Никак�
 
 ## Реестр схем MCP
 
-| Инструмент | Поля обязательно | Поля всего | Источник |
+| Инструмент | Обязательные поля | Полей всего | Источник |
 | --- | --- | ---: | --- |
 | audit_search | — | 4 | additional |
 | audit_tail | — | 1 | additional |
@@ -180,31 +177,13 @@ FastMCP и статическое чтение исходников. Никак�
 | workspace_policy | — | 0 | additional |
 | write_file | content, path | 3 | additional |
 
-## Сообщения для разбирательства
-
-Не все сообщения ниже являются ошибкой аргумента пользователя;
-некоторые обозначают ошибку локального конфига или состояния.
-Без подтверждения не добавлять их в VALIDATION_ERROR.
-
-| Инструмент | Сообщение из исходника |
-| --- | --- |
-| chrome_chat_save | Invalid result filename |
-| fs_restore | Invalid backup ID |
-| gui_open_app | Invalid application name |
-| launchd_restart | Invalid label |
-| launchd_status | Invalid launchd label |
-| local_http_probe | Unsupported method or path |
-
 ## Общие валидаторы вызываемых модулей
-
-Эти исключения встречаются в зарегистрированных модулях и helper-функциях.
-Они не обязательно соответствуют одному инструменту или ошибке аргумента.
 
 | Модуль | ValueError | PermissionError | RuntimeError | TypeError |
 | --- | ---: | ---: | ---: | ---: |
 | bridge_media.py | 11 | 11 | 0 | 0 |
 | chrome_orchestrator_ops.py | 7 | 0 | 4 | 0 |
-| command_plugins.py | 7 | 1 | 7 | 0 |
+| command_plugins.py | 9 | 1 | 7 | 0 |
 | fs_ops.py | 17 | 4 | 0 | 0 |
 | git_ops.py | 8 | 1 | 0 | 0 |
 | gui_ops.py | 9 | 0 | 5 | 0 |
@@ -218,10 +197,10 @@ FastMCP и статическое чтение исходников. Никак�
 | background_browser_ops.py | 9 | 0 | 0 | 0 |
 | background_native_ops.py | 0 | 1 | 0 | 0 |
 
-## Backlog P1: проверить причины ошибок
+## Backlog: необходима классификация
 
-Статические подозрительные сообщения, ещё не квалифицированные
-как отказ до запуска. Нельзя автоматически предлагать retry.
+Не все сообщения являются ошибками аргументов; не предлагать
+повтор без оценки этапа выполнения.
 
 | Модуль | Сообщение |
 | --- | --- |
@@ -234,7 +213,6 @@ FastMCP и статическое чтение исходников. Никак�
 | bridge_media.py | Unknown media storage type |
 | chrome_orchestrator_ops.py | Invalid ChatBridge endpoint |
 | chrome_orchestrator_ops.py | Invalid result filename |
-| command_plugins.py | Unknown or expired session |
 | fs_ops.py | Invalid backup ID |
 | fs_ops.py | Invalid trusted projects config |
 | gui_ops.py | Invalid application name |
@@ -257,4 +235,3 @@ FastMCP и статическое чтение исходников. Никак�
 | system_ops.py | Invalid label |
 | system_ops.py | Invalid launchd label |
 | system_ops.py | Unsupported method or path |
-| watcher_ops.py | Invalid ID |

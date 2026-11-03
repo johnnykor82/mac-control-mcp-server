@@ -36,3 +36,24 @@ The guidance never copies raw parameter values, shell commands, credentials
 or source exception bodies into the displayed error. The local owner-only
 JSONL audit, specified by FR-021 v2, is separate and records bounded actual
 input arguments. The old Mac Control service is untouched.
+
+## FR-025: exact semantic validation contracts (candidate)
+
+The offline source inventory is in TOOL_ARGUMENT_AUDIT_FR025.md in Git
+(not shipped as a runtime diagnostics endpoint). It covers all 133
+registered MCP tools, including 27 optional/maintenance tools and shared
+validator modules. Source raise-site counts are not all caller errors.
+
+| Tool | Actionable response |
+| --- | --- |
+| terminal_exec | TERMINAL_COMMAND_INVALID for empty/NUL/non-string; TERMINAL_COMMAND_TOO_LONG with actual characters and 8000-character limit. For generated source use fs_write(project, path, content), then short terminal_exec. |
+| terminal_send | TERMINAL_TEXT_TOO_LONG: 4000-character limit; TERMINAL_TEXT_INVALID, TERMINAL_KEY_INVALID (supported key names), TERMINAL_SEND_EMPTY. Session IDs via terminal_list. |
+| terminal_read/send/close | TERMINAL_SESSION_INVALID requires mc- plus 16 lowercase hex; TERMINAL_SESSION_NOT_FOUND means expired/absent, inspect terminal_list. |
+| watcher_* | WATCHER_ID_INVALID: 2–56 lowercase letters/digits/underscore/hyphen, starting lowercase letter/digit. Inspect watcher_status and watcher_guide. |
+| gui_mouse | GUI_MOUSE_ACTION_INVALID enumerates move/left_click/right_click/double_click/drag without contacting the helper. |
+| git_create_branch | GIT_BRANCH_NAME_INVALID explains 1–80-character precheck; native Git can still reject other invalid refs. |
+| background_browser_* | Structured INVALID_ARGUMENT includes exact input shape for session_token/client_request_id/session_tokens; ChatBridge config errors use CHATBRIDGE_CONFIGURATION_ERROR. Malformed provider replies use INVALID_PROVIDER_RESPONSE with an explicit no-automatic-retry warning. |
+
+Do not treat a post-dispatch or uncertain error as proof of no side effects.
+Structured API codes remain compatible with the previous browser adapter
+where bad capabilities returned INVALID_ARGUMENT. Raw audit is owner-only.

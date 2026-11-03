@@ -182,7 +182,10 @@ def register(mcp):
                   end_x: float = 0, end_y: float = 0) -> dict:
         """Mouse move, left/right/double click, or drag in global display coordinates."""
         if action not in ("move","left_click","double_click","right_click","drag"):
-            raise ValueError("Unsupported mouse action")
+            raise ValueError(
+                "GUI_MOUSE_ACTION_INVALID: action must be move, left_click, "
+                "double_click, right_click or drag. No mouse event was sent."
+            )
         return _call("mouse",action=action,x=float(x),y=float(y),
                      end_x=float(end_x),end_y=float(end_y))
 

@@ -3,7 +3,8 @@ import asyncio
 import unittest
 
 from mac_control import background_browser_ops, background_native_ops
-from scripts.audit_tool_argument_contracts import audit, _raises
+from scripts.audit_tool_argument_contracts import audit, _raises, render_markdown
+from pathlib import Path
 
 
 class ArgumentContractInventoryTests(unittest.TestCase):
@@ -34,6 +35,11 @@ class ArgumentContractInventoryTests(unittest.TestCase):
         self.assertIn("background_browser_ops.py", lookup)
         self.assertIn("ssh_manage_ops.py", lookup)
         self.assertGreater(lookup["ssh_manage_ops.py"]["exception_sites"]["ValueError"], 0)
+
+    def test_source_report_matches_generated_contract(self):
+        root = Path(__file__).resolve().parents[2]
+        actual = (root / "docs/TOOL_ARGUMENT_AUDIT_FR025.md").read_text()
+        self.assertEqual(actual, render_markdown(self.report))
 
     def test_registration_does_not_enable_optional_runtime_flags(self):
         browser_before = background_browser_ops.enabled()

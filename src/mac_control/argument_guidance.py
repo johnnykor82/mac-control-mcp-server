@@ -92,7 +92,19 @@ def guided_validation_error(operation: str, handler: Callable,
     """Never echo dynamic exception text, tool parameters or secrets."""
     message = str(original)
     # Preserve already actionable, tool-specific machine-readable errors.
-    if operation == "ssh_exec" and message.startswith(("SSH_COMMAND_TOO_LONG:", "SSH_COMMAND_INVALID:")):
+    if (
+        (operation == "ssh_exec" and message.startswith(("SSH_COMMAND_TOO_LONG:", "SSH_COMMAND_INVALID:")))
+        or (operation == "terminal_exec" and message.startswith(
+            ("TERMINAL_COMMAND_TOO_LONG:", "TERMINAL_COMMAND_INVALID:")))
+        or (operation.startswith("watcher_") and message.startswith("WATCHER_ID_INVALID:"))
+        or (operation == "terminal_send" and message.startswith((
+            "TERMINAL_TEXT_INVALID:", "TERMINAL_TEXT_TOO_LONG:",
+            "TERMINAL_KEY_INVALID:", "TERMINAL_SEND_EMPTY:")))
+        or (operation == "gui_mouse" and message.startswith("GUI_MOUSE_ACTION_INVALID:"))
+        or (operation == "git_create_branch" and message.startswith("GIT_BRANCH_NAME_INVALID:"))
+        or (operation.startswith("terminal_") and message.startswith((
+            "TERMINAL_SESSION_INVALID:", "TERMINAL_SESSION_NOT_FOUND:")))
+    ):
         return ValueError(message)
     # Signature.bind() happens before invocation, so missing/extra args are
     # always preflight failures. Handler-thrown ValueErrors can occur later.
