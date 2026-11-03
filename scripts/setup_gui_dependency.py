@@ -29,9 +29,9 @@ except ModuleNotFoundError:
     import build_mac_control_gui as gui
 
 RELEASE_URL = ('https://github.com/johnnykor82/mac-control-mcp-server/releases/download/'
-               'v0.1.0-beta.11/mac-control-native-v0.1.0-beta.11-universal.tar.gz')
+               'v0.1.0-beta.29/mac-control-native-v0.1.0-beta.29-universal.tar.gz')
 # Never download or accept an unpinned native executable.
-RELEASE_SHA256 = '7540329d030e5066d49ef9af4c8c2007edc245f8c17b7ef3c93c39114881cfaa'
+RELEASE_SHA256 = '7c1e99163d3c765492f3b035daf609b43092c28ea1380f4c4886b655fdf156ad'
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
 

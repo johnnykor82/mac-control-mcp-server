@@ -68,3 +68,17 @@ its disposable temporary root to an actual filesystem path before
 setting MAC_CONTROL_DATA_ROOT and workspace_root. No production
 permission check or security guard was changed. The original local
 pass alone was insufficient; final macOS CI is required.
+
+
+## E9 native GUI release parity candidate / 2026-11-03
+
+The earlier fresh installer downloaded the beta.11 GUI, even when
+the server source advanced. A source-built beta.29 universal helper
+archive was staged independently with package_gui_release.py and
+verified with extract_release(), _verify_payload(), codesign --verify,
+and universal Mach-O architecture checks. SHA256:
+7c1e99163d3c765492f3b035daf609b43092c28ea1380f4c4886b655fdf156ad.
+No installed app, TCC approval or production service was changed.
+The default source pin now references the beta.29 artifact. Until
+release publication, the URL is intentionally not yet downloadable;
+do not interpret the pin as a successfully published binary.

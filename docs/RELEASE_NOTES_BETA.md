@@ -369,3 +369,23 @@ and approval documents remain outside the source checkout.
   traversal, symlink and external-root restrictions are preserved.
 - Regression tests cover the exact jkmac A08 path without touching
   any Android audit project or its user files.
+
+
+## v0.1.0-beta.29 — mclog, compatibility and OAuth profile (release candidate)
+
+- Complete FR-021–FR-025 candidate: owner-only mclog actual call
+  parameters, detailed MCP tool errors, workspace-relative path
+  compatibility for write_file/read_file, and stable authenticated
+  GitHub get_profile for ChatGPT linked-account recognition.
+- Exact native GUI release is pinned to the beta.29 universal package,
+  SHA256 7c1e99163d3c765492f3b035daf609b43092c28ea1380f4c4886b655fdf156ad.
+  Source and prebuilt native GUI are packaged separately; the native
+  archive contains ad-hoc signed arm64/x86_64 app and clipboard helper.
+  Ad-hoc signature validates integrity, not publisher notarization.
+- Existing owned GUI is reused by default, without resetting macOS
+  Accessibility or Screen Recording permissions. Fresh install still
+  requires explicit owner TCC authorization.
+- Source and GUI binaries are candidates until the complete GitHub
+  macOS CI, security/provenance review, and actual release assets have
+  been published with verified SHA256SUMS. A GitHub tag alone is not a
+  complete installable update.
