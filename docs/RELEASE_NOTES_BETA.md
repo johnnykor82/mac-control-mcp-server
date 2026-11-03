@@ -282,3 +282,16 @@ and approval documents remain outside the source checkout.
   rotation). Remote `audit_tail`/`audit_search` remain metadata-only.
 - Versioned source candidate only; active MCP/legacy service and OAuth
   credentials are not changed by testing or publication of source.
+
+
+## FR-022 — actionable SSH argument validation (candidate)
+
+- The old 5000-character ssh_exec validator rejected a 5027-character
+  heredoc (verified in owner legacy audit) with only "Invalid remote command".
+- New ssh_exec accepts up to 65536 UTF-8 bytes; longer inputs return
+  SSH_COMMAND_TOO_LONG with actual byte count and next steps:
+  ssh_write_text or ssh_upload followed by short ssh_exec.
+- Empty or non-string commands return SSH_COMMAND_INVALID with guidance.
+  Invalid calls do not contact SSH and never echo command contents in errors.
+- The change is to the new Mac Control MCP only; old Mac Control and remote
+  VPN hosts are not modified.

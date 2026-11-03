@@ -132,6 +132,12 @@ SSH requires an approved host/profile, existing key or agent authentication, and
 | `ssh_transfer_cancel` | W | Cancel and clean owned staging files. | `transfer_id=returned_transfer_id` |
 
 
+The ssh_exec command parameter supports up to **65536 UTF-8 bytes** (including multiline
+commands and heredocs). Empty, invalid or oversized arguments fail **before SSH**
+with a specific error and an actionable alternative rather than the ambiguous
+"Invalid remote command". For larger generated source files, prefer ssh_write_text
+(up to 512 KiB) and then a short ssh_exec to run tests or compile.
+
 SFTP uses the standard OpenSSH configuration and aliases directly, like `ssh_exec`; no Mac Control host registration is needed. Previously saved profiles remain optional. A remote Python 3 is required for hash verification and atomic commit. File bytes use SFTP; base64 applies only to binary chunks inside MCP JSON. For generated source files use `ssh_write_text`, never large `ssh_exec` heredocs. `expected_remote_sha256` is rechecked immediately before atomic rename, without remote locking; unrelated writers can still race. Local downloads stay within approved projects; remote destination permissions come from the SSH user. See [SFTP design](SSH_SFTP_TRANSFER_SPEC.md).
 
 ## Native macOS app and desktop control — 13 tools

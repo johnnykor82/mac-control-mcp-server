@@ -168,8 +168,23 @@ def register(mcp):
 
         Commands run with the remote login user's permissions. Do not send passwords.
         """
-        if not isinstance(command, str) or not command or len(command) > 5000:
-            raise ValueError("Invalid remote command")
+        if not isinstance(command, str) or not command:
+            raise ValueError(
+                "SSH_COMMAND_INVALID: command must be a non-empty string. "
+                "Pass the shell command in the command argument; for source "
+                "files use ssh_write_text(host, remote_path, content) then "
+                "a short ssh_exec to compile or verify."
+            )
+        command_bytes = len(command.encode("utf-8"))
+        if command_bytes > 65536:
+            raise ValueError(
+                f"SSH_COMMAND_TOO_LONG: command has {command_bytes} UTF-8 bytes; "
+                "maximum for ssh_exec is 65536 bytes. "
+                "For source files use ssh_write_text(host, remote_path, content) "
+                "or ssh_upload(host, local_path, remote_path), then run a "
+                "separate short ssh_exec for verification. "
+                "No remote command was executed."
+            )
         argv = _command(host, command)
         timeout = max(2, min(int(timeout_seconds), 120))
         try:
