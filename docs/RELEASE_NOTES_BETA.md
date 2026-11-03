@@ -431,3 +431,21 @@ and approval documents remain outside the source checkout.
 - Both still use `launchctl` in `gui/<current-uid>`, validate labels, and use
   `restart_server` for Mac Control's own service. macOS permissions and OAuth remain.
 - No live LaunchAgent, Chrome profile or SQLite state is modified by updating source.
+
+
+## beta.32 — urgent BF-15: stale managed ChatBridge LaunchAgent alias recovery
+
+- `maccontrol update --with-chatbridge` now handles a verified **unloaded**
+  `net.chatbridge.gateway` LaunchAgent that mistakenly references the exact same
+  Mac Control-owned SQLite database and Chrome profile as the managed
+  `net.chatbridge.gateway.maccontrol` service.
+- To prevent Chrome/SQLite concurrent writers, **active**, foreign or unknown
+  LaunchAgents remain protected. No service is stopped automatically.
+- The stale plist is moved to a private, verified backup/quarantine; failed
+  ChatBridge provisioning or upgrade restores the original plist. Backup is
+  retained after success for manual rollback. Neither SQLite nor Chrome profile
+  files are modified by this migration.
+- Standalone ChatBridge's own shared-state protection is unchanged.
+- If both services are active on the same data, the installer still stops with
+  a recoverable error. Stop/migrate that live service only under a separate
+  owner-approved transition.

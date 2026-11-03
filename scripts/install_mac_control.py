@@ -590,18 +590,22 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
     if with_chatbridge:
         try:
             from scripts.setup_chatbridge_dependency import (
-                ensure, browser_login_status, managed_paths, upgrade_managed)
+                ensure, browser_login_status, managed_paths, upgrade_managed,
+                quarantine_stale_alias)
         except ModuleNotFoundError:
             from setup_chatbridge_dependency import (
-                ensure, browser_login_status, managed_paths, upgrade_managed)
-        bridge_info = ensure(provider_url, chatbridge_source, install_root=root)
+                ensure, browser_login_status, managed_paths, upgrade_managed,
+                quarantine_stale_alias)
+        with quarantine_stale_alias(root):
+            bridge_info = ensure(provider_url, chatbridge_source, install_root=root)
+            if isinstance(bridge_info, dict):
+                provider_url = bridge_info.get("url", provider_url)
+                # Only the owner's exact managed dependency is upgradeable.
+                # Existing external/foreign services were already rejected by ensure.
+                managed_source, _, _ = managed_paths(root)
+                if chatbridge_source is None and managed_source.is_dir():
+                    upgrade_managed(root, url=provider_url)
         if isinstance(bridge_info, dict):
-            provider_url = bridge_info.get("url", provider_url)
-            # Only the owner's exact managed dependency is upgradeable.
-            # Existing external/foreign services were already rejected by ensure.
-            managed_source, _, _ = managed_paths(root)
-            if chatbridge_source is None and managed_source.is_dir():
-                upgrade_managed(root, url=provider_url)
             chatbridge_auth = browser_login_status(provider_url, verify_idle=True)
             if not chatbridge_auth["authenticated"]:
                 print("ChatBridge needs sign-in in the managed Chrome profile; "

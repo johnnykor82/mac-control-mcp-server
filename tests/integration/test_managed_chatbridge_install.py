@@ -186,6 +186,177 @@ class ManagedChatBridgeTests(unittest.TestCase):
                 self.assertTrue((root / ".mac-control-installer-owned").is_file())
 
 
+
+class StaleManagedAliasQuarantineTests(unittest.TestCase):
+    def fixture(self, directory, *, shared=True, owner=True, valid_root=True):
+        home = Path(directory) / "home"
+        root = home / "MacControlMCP"
+        prefix = root / "deps/chatbridge"
+        state = root / "deps/chatbridge-data"
+        release = prefix / "releases/v1"
+        release.mkdir(parents=True)
+        state.mkdir(parents=True)
+        agents = home / "Library/LaunchAgents"
+        agents.mkdir(parents=True)
+        managed = agents / (cb.MANAGED_LABEL + ".plist")
+        legacy = agents / "net.chatbridge.gateway.plist"
+        env = {"CHATBRIDGE_DB": str(state / "state.db"),
+               "CHATBRIDGE_CHROME_PROFILE": str(state / "chrome-profile"),
+               "CHATBRIDGE_PORT": "8787"}
+        base = {"ChatBridgeInstaller": "1", "WorkingDirectory": str(release),
+                "EnvironmentVariables": env}
+        managed.write_bytes(plistlib.dumps({**base, "Label": cb.MANAGED_LABEL}))
+        legacy_config = {**base, "Label": "net.chatbridge.gateway"}
+        if not owner:
+            legacy_config.pop("ChatBridgeInstaller")
+        if not shared:
+            legacy_config["EnvironmentVariables"] = {
+                **env, "CHATBRIDGE_DB": str(home / ".chatbridge/state.db"),
+                "CHATBRIDGE_CHROME_PROFILE": str(home / ".chatbridge/chrome-profile")}
+        if not valid_root:
+            legacy_config["WorkingDirectory"] = str(home / ".local/share/chatbridge/releases/v1")
+        payload = plistlib.dumps(legacy_config)
+        legacy.write_bytes(payload)
+        return home, root, legacy, payload
+
+    def test_verified_inactive_duplicate_quarantined_with_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=absent) as status:
+                with cb.quarantine_stale_alias(root):
+                    self.assertFalse(legacy.exists())
+                self.assertFalse(legacy.exists())
+            self.assertGreaterEqual(status.call_count, 2)
+            saved = list((root / "deps/chatbridge-data/installer-backups/alias-quarantine").glob("*.plist"))
+            self.assertGreaterEqual(len(saved), 2)
+            self.assertTrue(all(item.read_bytes() == payload for item in saved))
+
+    def test_failed_update_restores_exact_duplicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=absent):
+                with self.assertRaisesRegex(RuntimeError, "installer failed"):
+                    with cb.quarantine_stale_alias(root):
+                        self.assertFalse(legacy.exists())
+                        raise RuntimeError("installer failed")
+            self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_becomes_active_between_checks_is_never_moved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            active = SimpleNamespace(returncode=0, stdout="state = running", stderr="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", side_effect=[absent, active]) as run:
+                with self.assertRaisesRegex(RuntimeError, "loaded"):
+                    with cb.quarantine_stale_alias(root):
+                        self.fail("Must not change plist after service activates")
+            self.assertEqual(legacy.read_bytes(), payload)
+            self.assertEqual(run.call_count, 2)
+
+    def test_failed_dependency_ensure_restores_duplicate_in_installer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            (root / 'data').mkdir()
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=absent), \
+                 patch.object(installer.sys, 'platform', 'darwin'), \
+                 patch.object(cb, 'ensure', side_effect=RuntimeError('dependency failed')):
+                with self.assertRaisesRegex(RuntimeError, 'dependency failed'):
+                    installer.install(root, with_chatbridge=True)
+            self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_successful_ensure_and_upgrade_leave_alias_quarantined(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            (root / 'data').mkdir()
+            (root / 'deps/chatbridge-source').mkdir()
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=absent), \
+                 patch.object(installer.sys, 'platform', 'darwin'), \
+                 patch.object(cb, 'ensure', return_value={'url': cb.DEFAULT_URL}), \
+                 patch.object(cb, 'upgrade_managed', return_value={'status': 'upgraded'}) as upgrade, \
+                 patch.object(cb, 'browser_login_status', return_value={'authenticated': True}), \
+                 patch.object(installer, 'find_uv', side_effect=RuntimeError('later stage')):
+                with self.assertRaisesRegex(RuntimeError, 'later stage'):
+                    installer.install(root, with_chatbridge=True)
+            self.assertFalse(legacy.exists())
+            upgrade.assert_called_once_with(root.resolve(), url=cb.DEFAULT_URL)
+            retained = list((root / 'deps/chatbridge-data/installer-backups/alias-quarantine').glob('*.plist'))
+            self.assertEqual(len(retained), 2)
+            self.assertTrue(all(x.read_bytes() == payload for x in retained))
+
+    def test_backup_symlink_is_rejected_before_quarantine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            unsafe = root / 'deps/chatbridge-data/installer-backups'
+            unsafe.symlink_to(home, target_is_directory=True)
+            absent = SimpleNamespace(returncode=113, stderr=(
+                f'Could not find service "net.chatbridge.gateway" in domain for user gui: {os.getuid()}'), stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=absent):
+                with self.assertRaisesRegex(RuntimeError, 'backup'):
+                    with cb.quarantine_stale_alias(root):
+                        self.fail('Unsafe backup root must be rejected')
+            self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_active_duplicate_is_never_moved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            active = SimpleNamespace(returncode=0, stdout="state = running", stderr="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=active):
+                with self.assertRaisesRegex(RuntimeError, "active|loaded"):
+                    with cb.quarantine_stale_alias(root):
+                        self.fail("Must refuse active duplicate")
+            self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_unknown_launchctl_failure_is_not_interpreted_as_inactive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory)
+            ambiguous = SimpleNamespace(returncode=1, stderr="launchd unavailable", stdout="")
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run", return_value=ambiguous):
+                with self.assertRaisesRegex(RuntimeError, "confirm|inactive"):
+                    with cb.quarantine_stale_alias(root):
+                        self.fail("Must refuse uncertain status")
+            self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_foreign_owner_or_release_root_is_never_moved(self):
+        for kwargs in ({"owner": False}, {"valid_root": False}):
+            with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as directory:
+                home, root, legacy, payload = self.fixture(directory, **kwargs)
+                with patch.object(cb.Path, "home", return_value=home), \
+                     patch.object(cb.subprocess, "run") as status:
+                    with self.assertRaisesRegex(RuntimeError, "owner|foreign|outside"):
+                        with cb.quarantine_stale_alias(root):
+                            self.fail("Must not quarantine foreign service")
+                    status.assert_not_called()
+                self.assertEqual(legacy.read_bytes(), payload)
+
+    def test_independent_legacy_service_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, legacy, payload = self.fixture(directory, shared=False)
+            with patch.object(cb.Path, "home", return_value=home), \
+                 patch.object(cb.subprocess, "run") as status:
+                with cb.quarantine_stale_alias(root):
+                    pass
+                status.assert_not_called()
+            self.assertEqual(legacy.read_bytes(), payload)
+
+
+
 class ManagedChatBridgeUpgradeTests(unittest.TestCase):
     def make_source(self, root, version):
         source = root / 'deps/chatbridge-source'

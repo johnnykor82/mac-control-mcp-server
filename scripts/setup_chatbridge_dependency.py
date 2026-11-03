@@ -2,6 +2,7 @@
 """Reuse ChatBridge or install its checksum-pinned independent release."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import errno
 import hashlib
 import gzip
@@ -212,6 +213,114 @@ def owned_endpoint(install_root: Path) -> str | None:
     if not isinstance(port, str) or not port.isdecimal() or not 1 <= int(port) <= 65535:
         raise RuntimeError("Owned ChatBridge port missing or invalid; inspect its LaunchAgent")
     return "http://127.0.0.1:" + port
+
+
+def _alias_absent(label: str) -> None:
+    """An exact launchctl not-found result is required before touching a plist."""
+    command = ["/bin/launchctl", "print", f"gui/{os.getuid()}/{label}"]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True,
+                                check=False, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("Cannot confirm legacy ChatBridge service is inactive") from None
+    if result.returncode == 0:
+        raise RuntimeError("Legacy ChatBridge service is loaded; active service preserved")
+    expected = (f'Could not find service "{label}" in domain '
+                f'for user gui: {os.getuid()}')
+    if result.returncode != 113 or expected not in result.stderr:
+        raise RuntimeError("Cannot confirm legacy ChatBridge service is inactive")
+
+
+@contextmanager
+def quarantine_stale_alias(install_root: Path):
+    """Move only an unloaded, provably same-owner duplicate plist; restore on failure.
+
+    The standalone ChatBridge installer retains its shared-state guard. Never
+    stop or replace a service, profile or SQLite database here.
+    """
+    root = install_root.expanduser().resolve()
+    _, prefix, state = managed_paths(root)
+    agents = Path.home() / "Library/LaunchAgents"
+    legacy = agents / "net.chatbridge.gateway.plist"
+    managed = agents / (MANAGED_LABEL + ".plist")
+    if not legacy.exists() and not legacy.is_symlink():
+        yield
+        return
+    if legacy.is_symlink() or not legacy.is_file():
+        raise RuntimeError("Unsafe legacy ChatBridge LaunchAgent path")
+    # Never transfer a foreign service or an unrelated data directory.
+    if not managed.is_file() or managed.is_symlink():
+        yield
+        return
+    try:
+        with managed.open("rb") as stream:
+            ours = plistlib.load(stream)
+        with legacy.open("rb") as stream:
+            old = plistlib.load(stream)
+        variables = ours["EnvironmentVariables"]
+        old_variables = old["EnvironmentVariables"]
+        release_root = (prefix / "releases").resolve()
+        expected_db = (state / "state.db").resolve()
+        expected_profile = (state / "chrome-profile").resolve()
+        ours_release = Path(ours["WorkingDirectory"]).expanduser().resolve()
+        old_release = Path(old["WorkingDirectory"]).expanduser().resolve()
+        owns_managed = (
+            ours.get("Label") == MANAGED_LABEL
+            and ours.get("ChatBridgeInstaller") == "1"
+            and ours_release.parent == release_root
+            and Path(variables["CHATBRIDGE_DB"]).expanduser().resolve() == expected_db
+            and Path(variables["CHATBRIDGE_CHROME_PROFILE"]).expanduser().resolve()
+            == expected_profile
+        )
+        same_state = (
+            Path(old_variables["CHATBRIDGE_DB"]).expanduser().resolve() == expected_db
+            and Path(old_variables["CHATBRIDGE_CHROME_PROFILE"]).expanduser().resolve()
+            == expected_profile
+        )
+        owns_legacy = (
+            old.get("Label") == "net.chatbridge.gateway"
+            and old.get("ChatBridgeInstaller") == "1"
+            and old_release.parent == release_root
+        )
+    except (OSError, KeyError, TypeError, ValueError, plistlib.InvalidFileException):
+        raise RuntimeError("Cannot verify legacy ChatBridge LaunchAgent ownership") from None
+    if not same_state:
+        yield
+        return
+    if not owns_managed or not owns_legacy:
+        raise RuntimeError("Shared ChatBridge state belongs to an unknown or foreign owner")
+    _alias_absent("net.chatbridge.gateway")
+    backup_dir = state / "installer-backups/alias-quarantine"
+    for candidate in (state, state / "installer-backups", backup_dir):
+        if candidate.is_symlink() or (candidate.exists() and not candidate.is_dir()):
+            raise RuntimeError("Unsafe ChatBridge alias backup directory")
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    backup_dir.chmod(0o700)
+    nonce = str(time.time_ns()) + "-" + os.urandom(6).hex()
+    backup = backup_dir / ("net.chatbridge.gateway-" + nonce + ".original.plist")
+    quarantined = backup_dir / ("net.chatbridge.gateway-" + nonce + ".quarantine.plist")
+    original = legacy.read_bytes()
+    with backup.open("xb") as stream:
+        stream.write(original)
+    backup.chmod(0o600)
+    if backup.read_bytes() != original:
+        raise RuntimeError("ChatBridge duplicate LaunchAgent backup verification failed")
+    _alias_absent("net.chatbridge.gateway")
+    if legacy.read_bytes() != original:
+        raise RuntimeError("Legacy ChatBridge LaunchAgent changed during preparation")
+    legacy.rename(quarantined)
+    try:
+        if quarantined.read_bytes() != original:
+            raise RuntimeError("Quarantined ChatBridge LaunchAgent integrity mismatch")
+        yield
+    except BaseException:
+        if legacy.exists() or legacy.is_symlink():
+            raise RuntimeError("Legacy ChatBridge LaunchAgent reappeared; backup retained") from None
+        quarantined.rename(legacy)
+        if legacy.read_bytes() != original:
+            raise RuntimeError("Restored legacy ChatBridge LaunchAgent integrity mismatch")
+        raise
+
 
 def install(source: Path, *, url: str = DEFAULT_URL,
             install_root: Path | None = None) -> dict:
