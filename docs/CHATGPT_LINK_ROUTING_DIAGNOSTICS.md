@@ -79,3 +79,24 @@ assume every eligible account supports these controls.
 Source: https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
 ChatGPT documents explicit safety blocks as independent of saved approvals:
 https://help.openai.com/en/articles/20001497-troubleshooting-plugins-and-apps-in-chatgpt
+
+## FR-025.2 — stable GitHub account profile (release candidate)
+
+The authenticated remote MCP now advertises get_profile with
+_meta["openai/profile"]=true, zero input fields, an explicit output
+schema, and read-only annotations. It reads the immutable GitHub numeric
+subject from the FastMCP-validated access token and verifies the existing
+approved GitHub ID allowlist before returning a single id string. It does
+not return an email, username, token or OAuth client registration ID.
+Anonymous local previews do not advertise get_profile.
+
+Profile identity is constant across token renewals, new ChatGPT
+connections and Mac Control restarts because it is the immutable GitHub
+subject, not an ephemeral session or a generated JWT. This follows the
+OpenAI profile contract: https://developers.openai.com/plugins/build/auth
+
+This improves recognition and duplicate detection but does not remove
+historically registered duplicate connections, repair platform link_id
+routing, or override a ChatGPT safety block. After the new remote release
+is deployed, refresh the published MCP tool schema where the ChatGPT UI
+supports it. Do not create another account merely to check this feature.

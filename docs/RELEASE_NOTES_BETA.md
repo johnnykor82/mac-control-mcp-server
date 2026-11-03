@@ -347,3 +347,14 @@ and approval documents remain outside the source checkout.
 - Document optional refresh of the app's published/frozen MCP tool snapshot
   where supported, since stale approved schemas can produce parameter
   mismatches even while local FastMCP schemas are correct.
+
+## FR-025.2 — GitHub OAuth profile identity for multi-account ChatGPT (candidate)
+
+- Add an authenticated, remote-only, read-only get_profile tool with
+  OpenAI profile metadata and an explicit structured output schema.
+- Stable id is the authenticated, immutable GitHub provider subject,
+  not a session token, mutable GitHub login or MCP client_id.
+- Missing or unauthorized subject fails closed. Local anonymous MCP
+  tool schemas and existing OAuth settings are unchanged.
+- This helps ChatGPT identify existing linked accounts after reconnect;
+  historical duplicate connection records remain managed by ChatGPT.
