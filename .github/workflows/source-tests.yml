@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Release security history audit must see reachable historical blobs.
+          fetch-depth: 0
       - name: Check installer bootstrap with Python 3.9
         uses: actions/setup-python@v5
         with:

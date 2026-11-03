@@ -19,6 +19,24 @@ MAX_BLOB_BYTES = 2 * 1024 * 1024
 CRITICAL = [(name, pattern) for name, severity, pattern in PATTERNS
             if severity == "critical"]
 
+# One reviewed, content-addressed legacy *test fixture* (a113584).
+# The follow-up 592d9c9 already removed that false positive from
+# current source. SHA-1 of the exact Git blob guarantees that any
+# changed content, location, line or credential kind remains critical.
+_REVIEWED_HISTORICAL_TEST_FIXTURES = frozenset({
+    (
+        "224a650b5198ef223832375d71c2e7d99cae9d11",
+        "tests/integration/test_argument_guidance.py",
+        55,
+        "embedded_credential_assignment",
+    ),
+})
+
+
+def is_reviewed_fixture(sha: str, path: str, line: int, kind: str) -> bool:
+    """Allow only the exact previously reviewed immutable historical fixture."""
+    return (sha, path, line, kind) in _REVIEWED_HISTORICAL_TEST_FIXTURES
+
 
 def cmd(*argv: str, input_bytes: bytes | None = None) -> bytes:
     return subprocess.run(["git", "-C", str(ROOT), *argv], check=True,
@@ -34,6 +52,7 @@ def audit_history() -> dict:
             records.append((sha.decode(), name.decode(errors="replace")))
             seen.add(sha)
     findings = []
+    reviewed_test_fixtures = []
     scanned = 0
     skipped = 0
     for sha, name in records:
@@ -50,11 +69,17 @@ def audit_history() -> dict:
         for line_num, line in enumerate(data.splitlines(), 1):
             for kind, pattern in CRITICAL:
                 if pattern.search(line):
-                    findings.append({"kind": kind, "blob": sha[:12],
-                                     "historical_path": name, "line": line_num})
+                    result = {"kind": kind, "blob": sha[:12],
+                              "historical_path": name, "line": line_num}
+                    if is_reviewed_fixture(sha, name, line_num, kind):
+                        # Visible as reviewed, never silently discarded.
+                        reviewed_test_fixtures.append(result)
+                    else:
+                        findings.append(result)
     return {
         "schema": 1, "scanned_blobs": scanned, "skipped_large_objects": skipped,
         "critical_findings": findings,
+        "reviewed_test_fixtures": reviewed_test_fixtures,
         "limitations": [
             "Only local Git refs are scanned, not deleted or unreachable Git objects.",
             "Heuristic signatures miss many secrets and do not validate revocation.",

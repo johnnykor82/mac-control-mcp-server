@@ -56,3 +56,15 @@ contract mismatch, not evidence of an unauthorized target.
 - No public release, PR merge, GitHub app reauthorization, real-host
   SSH command or remote service restart occurs during these tests.
   Final independent CI and explicit review/merge/release gates remain.
+
+
+## macOS CI portability correction / 2026-11-03
+
+The first PR CI isolated E2E failed on macos-15 because
+TemporaryDirectory used /var/folders/..., where /var is a macOS
+symlink to /private/var. The protected backup path was correctly
+rejected by the production _no_symlinks guard. The test now resolves
+its disposable temporary root to an actual filesystem path before
+setting MAC_CONTROL_DATA_ROOT and workspace_root. No production
+permission check or security guard was changed. The original local
+pass alone was insufficient; final macOS CI is required.

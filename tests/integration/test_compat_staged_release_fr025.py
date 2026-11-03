@@ -17,7 +17,11 @@ from scripts import install_mac_control as installer
 class StagedReleaseCompatibilityE2ETests(unittest.TestCase):
     def test_packaged_mcp_file_alias_and_legacy_cas_interoperate(self):
         with tempfile.TemporaryDirectory(prefix="fr025-staged-") as tmp:
-            root = Path(tmp)
+            # macOS /var is often a symlink to /private/var. The real
+            # workspace and backup paths must have no symlink ancestor;
+            # never disable maintenance_ops._no_symlinks to fix a fixture.
+            root = Path(tmp).resolve(strict=True)
+            self.assertEqual(root, root.resolve(strict=True))
             release = root / "releases" / "candidate"
             release.mkdir(parents=True)
             installer.copy_source(release)
