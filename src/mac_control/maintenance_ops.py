@@ -113,9 +113,11 @@ def _workspace_path(name: str, *, write: bool = False) -> Path:
         if (relative.parts[0] in WORKSPACE_RELATIVE_PREFIXES
                 and len(relative.parts) >= 2):
             relative = Path('workspace') / relative
-        elif (relative.parts[0].startswith('.')
-              or relative.as_posix() in READ_ONLY_FILES):
-            raise PermissionError('Hidden or shipped-source writes are denied')
+        elif len(relative.parts) == 1 and relative.parts[0].startswith('.'):
+            # Hidden files at workspace root are owner-authorized destinations.
+            relative = Path('workspace') / relative
+        elif relative.as_posix() in READ_ONLY_FILES:
+            raise PermissionError('Shipped-source writes are denied')
         else:
             raise ValueError(
                 'WORKSPACE_PATH_FORMAT_INVALID: write_file(path=...) accepts '
@@ -127,8 +129,8 @@ def _workspace_path(name: str, *, write: bool = False) -> Path:
     if not relative.parts or relative.parts[0] != 'workspace' or len(relative.parts) < 2:
         raise PermissionError('Only workspace/<file> or an approved workspace-relative subpath is writable')
     _no_symlinks(fs_ops.roots()['workspace'])
-    # Read-only paths can include dotfiles; mutation paths retain the existing
-    # name denylist. Aliases cannot write outside the configured workspace.
+    # Hidden names are allowed for read and write in the approved workspace.
+    # Aliases still cannot reach outside the configured workspace.
     _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix(),
                                   read_only=not write)
     if target == fs_ops.roots()['workspace'] or target.is_dir():

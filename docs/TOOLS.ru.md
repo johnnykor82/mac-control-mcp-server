@@ -46,9 +46,9 @@ Mac Control соединяет помощника с Mac через MCP. Его 
 | `fs_write` | W | Создать текст или атомарно заменить файл после проверки SHA256. Для Python проверяется синтаксис. | `project="workspace", path="artifacts/note.txt", content="Заметки проверки"`; для замены добавьте `expected_sha256=current_sha256`. |
 | `fs_replace` | W | Заменить ровно одно вхождение текста с обязательным текущим SHA256. | `project="workspace", path="artifacts/note.txt", old="Заметки", new="Итоги", expected_sha256=current_sha256` |
 | `fs_mkdir` | W | Создать каталог внутри разрешённого проекта. | `project="workspace", path="artifacts"` |
-| `fs_move` | W | Переместить разрешённый файл в пределах проекта без перезаписи назначения. | `project="workspace", source="scratch/note.txt", destination="artifacts/note.txt"` |
-| `fs_trash` | W | Переместить один файл в закрытое хранилище восстановления без рекурсивного удаления каталогов. | `project="workspace", path="scratch/old.txt", expected_sha256=current_sha256` |
-| `fs_restore` | W | Восстановить сохранённую копию, при необходимости проверив текущий хеш назначения. | `project="workspace", path="artifacts/note.txt", backup_id=returned_backup_id, expected_sha256=current_sha256` |
+| `fs_move` | W | Переместить разрешённый файл или каталог в пределах проекта без перезаписи назначения. | `project="workspace", source="scratch/note.txt", destination="artifacts/note.txt"` |
+| `fs_trash` | W | Переместить файл или каталог в закрытое хранилище восстановления с проверкой SHA256, без безвозвратного удаления. | `project="workspace", path="scratch/old.txt", expected_sha256=current_sha256` |
+| `fs_restore` | W | Восстановить сохранённый файл или каталог без перезаписи существующего каталога. | `project="workspace", path="artifacts/note.txt", backup_id=returned_backup_id, expected_sha256=current_sha256` |
 
 ## Репозитории Git — 10 инструментов
 

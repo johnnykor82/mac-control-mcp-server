@@ -46,9 +46,9 @@ Use `project="workspace"` for ordinary agent work. Other aliases must appear in 
 | `fs_write` | W | Create text, or atomically replace an existing file after checking its SHA256. Python source receives a syntax check. | `project="workspace", path="artifacts/note.txt", content="Review notes"`; add `expected_sha256=current_sha256` when replacing. |
 | `fs_replace` | W | Replace exactly one occurrence of a text span, with a required current SHA256. | `project="workspace", path="artifacts/note.txt", old="Review", new="Final", expected_sha256=current_sha256` |
 | `fs_mkdir` | W | Create a directory inside an approved project. | `project="workspace", path="artifacts"` |
-| `fs_move` | W | Move a permitted file inside the same project without overwriting its destination. | `project="workspace", source="scratch/note.txt", destination="artifacts/note.txt"` |
-| `fs_trash` | W | Move one file into private recoverable backup storage; no recursive directory deletion. | `project="workspace", path="scratch/old.txt", expected_sha256=current_sha256` |
-| `fs_restore` | W | Restore a retained backup, checking the current destination hash when applicable. | `project="workspace", path="artifacts/note.txt", backup_id=returned_backup_id, expected_sha256=current_sha256` |
+| `fs_move` | W | Move a permitted file or directory inside the same project without overwrite. | `project="workspace", source="scratch/note.txt", destination="artifacts/note.txt"` |
+| `fs_trash` | W | Move a file or directory into private recoverable backup storage with SHA256 CAS. | `project="workspace", path="scratch/old.txt", expected_sha256=current_sha256` |
+| `fs_restore` | W | Restore a saved file or directory backup without overwriting an existing directory. | `project="workspace", path="artifacts/note.txt", backup_id=returned_backup_id, expected_sha256=current_sha256` |
 
 ## Git repositories — 10 tools
 

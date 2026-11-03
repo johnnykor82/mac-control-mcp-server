@@ -49,7 +49,7 @@ has 512 KiB; the higher limit must not be silently borrowed.
   for maintenance read/write. It gives both correct signatures without
   printing the rejected value. A safe corrected path may be resubmitted
   only with the user's existing authorization for the operation.
-- Absolute write paths, traversal, hidden/sensitive paths, symlinks,
+- Absolute write paths, traversal, symlinks and outside-root paths,
   outside-workspace roots and ownership failures remain denied. **Never**
   switch tool, rename command or change path to bypass a permission,
   provider or platform safety block.
@@ -89,3 +89,29 @@ permit traversal or symlink following. Existing size and text-only limits apply.
 reject protected/hidden targets; CAS hashes and automatic backups remain.
 Platform/provider authorization failures never trigger alternate-tool retries.
 Regression suite: `tests/integration/test_hidden_read_fr025.py`.
+
+
+## FR-027 — full hidden file and directory CRUD (2026-11-03)
+
+FR-025.4's read-only hidden-name permission was superseded by the owner's
+explicit FR-027 authorization. Every existing filesystem mutation tool now
+accepts dotfile and hidden-directory names inside a preapproved project root,
+including `.gitignore`, `.planning`, `.git`, `.env` and `.ssh`. The maintenance
+`write_file` accepts both `workspace/projects/repo/.gitignore` and
+`projects/repo/.gitignore`, plus root `.gitignore`.
+
+`fs_mkdir` creates hidden directories; `fs_write` and `fs_replace` use
+existing-file SHA256 CAS and backups; `fs_move` moves files or directories
+without overwrite; `fs_trash` recoverably removes either. To delete a
+directory, first call `fs_stat` and pass the returned `sha256` to `fs_trash`;
+its directory hash covers names and metadata, not file contents. `fs_restore`
+accepts the returned backup_id and refuses to overwrite an existing directory.
+Directory trash/restore use atomic same-filesystem renames; cross-volume
+rename errors leave the original in place. Files continue to use SHA256
+content hashes and recoverable backup files. Directory listing and fingerprinting
+are limited to 50,000 entries per operation.
+
+Root boundaries, absolute-path / traversal rejection, no symlink traversal,
+workspace ownership, size limits and existing-file hash checks remain.
+`jkmac-mcp` is the ChatGPT connection name for the same published server when
+installed on jkmac; updating that installation supplies this handler.

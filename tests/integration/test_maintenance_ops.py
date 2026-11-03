@@ -130,17 +130,19 @@ class MaintenanceTests(unittest.TestCase):
                 self.assertEqual(reader('workspace/' + alias)['content'], prefix)
                 self.assertEqual(reader(alias)['sha256'], result['sha256'])
 
-    def test_fr025_alias_still_rejects_traversal_hidden_external_symlink(self):
+    def test_fr027_alias_rejects_traversal_external_symlink_but_allows_hidden(self):
         writer = self.tools['write_file']
         for path in (
             'projects/../outside.txt',
             'projects/a/../../outside.txt',
-            'projects/.env',
-            'projects/.ssh/id_rsa',
             '/tmp/workspace/projects/report.md',
         ):
             with self.subTest(path=path), self.assertRaises(PermissionError):
                 writer(path, '# forbidden')
+        for hidden in ('projects/.env', 'projects/.ssh/id_rsa'):
+            result = writer(hidden, '# authorized')
+            self.assertTrue((self.workspace / hidden).is_file())
+            self.assertEqual(len(result['sha256']), 64)
         outside = self.root / 'outside.txt'
         outside.write_text('leave intact')
         (self.workspace / 'projects' / 'linked').symlink_to(self.root)
@@ -149,11 +151,15 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(outside.read_text(), 'leave intact')
 
     def test_sensitive_paths_symlinks_and_release_writes_are_denied(self):
-        for name in ('workspace/../remote_auth.json', 'workspace/.env',
-                     'workspace/.ssh/id_rsa', 'extensions.py', '/etc/passwd'):
+        for name in ('workspace/../remote_auth.json',
+                     'extensions.py', '/etc/passwd'):
             self.assertFalse(self.tools['read_file'](name)['ok'])
             with self.assertRaises((ValueError, PermissionError)):
                 self.tools['write_file'](name, 'bad')
+        for name in ('workspace/.env', 'workspace/.ssh/id_rsa'):
+            result = self.tools['write_file'](name, 'hidden fixture')
+            self.assertEqual(len(result['sha256']), 64)
+            self.assertEqual(self.tools['read_file'](name)['content'], 'hidden fixture')
         outside = self.root / 'private.txt'
         outside.write_text('secret')
         (self.workspace / 'link.txt').symlink_to(outside)

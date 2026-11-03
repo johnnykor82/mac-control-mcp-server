@@ -17,8 +17,7 @@ ROOT = DATA_ROOT
 WORKSPACE = workspace_root(ROOT)
 TRUSTED_CONFIG = ROOT / "allowed_projects.json"
 RECOVERY = ROOT / "backups" / "fs_recovery"
-DENY = {".git", ".ssh", ".aws", ".gnupg", ".venv", "__pycache__", "node_modules", ".DS_Store"}
-DENY_PREFIX = (".env", "id_rsa", "id_ed25519", ".npmrc", ".netrc", ".pypirc")
+MAX_DIRECTORY_ENTRIES = 50000
 MAX_FILE = 512 * 1024
 
 def roots():
@@ -49,14 +48,8 @@ def target_for(project: str, path: str, require_file=False, *, read_only=False):
     p = Path(path)
     if p.is_absolute() or ".." in p.parts or not path or "\x00" in path:
         raise ValueError("Relative non-traversing path required")
-    # The hidden/sensitive name denylist protects mutations only. Read tools
-    # may inspect any file under an already approved root, including dotfiles.
-    for part in p.parts:
-        if not read_only:
-            if part in DENY or any(part.startswith(x) for x in DENY_PREFIX):
-                raise PermissionError("Blocked sensitive or generated path")
-            if part.startswith(".") and part != ".github" and part != ".":
-                raise PermissionError("Hidden paths are not exposed")
+    # All names, including dotfiles, are eligible within an owner-approved root.
+    # Root confinement, traversal and symlink protections remain in place.
     current = base
     for part in p.parts:
         current = current / part
@@ -77,9 +70,62 @@ def read_bytes(path):
         raise ValueError("File too large (512 KiB limit)")
     return path.read_bytes()
 
-def backup_original(path, data):
+def directory_sha256(folder: Path) -> str:
+    """Deterministic bounded directory CAS fingerprint without following symlinks.
+
+    Directory CAS covers member paths, types, size, mode, and nanosecond mtime.
+    File CAS is SHA256 of complete file content.
+    """
+    digest = hashlib.sha256(b"maccontrol-directory-metadata-v1\0")
+    pending = [(Path("."), folder)]
+    visited = 0
+    while pending:
+        relative, entry = pending.pop()
+        info = entry.lstat()
+        if stat.S_ISDIR(info.st_mode):
+            kind = "directory"
+        elif stat.S_ISREG(info.st_mode):
+            kind = "file"
+        elif stat.S_ISLNK(info.st_mode):
+            # Do not traverse symlinks found *inside* a directory.
+            kind = "symlink"
+        else:
+            raise PermissionError("Unsupported special entry in directory")
+        row = [relative.as_posix(), kind, info.st_size, info.st_mtime_ns,
+               stat.S_IMODE(info.st_mode)]
+        if kind == "symlink":
+            row.append(os.readlink(entry))
+        digest.update(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode())
+        digest.update(b"\n")
+        visited += 1
+        if visited > MAX_DIRECTORY_ENTRIES:
+            raise ValueError("Directory exceeds 50000 entries; nothing was removed")
+        if kind == "directory":
+            for child in sorted(entry.iterdir(), key=lambda p: p.name, reverse=True):
+                pending.append((relative / child.name, child))
+    return digest.hexdigest()
+
+
+def recovery_root() -> Path:
+    """Reject a redirected recovery destination before saving or restoring."""
+    if any(part.is_symlink() for part in (RECOVERY, RECOVERY.parent, RECOVERY.parent.parent)):
+        raise PermissionError("Symlinked recovery storage is not supported")
     RECOVERY.mkdir(mode=0o700, parents=True, exist_ok=True)
     RECOVERY.chmod(0o700)
+    return RECOVERY
+
+
+def backup_directory(folder: Path) -> str:
+    """Recoverable atomic move to a private backup, no cross-volume delete."""
+    recovery_root()
+    name = f"{time.time_ns()}-{secrets.token_hex(5)}.dir"
+    # Atomic rename or an error; never copy-then-unlink on another volume.
+    folder.rename(RECOVERY / name)
+    return name
+
+
+def backup_original(path, data):
+    recovery_root()
     backup = RECOVERY / (f"{time.time_ns()}-{secrets.token_hex(5)}.bak")
     backup.write_bytes(data)
     backup.chmod(0o600)
@@ -145,6 +191,9 @@ def register(mcp):
                   "modified_epoch": st.st_mtime, "mode": oct(stat.S_IMODE(st.st_mode))}
         if file.is_file() and st.st_size <= MAX_FILE:
             result["sha256"] = hash_bytes(file.read_bytes())
+        elif file.is_dir():
+            result["sha256"] = directory_sha256(file)
+            result["hash_kind"] = "directory_metadata_v1"
         if include_media:
             if type(include_media) is not bool or not file.is_file() or file.is_symlink():
                 raise ValueError("include_media requires a regular approved file")
@@ -235,25 +284,41 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def fs_move(project: str, source: str, destination: str) -> dict:
-        """Move a file inside one approved project without overwriting its destination."""
-        base, old = target_for(project, source, require_file=True)
+        """Move a file or directory within an approved root, never overwrite."""
+        base, old = target_for(project, source)
         _, new = target_for(project, destination)
+        if old == base or not (old.is_file() or old.is_dir()):
+            raise FileNotFoundError(source)
+        directory = old.is_dir()
+        if directory and new.is_relative_to(old):
+            raise ValueError("Cannot move a directory into itself")
         if new.exists() or old == new or new == base:
             raise FileExistsError(destination)
         new.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         old.rename(new)
-        return {"moved": source, "to": destination}
+        return {"moved": source, "to": destination, "directory": directory}
 
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def fs_trash(project: str, path: str, expected_sha256: str) -> dict:
-        """Move a file to private recoverable backups; never recursively delete directories."""
-        _, file = target_for(project, path, require_file=True)
+        """Recoverably remove a file or directory, requiring its current SHA256."""
+        base, file = target_for(project, path)
+        if file == base:
+            raise ValueError("Cannot trash an approved project root")
+        if file.is_dir():
+            if directory_sha256(file) != expected_sha256:
+                raise ValueError("Directory SHA256 mismatch")
+            backup = backup_directory(file)
+            return {"trashed": path, "backup_id": backup, "recovery_dir": str(RECOVERY),
+                    "directory": True}
+        if not file.is_file():
+            raise FileNotFoundError(path)
         data = read_bytes(file)
         if hash_bytes(data) != expected_sha256:
             raise ValueError("SHA256 mismatch")
         backup = backup_original(file, data)
         file.unlink()
-        return {"trashed": path, "backup_id": backup, "recovery_dir": str(RECOVERY)}
+        return {"trashed": path, "backup_id": backup, "recovery_dir": str(RECOVERY),
+                "directory": False}
 
     @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
     def fs_search(project: str, pattern: str, path: str = ".",
@@ -294,15 +359,28 @@ def register(mcp):
     @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def fs_restore(project: str, path: str, backup_id: str,
                    expected_sha256: str | None = None) -> dict:
-        """Restore saved backup to an approved file, with SHA256 CAS protection."""
+        """Restore saved file or directory; never overwrite an existing directory."""
         base, target = target_for(project, path)
-        if target == base or target.is_dir():
-            raise ValueError("Destination must be a file")
-        if not re.fullmatch(r"[0-9]{12,24}-[0-9a-f]{10}\.bak", backup_id):
+        if target == base:
+            raise ValueError("Cannot restore a project root")
+        if not re.fullmatch(r"[0-9]{12,24}-[0-9a-f]{10}\.(bak|dir)", backup_id):
             raise ValueError("Invalid backup ID")
+        recovery_root()
         saved = RECOVERY / backup_id
-        if saved.is_symlink() or not saved.is_file():
+        if saved.is_symlink() or not (saved.is_file() or saved.is_dir()):
             raise FileNotFoundError("Backup not found")
+        if saved.is_dir():
+            if target.exists():
+                raise FileExistsError(path)
+            if expected_sha256 is not None:
+                raise ValueError("Expected SHA256 must be empty when restoring a deleted directory")
+            # A directory backup is preserved until atomic rename succeeds.
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            saved.rename(target)
+            return {"restored": path, "sha256": directory_sha256(target),
+                    "previous_backup_id": None, "directory": True}
+        if target.is_dir():
+            raise ValueError("Destination must be a file")
         data = read_bytes(saved)
         original = read_bytes(target) if target.exists() else None
         if original is None and expected_sha256 is not None:

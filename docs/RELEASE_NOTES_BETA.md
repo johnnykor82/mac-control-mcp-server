@@ -394,3 +394,16 @@ and approval documents remain outside the source checkout.
   inventory. Standalone source tarballs contain no `.git` history: the one
   history-dependent fixture test explicitly skips there, while full-history
   security scanning remains mandatory in Git checkout/CI.
+
+
+## v0.1.0-beta.30 — full hidden path read/write/delete
+
+- Owner-approved FR-027 removes the hidden-basename restriction for already
+  approved workspace and project roots; supports .gitignore, .planning, .git,
+  .venv, .env and nested dotfiles with existing MCP file tools.
+- Directory fs_stat now returns bounded metadata SHA256, fs_move handles
+  directories, fs_trash moves directories into private recoverable storage
+  after CAS, and fs_restore recovers them without overwriting an existing path.
+- Root, symlink, traversal and file-level CAS guards remain enforced.
+- On jkmac, jkmac-mcp is the connection name to this server installation;
+  maccontrol update refreshes its server code. It does not update legacy Mac Control.
