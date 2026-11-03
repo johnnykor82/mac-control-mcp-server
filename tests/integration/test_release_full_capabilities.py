@@ -18,6 +18,10 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
         source = {path.relative_to(ROOT).as_posix() for path in installer.install_sources()}
         self.assertIn("scripts/doctor_mac_control.py", source)
         self.assertIn("scripts/test_github_oauth_login.py", source)
+        self.assertIn("src/mac_control/argument_guidance.py", source)
+        self.assertIn("docs/TOOL_ARGUMENT_ERRORS.md", source)
+        self.assertIn("scripts/mclog.py", source)
+        self.assertIn("src/mac_control/audit_middleware.py", source)
 
     def test_copied_release_runs_in_an_isolated_directory(self):
         with tempfile.TemporaryDirectory() as tmp:

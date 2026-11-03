@@ -25,6 +25,7 @@ docs/SPEC_SHARED_FUNNEL.md
 docs/SPEC_SHARED_FUNNEL.ru.md
 docs/TOOLS.md
 docs/TOOLS.ru.md
+docs/TOOL_ARGUMENT_ERRORS.md
 docs/WATCHER_GUIDE.md
 docs/WATCHER_GUIDE.ru.md
 docs/WORKSPACE_MIGRATION.md
@@ -62,6 +63,7 @@ scripts/test_github_oauth_login.py
 scripts/workspace_migration.py
 src/mac_control/__init__.py
 src/mac_control/__main__.py
+src/mac_control/argument_guidance.py
 src/mac_control/assets/gui_agent.swift
 src/mac_control/audit_middleware.py
 src/mac_control/background_browser_ops.py
