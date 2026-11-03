@@ -179,10 +179,63 @@ def managed_paths(install_root: Path) -> tuple[Path, Path, Path]:
             root / "deps/chatbridge-data")
 
 
-def verify_managed_install(install_root: Path) -> None:
-    """An available external ChatBridge cannot silently break consolidation."""
+
+def managed_service_label(install_root: Path) -> str:
+    """Retain a verified original-label service; never create a second owner.
+
+    Historical Mac Control installations provisioned `net.chatbridge.gateway`
+    under the consolidated Mac Control dependency root. A running service
+    may be upgraded in place with this original label, not relabelled live.
+    """
     _, prefix, state = managed_paths(install_root)
-    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
+    agents = Path.home() / "Library/LaunchAgents"
+    managed = agents / (MANAGED_LABEL + ".plist")
+    legacy = agents / "net.chatbridge.gateway.plist"
+    if managed.exists() or managed.is_symlink():
+        return MANAGED_LABEL
+    if not legacy.is_file() or legacy.is_symlink():
+        raise RuntimeError("ChatBridge endpoint is running without a managed LaunchAgent; stop it before installing Mac Control")
+    try:
+        info = legacy.stat()
+        if info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_mode & 0o022:
+            raise RuntimeError("Legacy ChatBridge service has unsafe ownership or permissions")
+        with legacy.open('rb') as stream:
+            data = plistlib.load(stream)
+        env = data['EnvironmentVariables']
+        release = Path(data['WorkingDirectory']).expanduser().resolve()
+        program = data['ProgramArguments'][0]
+        db = Path(env['CHATBRIDGE_DB']).expanduser().resolve()
+        chrome = Path(env['CHATBRIDGE_CHROME_PROFILE']).expanduser().resolve()
+        port = env['CHATBRIDGE_PORT']
+        if (data.get('Label') != 'net.chatbridge.gateway'
+                or data.get('ChatBridgeInstaller') != '1'
+                or release.parent != (prefix / 'releases').resolve()
+                or db != (state / 'state.db').resolve()
+                or chrome != (state / 'chrome-profile').resolve()
+                or not isinstance(port, str) or not port.isdecimal()
+                or not 1 <= int(port) <= 65535
+                or Path(program).expanduser().resolve() != (release / '.venv/bin/python').resolve()):
+            raise RuntimeError("Legacy ChatBridge service is foreign or outside managed owner state")
+        status = subprocess.run(
+            ['/bin/launchctl', 'print', f'gui/{os.getuid()}/net.chatbridge.gateway'],
+            capture_output=True, text=True, check=False, timeout=5)
+        if (status.returncode != 0
+                or f'path = {legacy}' not in status.stdout
+                or f'program = {program}' not in status.stdout
+                or 'state = running' not in status.stdout
+                or not re.search(r'^\s*pid = [1-9][0-9]*$', status.stdout, re.MULTILINE)):
+            raise RuntimeError("Cannot confirm running owner-managed historical ChatBridge service")
+    except (OSError, KeyError, IndexError, ValueError, TypeError, AttributeError,
+            plistlib.InvalidFileException, subprocess.TimeoutExpired) as error:
+        raise RuntimeError("Cannot verify historical ChatBridge service ownership") from error
+    return 'net.chatbridge.gateway'
+
+
+def verify_managed_install(install_root: Path) -> None:
+    """Reject unknown endpoints; accept a provably owned historical label."""
+    _, prefix, state = managed_paths(install_root)
+    label = managed_service_label(install_root)
+    plist = Path.home() / ("Library/LaunchAgents/" + label + ".plist")
     if not plist.is_file() or plist.is_symlink():
         raise RuntimeError("ChatBridge endpoint is running without a managed LaunchAgent; stop it before installing Mac Control")
     try:
@@ -193,26 +246,29 @@ def verify_managed_install(install_root: Path) -> None:
         database = Path(variables["CHATBRIDGE_DB"]).resolve()
     except (OSError, KeyError, ValueError, TypeError):
         raise RuntimeError("Cannot verify existing ChatBridge installation ownership") from None
-    if (data.get("Label") != MANAGED_LABEL
+    if (data.get("Label") != label
             or data.get("ChatBridgeInstaller") != "1"
             or workdir.parent != prefix / "releases"
             or database != state / "state.db"):
         raise RuntimeError("ChatBridge is installed outside ~/MacControlMCP; remove or migrate it first")
 
 
-
 def owned_endpoint(install_root: Path) -> str | None:
-    """Reuse the actual bound port of this installation, not a guessed free port."""
-    plist = Path.home() / ("Library/LaunchAgents/" + MANAGED_LABEL + ".plist")
-    if not plist.exists() and not plist.is_symlink():
+    """Reuse actual bound port of the verified historical or current label."""
+    agents = Path.home() / 'Library/LaunchAgents'
+    if not any((agents / (label + '.plist')).exists() or
+               (agents / (label + '.plist')).is_symlink()
+               for label in (MANAGED_LABEL, 'net.chatbridge.gateway')):
         return None
     verify_managed_install(install_root)
-    with plist.open("rb") as stream:
-        env = plistlib.load(stream).get("EnvironmentVariables", {})
-    port = env.get("CHATBRIDGE_PORT")
+    label = managed_service_label(install_root)
+    plist = agents / (label + '.plist')
+    with plist.open('rb') as stream:
+        env = plistlib.load(stream).get('EnvironmentVariables', {})
+    port = env.get('CHATBRIDGE_PORT')
     if not isinstance(port, str) or not port.isdecimal() or not 1 <= int(port) <= 65535:
-        raise RuntimeError("Owned ChatBridge port missing or invalid; inspect its LaunchAgent")
-    return "http://127.0.0.1:" + port
+        raise RuntimeError('Owned ChatBridge port missing or invalid; inspect its LaunchAgent')
+    return 'http://127.0.0.1:' + port
 
 
 def _alias_absent(label: str) -> None:
@@ -555,7 +611,7 @@ def upgrade_managed(install_root: Path, *, url: str = DEFAULT_URL) -> dict:
                 raise RuntimeError("Pinned ChatBridge source version mismatch")
             command = [sys.executable, str(staging / "scripts/installer.py"),
                        "upgrade", "--prefix", str(prefix), "--state-dir", str(state),
-                       "--label", MANAGED_LABEL]
+                       "--label", managed_service_label(install_root)]
             try:
                 completed = subprocess.run(command, cwd=staging, check=False,
                                            timeout=1800)

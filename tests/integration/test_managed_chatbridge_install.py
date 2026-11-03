@@ -187,6 +187,87 @@ class ManagedChatBridgeTests(unittest.TestCase):
 
 
 
+
+class AdoptedLegacyChatBridgeLabelTests(unittest.TestCase):
+    def fixture(self, directory, *, marker='1', profile=True, release=True, dual=False):
+        home = Path(directory).resolve() / 'home'
+        root = home / 'MacControlMCP'
+        agents = home / 'Library/LaunchAgents'
+        agents.mkdir(parents=True)
+        _, prefix, state = cb.managed_paths(root)
+        version = prefix / 'releases/old'
+        version.mkdir(parents=True)
+        path = agents / 'net.chatbridge.gateway.plist'
+        env = {'CHATBRIDGE_DB': str(state / 'state.db'),
+               'CHATBRIDGE_CHROME_PROFILE': str(state / 'chrome-profile'),
+               'CHATBRIDGE_PORT': '8787'}
+        if not profile:
+            env['CHATBRIDGE_CHROME_PROFILE'] = str(home / '.chatbridge/chrome-profile')
+        data = {'Label': 'net.chatbridge.gateway', 'ChatBridgeInstaller': marker,
+                'WorkingDirectory': str(version if release else home / '.other/release'),
+                'ProgramArguments': [str(version / '.venv/bin/python'), '-m', 'chatbridge'],
+                'EnvironmentVariables': env}
+        path.write_bytes(plistlib.dumps(data))
+        path.chmod(0o600)
+        if dual:
+            other = agents / (cb.MANAGED_LABEL + '.plist')
+            other.write_bytes(plistlib.dumps({**data, 'Label': cb.MANAGED_LABEL}))
+        output = (f'path = {path}\nprogram = {version}/.venv/bin/python\n'
+                  'state = running\npid = 14119\n')
+        launch = SimpleNamespace(returncode=0, stdout=output, stderr='')
+        return home, root, path, launch
+
+    def test_adopt_owner_managed_running_original_label_and_port(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, path, launch = self.fixture(directory)
+            with patch.object(cb.Path, 'home', return_value=home), \
+                 patch.object(cb.subprocess, 'run', return_value=launch):
+                self.assertEqual(cb.managed_service_label(root), 'net.chatbridge.gateway')
+                self.assertEqual(cb.owned_endpoint(root), 'http://127.0.0.1:8787')
+                cb.verify_managed_install(root)
+            self.assertTrue(path.exists())
+            self.assertFalse((path.parent / (cb.MANAGED_LABEL + '.plist')).exists())
+
+    def test_never_adopt_foreign_marker_profile_or_release(self):
+        for kwargs in ({'marker': 'foreign'}, {'profile': False}, {'release': False}):
+            with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as directory:
+                home, root, path, launch = self.fixture(directory, **kwargs)
+                with patch.object(cb.Path, 'home', return_value=home), \
+                     patch.object(cb.subprocess, 'run', return_value=launch):
+                    with self.assertRaisesRegex(RuntimeError, 'owned|ownership|outside|foreign'):
+                        cb.managed_service_label(root)
+                self.assertTrue(path.exists())
+
+    def test_never_adopt_when_both_plists_exist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, path, launch = self.fixture(directory, dual=True)
+            with patch.object(cb.Path, 'home', return_value=home), \
+                 patch.object(cb.subprocess, 'run', return_value=launch):
+                self.assertEqual(cb.managed_service_label(root), cb.MANAGED_LABEL)
+
+    def test_upgrade_uses_adopted_label_not_second_service(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home, root, path, launch = self.fixture(directory)
+            source = root / 'deps/chatbridge-source'
+            source.mkdir(parents=True)
+            (source / 'pyproject.toml').write_text('version = "0.2.0b11"\n')
+            with patch.object(cb.Path, 'home', return_value=home), \
+                 patch.object(cb.subprocess, 'run', return_value=launch), \
+                 patch.object(cb, 'assert_managed_idle'), \
+                 patch.object(cb, 'download_pinned_source') as download:
+                with tempfile.TemporaryDirectory() as source_dir:
+                    package = Path(source_dir) / 'package'
+                    package.mkdir()
+                    (package / 'pyproject.toml').write_text('version = "0.2.0b12"\n')
+                    (package / 'scripts').mkdir()
+                    (package / 'scripts/installer.py').write_text('test')
+                    download.return_value = package
+                    with patch.object(cb, 'verify', return_value={'status':'compatible'}):
+                        cb.upgrade_managed(root)
+            self.assertTrue(path.exists())
+            self.assertFalse((path.parent / (cb.MANAGED_LABEL + '.plist')).exists())
+
+
 class StaleManagedAliasQuarantineTests(unittest.TestCase):
     def fixture(self, directory, *, shared=True, owner=True, valid_root=True):
         home = Path(directory) / "home"

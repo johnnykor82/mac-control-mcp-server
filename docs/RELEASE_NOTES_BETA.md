@@ -458,3 +458,11 @@ and approval documents remain outside the source checkout.
 - Following installation, the worker checks an owned running LaunchAgent and the authenticated OAuth challenge on loopback MCP. If a changed release fails, it calls the previous release's official rollback installer, verifies recovery, and marks `rolled_back` or `rollback_failed`. An interrupted/missing watchdog is reported as `worker_missing`, never as success.
 - A hard machine reboot or SIGKILL of the independent process can interrupt recovery; this beta detects a missing worker but does not yet install an always-on external OS-level recovery daemon. For existing installations without these tools, bootstrap once with the standard `maccontrol update` command.
 - Updating a service intentionally disconnects the current MCP request; reconnect and call `self_update_status`. This feature is not invoked automatically and never touches a live service merely by being installed.
+
+
+## beta.34 — BF-17: upgrade owner-managed active historical ChatBridge label
+
+- `maccontrol update` accepts existing `net.chatbridge.gateway` services if the active service is demonstrably owned under the same `~/MacControlMCP/deps/chatbridge` release root and persistent data/profile as Mac Control, and `net.chatbridge.gateway.maccontrol` is absent.
+- Preserves that service's current LaunchAgent label, port, Chrome profile, SQLite, credentials and settings. Applies the pinned ChatBridge upgrade **to the existing label** using standalone ChatBridge's own idle check, prior plist backup and failed-upgrade rollback. No new second service or profile is created.
+- Foreign ChatBridge services and ambiguous launchctl/ownership remain protected; BF-15 inactive duplicate quarantine is unchanged. New installations still use `net.chatbridge.gateway.maccontrol`; no standalone ChatBridge installer changes.
+- After a successful ordinary `maccontrol update`, inspect LaunchAgent status, ChatBridge source version and browser readiness; request activity can delay the safe upgrade until the service is idle.
