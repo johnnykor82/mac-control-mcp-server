@@ -330,3 +330,17 @@ and approval documents remain outside the source checkout.
   service configuration and invalid upstream responses, preserving prior
   INVALID_ARGUMENT code for caller input and no-retry for uncertain outcomes.
 - Existing authorization, workspace policy and service lifecycle unchanged.
+
+## FR-025.1 — ChatGPT linked-account routing triage (candidate)
+
+- Document and test that link_id is owned by ChatGPT's connection wrapper,
+  not the FastMCP server schemas for ssh_exec, terminal_exec or custom_command.
+- Distinguish platform eligibility and safety rejections from server argument
+  validation and SSH execution. Do not retry a platform-blocked command
+  with another tool or interpret MCP status=ok as SSH exit_code=0.
+- Include the operator runbook CHATGPT_LINK_ROUTING_DIAGNOSTICS.md in the
+  immutable release payload alongside TOOL_ARGUMENT_ERRORS.md.
+- Improve mcp_bridge target-name, missing-target and URL diagnostics with
+  exact safe alternatives and no leaked caller argument values.
+- No platform eligibility or OpenAI safety policy can be changed by this
+  local Mac Control update. Production remains unchanged in this candidate.

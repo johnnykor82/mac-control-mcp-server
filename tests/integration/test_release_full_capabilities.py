@@ -20,6 +20,7 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
         self.assertIn("scripts/test_github_oauth_login.py", source)
         self.assertIn("src/mac_control/argument_guidance.py", source)
         self.assertIn("docs/TOOL_ARGUMENT_ERRORS.md", source)
+        self.assertIn("docs/CHATGPT_LINK_ROUTING_DIAGNOSTICS.md", source)
         self.assertIn("scripts/mclog.py", source)
         self.assertIn("src/mac_control/audit_middleware.py", source)
 

@@ -57,3 +57,11 @@ validator modules. Source raise-site counts are not all caller errors.
 Do not treat a post-dispatch or uncertain error as proof of no side effects.
 Structured API codes remain compatible with the previous browser adapter
 where bad capabilities returned INVALID_ARGUMENT. Raw audit is owner-only.
+
+## FR-025.1 — ChatGPT connected-tool link_id
+
+link_id is selected by the ChatGPT connector, not by Mac Control's
+ssh_exec, terminal_exec or custom_command handler. See
+CHATGPT_LINK_ROUTING_DIAGNOSTICS.md for account-eligibility,
+unexpected-field and safety-block troubleshooting; none is a reason
+to retry a blocked SSH request via another tool.
