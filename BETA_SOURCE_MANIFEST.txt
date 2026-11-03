@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 234
+Included files: 237
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -73,6 +73,7 @@ scripts/release_history_audit.py
 scripts/release_payload_audit.py
 scripts/release_preflight.py
 scripts/runtime_tools.py
+scripts/self_update_watchdog.py
 scripts/setup_chatbridge_dependency.py
 scripts/setup_cli_commands.py
 scripts/setup_github_oauth.py
@@ -118,6 +119,7 @@ src/mac_control/remote_auth.py
 src/mac_control/remote_http.py
 src/mac_control/remote_mount.py
 src/mac_control/runtime_paths.py
+src/mac_control/self_update.py
 src/mac_control/tmux_runtime.py
 src/mac_control/trusted_registry.py
 src/mac_control/watcher_runtime/WATCHER_USAGE.md
@@ -209,6 +211,7 @@ tests/integration/test_remote_auth.py
 tests/integration/test_remote_http.py
 tests/integration/test_remote_service.py
 tests/integration/test_required_watcher_bundle.py
+tests/integration/test_self_update_watchdog.py
 tests/integration/test_server_tool_parity.py
 tests/integration/test_setup_language.py
 tests/integration/test_setup_network.py
