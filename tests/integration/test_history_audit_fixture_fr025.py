@@ -18,6 +18,8 @@ class HistoricalSecurityAuditTests(unittest.TestCase):
         self.assertFalse(history.is_reviewed_fixture(SHA, PATH, 55, "openai_like_token"))
 
     def test_full_history_keeps_fixture_visible_and_other_findings_critical(self):
+        if not (history.ROOT / ".git").exists():
+            self.skipTest("Full-history audit requires Git metadata; source archives contain no .git")
         result = history.audit_history()
         self.assertEqual(result["critical_findings"], [])
         self.assertEqual(len(result["reviewed_test_fixtures"]), 1)
