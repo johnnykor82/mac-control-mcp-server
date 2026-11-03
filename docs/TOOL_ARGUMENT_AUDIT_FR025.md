@@ -6,7 +6,7 @@
 - Всего: **133** инструментов (106 frozen, 27 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=130.
-- Не классифицированных статических сообщений: **31**.
+- Не классифицированных статических сообщений: **28**.
 - Статические raise-сайты не являются доказательством ошибки параметра;
   ошибки среды, зависимости и после побочного эффекта проверяются отдельно.
 
@@ -217,13 +217,10 @@
 | fs_ops.py | Invalid trusted projects config |
 | gui_ops.py | Invalid application name |
 | maintenance_ops.py | Invalid path |
-| mcp_bridge_ops.py | Invalid MCP URL |
 | mcp_bridge_ops.py | Invalid saved MCP targets |
 | mcp_bridge_ops.py | Invalid stdio arguments |
 | mcp_bridge_ops.py | Invalid stdio environment |
 | mcp_bridge_ops.py | Invalid stdio working directory |
-| mcp_bridge_ops.py | Invalid target name |
-| mcp_bridge_ops.py | Unknown MCP target; supply URL or target_spec |
 | ssh_bridge_ops.py | Invalid ssh_targets.json |
 | ssh_bridge_ops.py | Unknown diagnostic command |
 | ssh_manage_ops.py | Invalid SSH configuration |

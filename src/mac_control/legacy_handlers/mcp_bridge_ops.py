@@ -84,10 +84,19 @@ def _settings(name, specification=None):
     if isinstance(name, str) and name.startswith(("http://", "https://")):
         return {"type": "http", "url": name}
     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,130}", name):
-        raise ValueError("Invalid target name")
+        raise ValueError(
+            "MCP_TARGET_NAME_INVALID: target name must be 1–130 characters "
+            "using ASCII letters, digits, underscore, dot, colon or hyphen. "
+            "Use mcp_targets for saved names or supply an explicit target_spec. "
+            "No downstream MCP request was sent."
+        )
     settings = _targets().get(name)
     if not isinstance(settings, dict):
-        raise ValueError("Unknown MCP target; supply URL or target_spec")
+        raise ValueError(
+            "MCP_TARGET_NOT_FOUND: target is not configured. Inspect mcp_targets "
+            "or supply a valid explicit HTTP(S) URL or target_spec. "
+            "No downstream MCP request was sent."
+        )
     return settings
 
 
@@ -96,12 +105,20 @@ def _target(name, specification=None):
     if settings.get("type") == "http":
         url = settings.get("url", "")
         if not isinstance(url, str) or len(url) > 2048:
-            raise ValueError("Invalid MCP URL")
+            raise ValueError(
+                "MCP_URL_INVALID: target_spec.url must be an http(s) URL of "
+                "at most 2048 characters, without embedded credentials, "
+                "query, fragment or spaces. No downstream MCP request was sent."
+            )
         parsed = urlsplit(url)
         if (parsed.scheme not in ("http", "https") or not parsed.hostname
                 or parsed.username or parsed.password or parsed.fragment
                 or parsed.query or any(c.isspace() for c in url)):
-            raise ValueError("MCP URL requires HTTP(S) without embedded credentials")
+            raise ValueError(
+                "MCP_URL_INVALID: target_spec.url must be an http(s) URL "
+                "without embedded credentials, query, fragment or spaces. "
+                "No downstream MCP request was sent."
+            )
         return Client(url)
     if settings.get("type") == "stdio":
         command = settings.get("command")

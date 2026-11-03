@@ -104,6 +104,8 @@ def guided_validation_error(operation: str, handler: Callable,
         or (operation == "git_create_branch" and message.startswith("GIT_BRANCH_NAME_INVALID:"))
         or (operation.startswith("terminal_") and message.startswith((
             "TERMINAL_SESSION_INVALID:", "TERMINAL_SESSION_NOT_FOUND:")))
+        or (operation.startswith("mcp_bridge_") and message.startswith((
+            "MCP_TARGET_NAME_INVALID:", "MCP_TARGET_NOT_FOUND:", "MCP_URL_INVALID:")))
     ):
         return ValueError(message)
     # Signature.bind() happens before invocation, so missing/extra args are
