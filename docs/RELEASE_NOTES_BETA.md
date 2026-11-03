@@ -389,3 +389,8 @@ and approval documents remain outside the source checkout.
   macOS CI, security/provenance review, and actual release assets have
   been published with verified SHA256SUMS. A GitHub tag alone is not a
   complete installable update.
+
+- The candidate `BETA_SOURCE_MANIFEST.txt` now matches the Git-tracked source
+  inventory. Standalone source tarballs contain no `.git` history: the one
+  history-dependent fixture test explicitly skips there, while full-history
+  security scanning remains mandatory in Git checkout/CI.
