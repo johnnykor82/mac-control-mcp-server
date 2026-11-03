@@ -414,9 +414,11 @@ def register(mcp) -> None:
                          start_new_session=True, close_fds=True)
         return {'status': 'restart_scheduled', 'delay_seconds': 3, 'message': 'Reconnect after restart'}
 
+    from .argument_guidance import guided_validation_error
+
     async def execute(operation: str, arguments: dict[str, Any] | None, read_only: bool):
         if not isinstance(operation, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,79}', operation):
-            raise ValueError('Invalid operation')
+            raise ValueError('VALIDATION_ERROR: operation must match [a-z][a-z0-9_]{0,79}; call custom_query(operation=\'help\') to list allowed operations.')
         arguments = {} if arguments is None else arguments
         if not isinstance(arguments, dict) or not all(isinstance(key, str) for key in arguments):
             raise TypeError('arguments must be a JSON object')
@@ -434,14 +436,21 @@ def register(mcp) -> None:
                                    for name, found in sorted(entries.items())],
                     'dynamic_plugin': None, 'security': 'Frozen shipped handlers; no workspace executable imports'}
         if operation not in entries:
-            raise ValueError('Unknown or disabled operation; call help')
+            raise ValueError('VALIDATION_ERROR: unknown or disabled operation; call custom_query(operation=\'help\') to list available operations. Do not retry disabled tools by another route.')
         found = entries[operation]
         if read_only and not found.read_only:
             raise PermissionError('State-changing operation requires custom_command')
-        inspect.signature(found.handler).bind(**arguments)
-        result = found.handler(**arguments)
-        if inspect.isawaitable(result):
-            result = await result
+        try:
+            inspect.signature(found.handler).bind(**arguments)
+        except TypeError as error:
+            detail = guided_validation_error(operation, found.handler, error, signature=True)
+            raise TypeError(str(detail)) from None
+        try:
+            result = found.handler(**arguments)
+            if inspect.isawaitable(result):
+                result = await result
+        except ValueError as error:
+            raise guided_validation_error(operation, found.handler, error) from None
         if operation in ('mcp_bridge_read', 'mcp_bridge_call') and isinstance(result, list):
             return result
         return {'operation': operation, 'result': result}

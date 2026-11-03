@@ -295,3 +295,10 @@ and approval documents remain outside the source checkout.
   Invalid calls do not contact SSH and never echo command contents in errors.
 - The change is to the new Mac Control MCP only; old Mac Control and remote
   VPN hosts are not modified.
+
+## FR-023 — guided parameter errors (candidate)
+
+- Guide arguments for 106 frozen handlers, plus custom_command/custom_query.
+- Preserve TypeError for nested signature errors and specific SSH error codes.
+- Unclassified ValueError may follow side effects: inspect state before retry.
+- Policy/runtime failures are not rewritten and live services are unchanged.

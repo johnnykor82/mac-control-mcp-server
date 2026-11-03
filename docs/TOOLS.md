@@ -263,3 +263,7 @@ For document/code work, use the filesystem and Git families, then a project test
 For native application work, check GUI status and inspect the actual window/tree before input. For ordinary websites, use an independent background-browser session. For ChatGPT conversations, use the ChatBridge compatibility family; for persistent handoffs, use Watcher projects and reports. These are distinct session types and their IDs/capabilities are not interchangeable.
 
 When an operation reports an uncertain outcome, inspect its durable request/job/event state before repeating a modifying action. SHA256 conflicts require rereading and reconciling the current file. A missing feature, target alias, permission or login requires that prerequisite to be completed; registering a tool name does not bypass it.
+
+## Guided argument errors / Понятные ошибки аргументов
+
+See [error handling and recovery](TOOL_ARGUMENT_ERRORS.md): validation vs runtime failures, safe alternatives, and unchanged policy enforcement.

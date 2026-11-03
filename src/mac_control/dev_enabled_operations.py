@@ -7,6 +7,7 @@ static deployment feature set, not a second approval policy/command catalog.
 from __future__ import annotations
 
 from .legacy_adapter import inspect_existing_handlers
+from .argument_guidance import guided_handler
 from .runtime_paths import DATA_ROOT
 from .workspace_policy import short_instruction as workspace_short_instruction
 import os
@@ -156,7 +157,7 @@ def register_preview_operations(mcp, *, include_mutations: bool = False) -> None
         found = registry[name]
         if not found.read_only:
             raise RuntimeError("Write operation in HTTP preview: " + name)
-        mcp.tool(name=name, annotations={"readOnlyHint": True, "openWorldHint": False})(found.handler)
+        mcp.tool(name=name, annotations={"readOnlyHint": True, "openWorldHint": False})(guided_handler(name, found.handler))
     if not include_mutations:
         return
     exposed = set(READ_ONLY_PREVIEW_OPERATIONS)
@@ -168,7 +169,7 @@ def register_preview_operations(mcp, *, include_mutations: bool = False) -> None
         if not found.read_only:
             desc += "\n\n" + workspace_short_instruction()
         mcp.tool(name=name, description=desc, annotations={"readOnlyHint": found.read_only,
-                   "destructiveHint": not found.read_only, "openWorldHint": False})(found.handler)
+                   "destructiveHint": not found.read_only, "openWorldHint": False})(guided_handler(name, found.handler))
     if set(registry) != (READ_ONLY_PREVIEW_OPERATIONS | LOCAL_MUTATION_OPERATIONS |
                          LOCAL_COMPAT_READ_OPERATIONS | LOCAL_GUI_READ_OPERATIONS |
                          LOCAL_TERMINAL_READ_OPERATIONS | LOCAL_BRIDGE_READ_OPERATIONS):
