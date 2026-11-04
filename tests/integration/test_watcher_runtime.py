@@ -40,6 +40,206 @@ class WatcherRuntimeTest(unittest.TestCase):
         self.adapter.setup(self.db)
         self.core.register_project(self.db, 'project-one', URL)
 
+    def test_file_dispatch_tracks_unconfirmed_send_and_hides_capability_hashes(self):
+        import hashlib,json
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        before=self.core.summary(self.db,'project-one')
+        self.assertEqual(before['file_dispatches'][0]['state'],'registered')
+        self.assertNotIn('submit_capability_hash',json.dumps(before))
+        digest=hashlib.sha256(b'harmless smoke task').hexdigest()
+        first=self.files.record_dispatch(self.db,'project-one','task-one',
+              'smoke-request-001',digest,'prepare')
+        self.assertEqual(first['state'],'prepared')
+        duplicate=self.files.record_dispatch(self.db,'project-one','task-one',
+              'smoke-request-001',digest,'prepare')
+        self.assertTrue(duplicate['duplicate'])
+        with self.assertRaises(ValueError):
+            self.files.record_dispatch(self.db,'project-one','task-one',
+                 'smoke-request-001',hashlib.sha256(b'changed').hexdigest(),'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one',
+             'smoke-request-001',digest,'failed',error_code='platform_tool_blocked')
+        self.assertEqual(self.core.summary(self.db)['file_dispatches'][0]['state'],'failed')
+        with self.assertRaises(ValueError):
+            self.files.record_dispatch(self.db,'project-one','task-one',
+                 'new-attempt-001',digest,'prepare')
+
+    def test_dispatch_queued_ack_is_idempotent_without_duplicate_requeue(self):
+        import hashlib
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'harmless message').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one','job-request-001',digest,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one','job-request-001',digest,'queued',request_id='chatbridge-request-001')
+        result=self.files.record_dispatch(self.db,'project-one','task-one','job-request-001',digest,'queued',request_id='chatbridge-request-001')
+        self.assertTrue(result['duplicate'])
+        with self.assertRaises(ValueError):
+            self.files.record_dispatch(self.db,'project-one','task-one','job-request-001',digest,'queued',request_id='different-request-001')
+        with self.assertRaises(ValueError):
+            self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+                 'job-request-001',owner_confirmed=True)
+
+    def test_recovery_rotates_capability_only_after_failed_unsent_attempt(self):
+        import hashlib
+        original=self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'harmless smoke task').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one','failed-job-001',digest,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one','failed-job-001',digest,'failed',error_code='platform_tool_blocked')
+        with self.assertRaises(PermissionError):
+            self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+                'failed-job-001',owner_confirmed=False)
+        renewed=self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+                'failed-job-001',owner_confirmed=True)
+        self.assertNotEqual(original['submission_token'],renewed['submission_token'])
+        self.assertNotEqual(original['orchestrator_token'],renewed['orchestrator_token'])
+        self.assertEqual(self.core.summary(self.db)['file_dispatches'][0]['state'],'registered')
+        with self.assertRaises(PermissionError):
+            self.files.submit(self.db,'project-one','task-one',1,'completed','Report',original['submission_token'])
+        self.files.submit(self.db,'project-one','task-one',1,'completed','Report',renewed['submission_token'])
+        self.files.reconcile(self.db)
+        self.assertEqual(self.files.read_report(self.db,'project-one','task-one',1)['text'],'Report')
+        self.assertEqual(self.core.summary(self.db)['file_dispatches'][0]['state'],'reported')
+        with self.assertRaises(ValueError):
+            self.files.recover_failed_dispatch(self.db,'project-one','task-one','failed-job-001',owner_confirmed=True)
+
+    def test_stale_prepared_dispatch_distinguished_from_running_task(self):
+        import hashlib,time
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'harmless smoke task').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one','stale-job-001',digest,'prepare')
+        self.db.execute('UPDATE file_task_dispatch SET updated_ts=?',(time.time()-1000,))
+        data=self.core.summary(self.db)
+        self.assertEqual(data['file_dispatches'][0]['display_state'],'uncertain')
+        self.assertEqual(data['tasks'][0]['state'],'watching')
+        self.assertEqual(data['tasks'][0]['dispatch_state'],'uncertain')
+
+    def test_two_executors_failed_dispatch_recovery_report_hash_ack_and_restart(self):
+        import hashlib
+        first=self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        another='https://chatgpt.com/c/33333333-3333-3333-3333-333333333333'
+        second=self.files.register(self.db,'project-one','task-two',another)
+        a=hashlib.sha256(b'executor A task').hexdigest()
+        b=hashlib.sha256(b'executor B task').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one','request-exec-A',a,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one','request-exec-A',a,
+                                   'failed',error_code='platform_tool_blocked')
+        self.files.record_dispatch(self.db,'project-one','task-two','request-exec-B',b,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-two','request-exec-B',b,
+                                   'queued',request_id='request-from-chatbridge-B')
+        new=self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+                                               'request-exec-A',owner_confirmed=True)
+        with self.assertRaises(PermissionError):
+            self.files.submit(self.db,'project-one','task-one',1,'completed','A report',
+                              first['submission_token'])
+        with self.assertRaises(PermissionError):
+            self.files.submit(self.db,'project-one','task-two',1,'completed','B report',
+                              new['submission_token'])
+        self.files.submit(self.db,'project-one','task-one',1,'completed','A report',
+                          new['submission_token'])
+        self.files.submit(self.db,'project-one','task-two',1,'completed','B report',
+                          second['submission_token'])
+        events=self.files.reconcile(self.db)
+        self.assertEqual(len(events),2)
+        self.assertTrue(all(x['queued'] for x in events))
+        for name,body in [('task-one','A report'),('task-two','B report')]:
+            report=self.files.read_report(self.db,'project-one',name,1)
+            self.assertEqual(report['text'],body)
+            self.assertEqual(report['sha256'],hashlib.sha256(body.encode()).hexdigest())
+        records=self.db.execute('SELECT id FROM deliveries ORDER BY id').fetchall()
+        self.assertEqual(len(records),2)
+        self.db.execute("UPDATE deliveries SET state='delivered', delivered_at=?",
+                        (self.core.utc(),))
+        for record in records:
+            ack=self.core.acknowledge_delivery(self.db,'project-one',record['id'])
+            self.assertTrue(ack['acknowledged'])
+        self.db.close()
+        self.db=self.core.connect()
+        self.addCleanup(self.db.close)
+        self.assertEqual(len(self.core.summary(self.db)['file_dispatches']),2)
+        self.assertTrue(all(x['state']=='reported' for x in self.core.summary(self.db)['file_dispatches']))
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM deliveries WHERE acknowledged_at IS NOT NULL').fetchone()[0],2)
+        self.assertEqual(self.files.reconcile(self.db),[])
+
+    def test_recovery_refuses_already_written_unindexed_report(self):
+        import hashlib
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'task').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one','refused-job-001',digest,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one','refused-job-001',digest,
+                                   'failed',error_code='platform_tool_blocked')
+        report_dir=self.files._reports_root()/'project-one'/'task-one'
+        report_dir.mkdir(parents=True,mode=0o700)
+        (report_dir/'000001.md').write_text('already submitted')
+        with self.assertRaises(ValueError):
+            self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+                                               'refused-job-001',owner_confirmed=True)
+
+    def test_existing_file_report_migration_distinguishes_reported(self):
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        self.db.execute("UPDATE tasks SET last_revision=1 WHERE id='task-one'")
+        self.db.execute("DELETE FROM file_task_dispatch WHERE task_id='task-one'")
+        self.files.setup(self.db)
+        record=self.db.execute('SELECT state FROM file_task_dispatch').fetchone()
+        self.assertEqual(record['state'],'reported')
+
+    def test_submit_auth_and_report_write_are_atomic_against_recovery(self):
+        token=self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        original=self.files._directory
+        def inspect_transaction(*args,**kwargs):
+            self.assertTrue(self.db.in_transaction,
+                            'Capability auth must be serialized with report write')
+            return original(*args,**kwargs)
+        with patch.object(self.files,'_directory',side_effect=inspect_transaction):
+            result=self.files.submit(self.db,'project-one','task-one',1,
+                                     'completed','Atomic report',token['submission_token'])
+        self.assertTrue(result['accepted'])
+        self.assertFalse(self.db.in_transaction)
+        self.files.reconcile(self.db)
+        self.assertEqual(self.files.read_report(self.db,'project-one','task-one',1)['text'],
+                         'Atomic report')
+
+    def test_failed_dispatch_history_survives_recovery_without_token_leak(self):
+        import hashlib,json
+        cap=self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'harmless task').hexdigest()
+        self.files.record_dispatch(self.db,'project-one','task-one',
+            'audit-request-001',digest,'prepare')
+        self.files.record_dispatch(self.db,'project-one','task-one',
+            'audit-request-001',digest,'failed',error_code='platform_tool_blocked')
+        renewed=self.files.recover_failed_dispatch(self.db,'project-one','task-one',
+            'audit-request-001',owner_confirmed=True)
+        status=self.core.summary(self.db)
+        self.assertEqual(status['file_dispatches'][0]['state'],'registered')
+        events=status['file_dispatch_events']
+        self.assertEqual([item['event'] for item in events],
+                         ['prepared','failed','recovered'])
+        self.assertEqual(events[1]['error_code'],'platform_tool_blocked')
+        encoded=json.dumps(status)
+        for secret in (cap['submission_token'],cap['orchestrator_token'],
+                       renewed['submission_token'],renewed['orchestrator_token']):
+            self.assertNotIn(secret,encoded)
+        self.assertNotIn(digest,encoded)
+
+    def test_concurrent_identical_dispatch_receipt_is_idempotent(self):
+        import hashlib,sqlite3,threading,concurrent.futures
+        self.files.register(self.db,'project-one','task-one',EXECUTOR)
+        digest=hashlib.sha256(b'harmless task').hexdigest()
+        barrier=threading.Barrier(3)
+        def worker(_):
+            db=sqlite3.connect(self.core.DBFILE,timeout=8,isolation_level=None)
+            db.row_factory=sqlite3.Row
+            db.execute('PRAGMA busy_timeout=8000')
+            try:
+                barrier.wait(timeout=5)
+                return self.files.record_dispatch(db,'project-one','task-one',
+                          'race-request-001',digest,'prepare')
+            finally:db.close()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            jobs=[pool.submit(worker,i) for i in range(2)]
+            barrier.wait(timeout=5)
+            results=[job.result(timeout=8) for job in jobs]
+        self.assertEqual(sorted(r['duplicate'] for r in results),[False,True])
+        history=self.core.summary(self.db)['file_dispatch_events']
+        self.assertEqual([row['event'] for row in history],['prepared'])
+
     def test_file_capabilities_and_immutable_report(self):
         result = self.files.register(self.db, 'project-one', 'task-one', EXECUTOR)
         with self.assertRaises(PermissionError):

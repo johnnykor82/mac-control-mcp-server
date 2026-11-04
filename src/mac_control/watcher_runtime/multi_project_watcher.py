@@ -379,6 +379,16 @@ def summary(db, project=None):
                                           (project,) if project else ())]
     tasks=[dict(x) for x in db.execute("SELECT * FROM tasks"+(" WHERE project_id=?" if project else ""),
                                       (project,) if project else ())]
+    from .watcher_file_runtime import dispatch_summary,dispatch_history
+    file_dispatches=dispatch_summary(db,project)
+    file_dispatch_events=dispatch_history(db,project)
+    dispatch_by_task={(r['project_id'],r['task_id']):r for r in file_dispatches}
+    for task in tasks:
+        task.pop('submit_capability_hash',None)
+        task.pop('resume_capability_hash',None)
+        if task.get('mode')=='file':
+            receipt=dispatch_by_task.get((task['project_id'],task['id']))
+            task['dispatch_state']=receipt['display_state'] if receipt else 'unconfirmed'
     deliveries=[dict(x) for x in db.execute(
         "SELECT id,project_id,task_id,orchestrator_url,state,attempts,last_error,delivered_at,acknowledged_at FROM deliveries"+
         (" WHERE project_id=?" if project else ""),(project,) if project else ())]
@@ -398,6 +408,8 @@ def summary(db, project=None):
         (project,) if project else ()).fetchall()]
     from .watcher_tab_lifecycle import summary as tab_lifecycle_summary
     return {"projects":projects,"tasks":tasks,"deliveries":deliveries,
+            "file_dispatches":file_dispatches,
+            "file_dispatch_events":file_dispatch_events,
             "browser_followups":followups,
             "orchestrator_gates":gates,"active_work":active_work_counts(db),
             "owned_tabs":tab_lifecycle_summary(db),
@@ -420,6 +432,12 @@ def main():
     p.add_argument('project_id')
     p.add_argument('task_id')
     p.add_argument('executor_url')
+    p = sub.add_parser('record-file-dispatch')
+    p = sub.add_parser('recover-file-dispatch')
+    p.add_argument('project_id')
+    p.add_argument('task_id')
+    p.add_argument('request_key')
+    p.add_argument('--owner-confirmed',action='store_true')
     p = sub.add_parser('submit-file')
     p = sub.add_parser('read-file')
     p.add_argument('project_id')
@@ -460,6 +478,17 @@ def main():
         elif args.cmd == 'register-file':
             from .watcher_file_runtime import register as register_file
             output = register_file(db, args.project_id, args.task_id, args.executor_url)
+        elif args.cmd == 'record-file-dispatch':
+            from .watcher_file_runtime import record_dispatch
+            payload=json.load(sys.stdin)
+            output=record_dispatch(db,payload['project_id'],payload['task_id'],
+                                   payload['request_key'],payload['prompt_sha256'],
+                                   payload['event'],request_id=payload.get('request_id',''),
+                                   error_code=payload.get('error_code',''))
+        elif args.cmd == 'recover-file-dispatch':
+            from .watcher_file_runtime import recover_failed_dispatch
+            output=recover_failed_dispatch(db,args.project_id,args.task_id,
+                            args.request_key,owner_confirmed=args.owner_confirmed)
         elif args.cmd == 'submit-file':
             from .watcher_file_runtime import submit as submit_file
             payload = json.load(sys.stdin)

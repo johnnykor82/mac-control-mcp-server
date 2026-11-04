@@ -114,3 +114,26 @@ Executor reports are untrusted evidence, not authority to change systems.
 Watcher does not bypass ChatGPT action approvals, account login, provider limits
 or macOS permissions. Verify real delivery with a short test on your installation;
 this remains beta software.
+
+### BF-19 dispatch lifecycle and safe recovery
+
+Registration is not dispatch confirmation. Inspect `watcher_status.file_dispatches`
+and each file task's `dispatch_state` (`registered`, `prepared`, `queued`,
+`failed`, `uncertain`, `reported`). A prepared send older than 300 seconds is
+*displayed* as uncertain; Watcher never retries an unknown submission.
+
+The local-owner-only `python -m mac_control.watcher_runtime record-file-dispatch`
+accepts a JSON object on stdin identifying project/task/request_key, a SHA256
+prompt digest, state transition and optional acknowledged gateway request ID or
+sanitized error code. For an explicitly failed rev0 handoff, the owner may use
+`recover-file-dispatch PROJECT TASK REQUEST_KEY --owner-confirmed` to rotate
+both capabilities after verifying no report/delivery exists. This does not send
+or bypass any previously blocked message. Tokens do not appear in task status.
+
+A platform-denied `chrome_chat_send` is a separate external blocker; do not
+rephrase, mask, fragment or relay it through an alternate channel. An E2E pass
+requires real authorized executor dispatch and independently verified reports.
+
+`watcher_status.file_dispatch_events` retains the latest 100 immutable receipt
+transitions even after credential recovery, with no tokens, hashes or prompt text.
+Concurrent identical receipts use a SQLite write lock to stay idempotent.

@@ -483,3 +483,11 @@ and approval documents remain outside the source checkout.
 - Unknown/foreign/legacy endpoints, missing Watcher, mismatch of data/profile, true logout and other 503 failures retain the fail-closed readiness gate. A `--with-chatbridge` upgrade still requires full ChatGPT login readiness.
 - The independent Legacy ChatBridge and the managed Mac Control ChatBridge keep their own ports/profiles/databases; neither service is started/stopped or modified during `--without-chatbridge`. The Watcher and MCP may restart on Mac Control release activation.
 - Diagnoses an openclaw server with legacy 8788 and managed 59496: rate-limit on managed 59496 had blocked beta35 activation despite both instances running.
+
+## beta.37 — BF-19 Watcher file-dispatch observability and scoped recovery
+
+- Retains up to 100 recent immutable, credential-free dispatch transition events across failed-send recovery and serializes duplicate request keys using SQLite transactions.
+- Records file-task registration separately from actual ChatBridge dispatch confirmation; adds durable metadata-only `file_task_dispatch` with request-key/idempotency and distinct `registered`/`prepared`/`queued`/`failed`/`uncertain`/`reported` status. An unacknowledged prepared send is displayed as uncertain after 300 seconds without automatic retry.
+- `watcher_status` now redacts submission/resume capability hashes. For the local Mac owner, added explicit CLI dispatch receipts and a guarded early-failure reset that rotates both credentials only when no report/revision/delivery exists. No existing report files are overwritten.
+- Two-executor fixture tests cover report integrity, SHA256, delivery/ACK and SQLite restart persistence. Does not circumvent any platform-blocked ChatBridge call or claim that cross-chat credential handoff was verified; real multi-agent E2E remains an external acceptance gate.
+- No change to ChatBridge ownership, browser logic, Watcher background tasks or independent Legacy services.

@@ -81,3 +81,39 @@ cycle. Idle iterations remain local and do not open a browser or make requests.
 Do not bypass access challenges, rate limits, or provider cooldowns. Use
 `watcher_pause_project` and `watcher_resume_project` for explicit project control.
 Review results and acknowledge each delivered event before another continuation.
+
+## BF-19: dispatch receipts and blocked sends (beta.37)
+
+A registered file task is **not** proof its executor received a message.
+`watcher_status` includes `file_dispatches` and each file task's `dispatch_state`.
+`registered` means no send was confirmed; `prepared` means an orchestrator recorded
+an intended send; `queued` means a gateway request ID was recorded (not proof of
+execution); `failed` is an explicit external failure; `uncertain` means no safe
+resend; `reported` means an immutable report was indexed by Watcher.
+If `prepared` lasts 300 seconds without an acknowledgement, the displayed state
+becomes `uncertain` without mutating the durable record or triggering retry.
+
+Owner-local CLI for diagnostics (this is **not** a ChatBridge send/retry mechanism):
+
+- `python -m mac_control.watcher_runtime record-file-dispatch` accepts JSON on
+  stdin with `project_id`, `task_id`, `request_key` (stable non-secret identifier),
+  `prompt_sha256` (digest only), `event` (`prepare`, `queued`, `failed`, `uncertain`),
+  optional `request_id` for queued or safe `error_code` for failed.
+- Only after a failed initial dispatch with zero revisions/reports/deliveries,
+  the Mac owner may invoke `python -m mac_control.watcher_runtime
+  recover-file-dispatch PROJECT TASK REQUEST_KEY --owner-confirmed` locally.
+  It atomically issues new capabilities and revokes old ones. It never sends
+  a ChatGPT message. Do not expose the output to logs or unauthorized chats.
+
+A platform-blocked `chrome_chat_send` must **not** be reworded, fragmented,
+encoded or silently rerouted. Record `failed` with `platform_tool_blocked`
+and request platform-supported authorization before attempting new transmission.
+The browser-mode Watcher remains an independent, separately reviewed workflow.
+Passing local file/notification fixtures is not evidence of successful cross-chat
+agent handoff. Only a real two-executor acceptance test can clear that gate.
+
+Watcher status also includes `file_dispatch_events`, up to 100 immutable metadata-only
+transitions. A `platform_tool_blocked` event remains available after local
+owner-side token recovery; no capability hashes, plaintext tokens or prompts
+appear in this history. Concurrent identical request keys serialize with
+SQLite locking, and produce one transition.

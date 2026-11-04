@@ -1,6 +1,6 @@
 """Watcher revisioned file handoff v1. Reports are inert UTF-8, never executed."""
 from __future__ import annotations
-import hashlib,hmac,json,os,re,secrets,sqlite3,stat,uuid
+import hashlib,hmac,json,os,re,secrets,sqlite3,stat,time,uuid
 from pathlib import Path
 
 MAX_BYTES=81920
@@ -43,6 +43,37 @@ def setup(db):
        bytes INTEGER NOT NULL,created_at TEXT NOT NULL,
        PRIMARY KEY(project_id,task_id,revision))""")
 
+    db.execute("""CREATE TABLE IF NOT EXISTS file_task_dispatch(
+       project_id TEXT NOT NULL,task_id TEXT NOT NULL,
+       request_key TEXT,prompt_sha256 TEXT,
+       state TEXT NOT NULL DEFAULT 'registered',
+       request_id TEXT,error_code TEXT,
+       updated_ts REAL NOT NULL,
+       PRIMARY KEY(project_id,task_id),
+       FOREIGN KEY(project_id,task_id) REFERENCES tasks(project_id,id))""")
+    db.execute("""CREATE TABLE IF NOT EXISTS file_dispatch_events(
+       event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id TEXT NOT NULL,task_id TEXT NOT NULL,
+       request_key TEXT,event TEXT NOT NULL,request_id TEXT,error_code TEXT,
+       recorded_ts REAL NOT NULL,
+       FOREIGN KEY(project_id,task_id) REFERENCES tasks(project_id,id))""")
+    db.execute("""CREATE TRIGGER IF NOT EXISTS file_dispatch_state_audit
+       AFTER UPDATE OF state ON file_task_dispatch
+       WHEN OLD.state <> NEW.state
+       BEGIN
+         INSERT INTO file_dispatch_events(project_id,task_id,request_key,event,
+                  request_id,error_code,recorded_ts)
+         VALUES (NEW.project_id,NEW.task_id,COALESCE(NEW.request_key,OLD.request_key),
+                 CASE WHEN OLD.state='failed' AND NEW.state='registered'
+                      THEN 'recovered' ELSE NEW.state END,
+                 COALESCE(NEW.request_id,OLD.request_id),
+                 COALESCE(NEW.error_code,OLD.error_code),NEW.updated_ts);
+       END""")
+    db.execute("""INSERT OR IGNORE INTO file_task_dispatch(project_id,task_id,state,updated_ts)
+       SELECT project_id,id,CASE WHEN last_revision>0 THEN 'reported'
+            ELSE 'registered' END,CAST(strftime('%s','now') AS REAL) FROM tasks
+       WHERE mode='file'""")
+
 def register(db,project,task,chat_url):
     setup(db)
     w=_watcher();p=_name(project);t=_name(task)
@@ -57,6 +88,8 @@ def register(db,project,task,chat_url):
         db.execute("""UPDATE tasks SET mode='file',last_revision=0,
           submit_capability_hash=?,resume_capability_hash=? WHERE project_id=? AND id=?""",
           (_digest(submit_token),_digest(resume_token),p,t))
+        db.execute("""INSERT INTO file_task_dispatch(project_id,task_id,updated_ts)
+                     VALUES(?,?,?)""",(p,t,time.time()))
         db.execute("COMMIT")
     except BaseException:
         db.execute("ROLLBACK")
@@ -66,7 +99,150 @@ def register(db,project,task,chat_url):
             "submission_token":submit_token,
             "orchestrator_token":resume_token,
             "next_revision":1,
-            "warning":"Copy submission_token only into this executor's task prompt. Keep orchestrator_token private."}
+            "warning":"Capabilities are secrets. Use only platform-permitted handoff; never bypass a blocked send. Keep orchestrator_token private."}
+
+_DISPATCH_KEY_RX=re.compile(r'^[A-Za-z0-9_-]{8,128}$')
+_DISPATCH_ID_RX=re.compile(r'^[A-Za-z0-9_-]{8,160}$')
+_DISPATCH_ERROR_RX=re.compile(r'^[a-z][a-z0-9_]{2,47}$')
+
+def record_dispatch(db,project,task,request_key,prompt_sha256,event,
+                    *,request_id='',error_code=''):
+    """Only records an explicit receipt; never sends any browser message."""
+    p=_name(project);t=_name(task)
+    if not isinstance(request_key,str) or not _DISPATCH_KEY_RX.fullmatch(request_key):
+        raise ValueError('Invalid dispatch request key')
+    if not isinstance(prompt_sha256,str) or not re.fullmatch(r'[a-f0-9]{64}',prompt_sha256):
+        raise ValueError('Invalid dispatch prompt digest')
+    if event not in ('prepare','queued','failed','uncertain'):
+        raise ValueError('Invalid dispatch event')
+    if event=='queued':
+        if not isinstance(request_id,str) or not _DISPATCH_ID_RX.fullmatch(request_id):
+            raise ValueError('Missing acknowledged request ID')
+    elif request_id:
+        raise ValueError('Request ID only permitted with queued receipt')
+    if event=='failed':
+        if not isinstance(error_code,str) or not _DISPATCH_ERROR_RX.fullmatch(error_code):
+            raise ValueError('Invalid failure code; never store error details')
+    elif error_code:
+        raise ValueError('Error code only permitted for failed receipt')
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        row=db.execute('''SELECT d.*,t.state AS task_state,t.last_revision,t.mode,
+                          p.status AS project_status FROM file_task_dispatch d
+                          JOIN tasks t ON t.project_id=d.project_id AND t.id=d.task_id
+                          JOIN projects p ON p.id=t.project_id
+                          WHERE d.project_id=? AND d.task_id=?''',(p,t)).fetchone()
+        if (not row or row['mode']!='file' or row['project_status']!='enabled'
+                or row['task_state']!='watching' or row['last_revision']!=0):
+            raise ValueError('Not an active initial file-task dispatch')
+        duplicate=(row['state']==('prepared' if event=='prepare' else event)
+                   and row['request_key']==request_key
+                   and row['prompt_sha256']==prompt_sha256
+                   and (event!='queued' or row['request_id']==request_id)
+                   and (event!='failed' or row['error_code']==error_code))
+        if duplicate:
+            db.execute('COMMIT')
+            return {'project_id':p,'task_id':t,'state':row['state'],
+                    'request_key':request_key,'duplicate':True}
+        if ((event=='prepare' and row['state']!='registered')
+                or (event!='prepare' and row['state']!='prepared')
+                or (event!='prepare' and (row['request_key']!=request_key or
+                     row['prompt_sha256']!=prompt_sha256))):
+            raise ValueError('Dispatch state conflict; inspect before retry')
+        state='prepared' if event=='prepare' else event
+        count=db.execute('''UPDATE file_task_dispatch SET state=?,request_key=?,
+            prompt_sha256=?,request_id=?,error_code=?,updated_ts=?
+            WHERE project_id=? AND task_id=? AND state=?''',
+            (state,request_key,prompt_sha256,request_id or None,error_code or None,
+             time.time(),p,t,row['state'])).rowcount
+        if count!=1:raise RuntimeError('Concurrent dispatch state update')
+        db.execute('COMMIT')
+        return {'project_id':p,'task_id':t,'state':state,
+                'request_key':request_key,'duplicate':False}
+
+    except BaseException:
+        db.execute('ROLLBACK')
+        raise
+
+def recover_failed_dispatch(db,project,task,request_key,*,owner_confirmed=False):
+    """Local owner-only rev0 recovery. Never reconstructs old credentials.
+
+    Not exposed as an MCP tool. A denied message remains denied: no resend.
+    """
+    p=_name(project);t=_name(task)
+    if owner_confirmed is not True:
+        raise PermissionError('Explicit local owner confirmation required')
+    if not isinstance(request_key,str) or not _DISPATCH_KEY_RX.fullmatch(request_key):
+        raise ValueError('Invalid failed request key')
+    submit_token=secrets.token_urlsafe(36)
+    resume_token=secrets.token_urlsafe(36)
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        row=db.execute('''SELECT d.state,d.request_key,t.last_revision,
+            t.mode,t.state AS task_state,p.status AS project_status FROM
+            file_task_dispatch d JOIN tasks t ON t.project_id=d.project_id
+            AND t.id=d.task_id JOIN projects p ON p.id=d.project_id
+            WHERE d.project_id=? AND d.task_id=?''',(p,t)).fetchone()
+        if (not row or row['state']!='failed' or row['request_key']!=request_key
+                or row['last_revision']!=0 or row['mode']!='file'
+                or row['task_state']!='watching' or row['project_status']!='enabled'):
+            raise ValueError('Task not eligible for lost-token recovery')
+        for table in ('task_reports','deliveries'):
+            if db.execute(f'SELECT 1 FROM {table} WHERE project_id=? AND task_id=? LIMIT 1',(p,t)).fetchone():
+                raise ValueError('Report/delivery already exists; cannot rotate')
+        for directory in (_reports_root()/p/t,_legacy_directory(p,t)):
+            if directory.is_symlink() or any(
+                (directory/name).exists() or (directory/name).is_symlink()
+                for name in ('000001.md','000001.ready.json')):
+                raise ValueError('Report material exists; cannot rotate')
+        count=db.execute('''UPDATE tasks SET submit_capability_hash=?,
+            resume_capability_hash=?,error=NULL WHERE project_id=? AND id=?
+            AND last_revision=0 AND mode='file' AND state='watching' ''',
+            (_digest(submit_token),_digest(resume_token),p,t)).rowcount
+        if count!=1:raise RuntimeError('Task changed during recovery')
+        count=db.execute('''UPDATE file_task_dispatch SET state='registered',
+             request_key=NULL,prompt_sha256=NULL,request_id=NULL,error_code=NULL,
+             updated_ts=? WHERE project_id=? AND task_id=? AND state='failed' ''',
+             (time.time(),p,t)).rowcount
+        if count!=1:raise RuntimeError('Dispatch changed during recovery')
+        db.execute('COMMIT')
+    except BaseException:
+        db.execute('ROLLBACK')
+        raise
+    return {'project_id':p,'task_id':t,'state':'registered',
+            'next_revision':1,'submission_token':submit_token,
+            'orchestrator_token':resume_token,
+            'warning':'New credentials issued once; old credentials revoked. Do not transmit via blocked channel.'}
+
+
+def dispatch_summary(db,project=None,*,at=None):
+    """Read-only receipts; no capabilities, prompt digests or body contents."""
+    sql='''SELECT project_id,task_id,request_key,state,request_id,
+            error_code,updated_ts FROM file_task_dispatch'''
+    rows=db.execute(sql+(' WHERE project_id=?' if project else ''),
+                    (project,) if project else ()).fetchall()
+    when=time.time() if at is None else float(at)
+    result=[]
+    for row in rows:
+        r=dict(row)
+        age=max(0,int(when-r['updated_ts']))
+        r['display_state']='uncertain' if r['state']=='prepared' and age>=300 else r['state']
+        r['age_seconds']=age
+        # A queued request ID is not proof of actual executor execution.
+        r['delivery_confirmed']=False
+        result.append(r)
+    return result
+
+
+def dispatch_history(db,project=None):
+    """Newest 100 immutable nonsecret events in chronological order."""
+    sql='''SELECT event_id,project_id,task_id,request_key,event,
+          request_id,error_code,recorded_ts FROM file_dispatch_events'''
+    rows=db.execute(sql+(' WHERE project_id=?' if project else '')+
+                    ' ORDER BY event_id DESC LIMIT 100',
+                    (project,) if project else ()).fetchall()
+    return [dict(row) for row in reversed(rows)]
+
 
 def _reports_root():
     from ..workspace_config import resolve as workspace_status
@@ -128,29 +304,36 @@ def submit(db,project,task,revision,status,content,capability_token):
         raise ValueError("Report must contain UTF-8 text")
     body=content.encode("utf8")
     if len(body)>MAX_BYTES:raise ValueError("Report exceeds 80 KiB")
-    row=db.execute("""SELECT t.*,p.status AS project_status FROM tasks t
-        JOIN projects p ON p.id=t.project_id WHERE t.project_id=? AND t.id=?""",
-        (p,t)).fetchone()
-    if not row or row["mode"]!="file" or row["project_status"]!="enabled":
-        raise PermissionError("Unknown file task")
-    _authenticate(row["submit_capability_hash"],capability_token)
-    digest=hashlib.sha256(body).hexdigest()
-    if revision<=row["last_revision"]:
-        old=db.execute("""SELECT status,sha256 FROM task_reports
-                  WHERE project_id=? AND task_id=? AND revision=?""",(p,t,revision)).fetchone()
-        if old and (old["status"],old["sha256"])==(status,digest):
-            return {"accepted":True,"duplicate":True,"revision":revision,"sha256":digest}
-        raise ValueError("Previously committed revision differs")
-    if revision!=row["last_revision"]+1 or row["state"]!="watching":
-        raise ValueError("Task not awaiting this revision")
-    base=_directory(p,t)
-    meta={"schema":1,"project":p,"task":t,"revision":revision,
-          "status":status,"sha256":digest,"bytes":len(body)}
-    _write_once(base/f"{revision:06d}.md",body)
-    _write_once(base/f"{revision:06d}.ready.json",
-                (json.dumps(meta,sort_keys=True,separators=(",",":"))+"\n").encode())
-    return {"accepted":True,"duplicate":False,"revision":revision,
-            "status":status,"sha256":digest,"bytes":len(body)}
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        row=db.execute("""SELECT t.*,p.status AS project_status FROM tasks t
+            JOIN projects p ON p.id=t.project_id WHERE t.project_id=? AND t.id=?""",
+            (p,t)).fetchone()
+        if not row or row["mode"]!="file" or row["project_status"]!="enabled":
+            raise PermissionError("Unknown file task")
+        _authenticate(row["submit_capability_hash"],capability_token)
+        digest=hashlib.sha256(body).hexdigest()
+        if revision<=row["last_revision"]:
+            old=db.execute("""SELECT status,sha256 FROM task_reports
+                      WHERE project_id=? AND task_id=? AND revision=?""",(p,t,revision)).fetchone()
+            if old and (old["status"],old["sha256"])==(status,digest):
+                db.execute('COMMIT')
+                return {"accepted":True,"duplicate":True,"revision":revision,"sha256":digest}
+            raise ValueError("Previously committed revision differs")
+        if revision!=row["last_revision"]+1 or row["state"]!="watching":
+            raise ValueError("Task not awaiting this revision")
+        base=_directory(p,t)
+        meta={"schema":1,"project":p,"task":t,"revision":revision,
+              "status":status,"sha256":digest,"bytes":len(body)}
+        _write_once(base/f"{revision:06d}.md",body)
+        _write_once(base/f"{revision:06d}.ready.json",
+                    (json.dumps(meta,sort_keys=True,separators=(",",":"))+"\n").encode())
+        db.execute('COMMIT')
+        return {"accepted":True,"duplicate":False,"revision":revision,
+                "status":status,"sha256":digest,"bytes":len(body)}
+    except BaseException:
+        db.execute('ROLLBACK')
+        raise
 
 def _read_ready(project,task,revision):
     base=_directory(project,task)
@@ -226,6 +409,9 @@ def reconcile(db,project_filter=None):
                    (project_id,task_id,revision,status,path,sha256,bytes,created_at)
                    VALUES(?,?,?,?,?,?,?,?)""",
                    (p,t,rev,status,report,digest,metadata["bytes"],w.utc()))
+                db.execute("""UPDATE file_task_dispatch SET state='reported',
+                    updated_ts=? WHERE project_id=? AND task_id=?""",
+                    (time.time(),p,t))
                 if status!="checkpoint":
                     db.execute("""INSERT INTO deliveries
                        (id,project_id,task_id,orchestrator_url,payload,state,created_at,revision)
