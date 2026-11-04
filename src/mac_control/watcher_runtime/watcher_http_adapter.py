@@ -808,9 +808,17 @@ def iteration(db, dry_run=False):
     from .watcher_browser_dispatch import dispatch_prepared as dispatch_initial
     initial=dispatch_initial(db,api,dry_run=dry_run)
     results.extend(initial)
-    if not any(event.get('state')=='submitted' for event in initial):
+    # BF23 owns only newly requested zero-URL children. Existing BF20 and
+    # file-mode messages take precedence; never exceed the provider gate.
+    from .watcher_autonomous import pump as pump_subagents, sync_completed
+    autonomous = ([] if any(e.get("state") == "submitted" for e in initial)
+                  else pump_subagents(db, api, dry_run=dry_run))
+    results.extend(autonomous)
+    if not any(e.get("state")=="submitted" for e in initial+autonomous):
         results.extend(dispatch_prepared_followups(db, dry_run=dry_run))
     results.extend(poll_executor_tasks(db, dry_run=dry_run))
+    if not dry_run:
+        sync_completed(db)
     results.extend(recover_missing_revision_deliveries(db, dry_run=dry_run))
     if not dry_run:
         results.extend(due_to_deliveries(db))
@@ -907,9 +915,12 @@ def main():
                 recovered=quarantine_crashed_followups(db)
                 from .watcher_browser_dispatch import quarantine_inflight
                 initial_recovered=quarantine_inflight(db)
+                from .watcher_autonomous import quarantine_inflight as quarantine_subagents
+                autonomous_recovered=quarantine_subagents(db)
                 print(json.dumps({"http_watcher": "started", "api": BASE,
                                   "crashed_followups": recovered,
-                                  "crashed_initial_dispatches":initial_recovered}), flush=True)
+                                  "crashed_initial_dispatches":initial_recovered,
+                                  "crashed_autonomous_subagents":autonomous_recovered}), flush=True)
                 while True:
                     try:
                         events = iteration(db)

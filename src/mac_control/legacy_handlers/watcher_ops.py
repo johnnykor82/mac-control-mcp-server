@@ -70,12 +70,13 @@ def register(mcp):
     def watcher_guide() -> dict:
         """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs.
 
-        For new owner-authenticated tokenless browser handoffs, first call
-        watcher_register_browser_project with a NEW project ID and the exact
-        orchestrator chat URL, then watcher_dispatch_browser_task for each
-        new executor chat. The Watcher queues an initial ChatBridge message
-        in that verified conversation; inspect status and verify immutable
-        reports and ACK before continuation. No bearer token reaches executors.
+        For autonomous BF23 tasks, publish a unique WATCHER-CHAT marker in the
+        orchestrator assistant message and call watcher_spawn_subagent WITHOUT
+        any manual chat URLs. Watcher verifies the marker via ChatBridge,
+        creates a new persistent executor session, and reports via the same
+        SHA256/ACK pipeline. The API returns queued state, not completion.
+        Legacy manual-URL BF20 tasks still use watcher_register_browser_project
+        then watcher_dispatch_browser_task. No bearer token reaches executors.
         Legacy file-mode tasks remain supported via
         watcher_register_project / watcher_register_file_task:
         keep the orchestrator capability private and give only a scoped
@@ -97,7 +98,8 @@ def register(mcp):
             "mcp_operations":[
                 "watcher_guide","watcher_register_project",
                 "watcher_register_task","watcher_register_browser_project",
-                "watcher_dispatch_browser_task","watcher_status",
+                "watcher_dispatch_browser_task","watcher_spawn_subagent",
+                "watcher_status",
                 "watcher_read_result","watcher_ack_delivery",
                 "watcher_pause_project","watcher_resume_project",
                 "watcher_register_file_task","watcher_followup_browser_task","watcher_submit_report",
@@ -135,6 +137,26 @@ def register(mcp):
         with closing(core.connect()) as db:
             return dispatch.register_owned_project(db,_name(project_id),
                                                    orchestrator_url,owner)
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_spawn_subagent(project_id:str,task_id:str,
+                               orchestrator_marker:str,prompt:str,
+                               request_key:str)->dict:
+        """Queue a new autonomous worker WITHOUT manual ChatGPT chat URLs.
+
+        The orchestrator places a unique WATCHER-CHAT marker in its OWN
+        assistant response. Watcher resolves that marker through ChatBridge,
+        then provisions a distinct persistent executor session. The verified
+        GitHub OAuth owner, not the marker, authorizes the request.
+        Returns marker_pending; never treats queueing as a delivered result.
+        """
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_autonomous as auto
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            return auto.enqueue(db,_name(project_id),_name(task_id),
+                                orchestrator_marker,prompt,request_key,owner)
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_dispatch_browser_task(project_id:str,task_id:str,executor_url:str,

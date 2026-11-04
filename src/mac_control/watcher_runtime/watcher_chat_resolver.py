@@ -46,14 +46,15 @@ def setup(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_chat_marker_url ON chat_marker_registry(chat_url)")
 
 
-def resolve(evidence_text, allow_search=True, db=None):
+def resolve(evidence_text, allow_search=True, db=None, transport=None):
     """Cache-first exact match. Never invent a target from current browser tab."""
     if not isinstance(evidence_text, str) or not MARKER.fullmatch(evidence_text):
         raise ValueError("Provide a dedicated WATCHER-CHAT-<32 lowercase hex> user-message marker")
     if db is None:
         from .multi_project_watcher import connect
         with connect() as connection:
-            return resolve(evidence_text, allow_search=allow_search, db=connection)
+            return resolve(evidence_text, allow_search=allow_search, db=connection,
+                           transport=transport)
     setup(db)
     from .multi_project_watcher import canonical_url
     known = db.execute(
@@ -68,7 +69,8 @@ def resolve(evidence_text, allow_search=True, db=None):
         raise LookupError("Marker is not registered")
     # The only browser owner is ChatBridge; use its localhost HTTP API.
     from .watcher_http_adapter import api
-    remote = api("POST", "/v1/chats/resolve-marker", {"marker": evidence_text})
+    remote = (transport or api)("POST", "/v1/chats/resolve-marker",
+                                 {"marker": evidence_text})
     role = remote.get("verification")
     if remote.get("evidence_verified") is not True or role not in ("user_message", "assistant_message"):
         raise ValueError("ChatBridge did not verify the marker in a message")

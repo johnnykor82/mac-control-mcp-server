@@ -107,6 +107,7 @@ src/mac_control/watcher_runtime/__main__.py
 src/mac_control/watcher_runtime/config.py
 src/mac_control/watcher_runtime/mcp_error_monitor.py
 src/mac_control/watcher_runtime/multi_project_watcher.py
+src/mac_control/watcher_runtime/watcher_autonomous.py
 src/mac_control/watcher_runtime/watcher_browser_dispatch.py
 src/mac_control/watcher_runtime/watcher_browser_followups.py
 src/mac_control/watcher_runtime/watcher_busy_batch.py

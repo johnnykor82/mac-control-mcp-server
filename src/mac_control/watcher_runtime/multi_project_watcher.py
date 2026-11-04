@@ -205,10 +205,17 @@ def active_work_counts(db):
     file_tasks=db.execute("""SELECT COUNT(*) FROM tasks t
         JOIN projects p ON p.id=t.project_id
         WHERE t.mode='file' AND t.state='watching' AND p.status='enabled'""").fetchone()[0]
+    autonomous=0
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                  "AND name='autonomous_subagents'").fetchone():
+        autonomous=db.execute("""SELECT COUNT(*) FROM autonomous_subagents
+            WHERE state IN ('marker_pending','session_pending',
+                'session_ready','submitted')""").fetchone()[0]
     return {"watching_tasks":tasks,"watching_file_tasks":file_tasks,
             "pending_deliveries":deliveries,
-            "browser_active":bool(tasks or deliveries),
-            "active":bool(tasks or deliveries or file_tasks)}
+            "pending_autonomous_subagents":autonomous,
+            "browser_active":bool(tasks or deliveries or autonomous),
+            "active":bool(tasks or deliveries or file_tasks or autonomous)}
 
 def current_site_backoff(db, at=None):
     when=time.time() if at is None else float(at)
@@ -413,7 +420,9 @@ def summary(db, project=None):
         "FROM chatbridge_browser_followups" + (" WHERE project_id=?" if project else ""),
         (project,) if project else ()).fetchall()]
     from .watcher_tab_lifecycle import summary as tab_lifecycle_summary
+    from .watcher_autonomous import safe_status as autonomous_status
     return {"projects":projects,"tasks":tasks,"deliveries":deliveries,
+            "autonomous_subagents":autonomous_status(db,project),
             "file_dispatches":file_dispatches,
             "file_dispatch_events":file_dispatch_events,
             "browser_followups":followups,"browser_initial_dispatches":browser_dispatches,
