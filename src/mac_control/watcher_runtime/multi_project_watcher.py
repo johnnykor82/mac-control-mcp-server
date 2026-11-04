@@ -382,6 +382,12 @@ def summary(db, project=None):
     from .watcher_file_runtime import dispatch_summary,dispatch_history
     file_dispatches=dispatch_summary(db,project)
     file_dispatch_events=dispatch_history(db,project)
+    from .watcher_browser_dispatch import setup as setup_initial
+    setup_initial(db)
+    browser_dispatches=[dict(row) for row in db.execute(
+        "SELECT project_id,task_id,client_request_id,request_id,state,last_error,assistant_message_id,reported_status "
+        "FROM chatbridge_browser_dispatches" + (" WHERE project_id=?" if project else ""),
+        (project,) if project else ())]
     dispatch_by_task={(r['project_id'],r['task_id']):r for r in file_dispatches}
     for task in tasks:
         task.pop('submit_capability_hash',None)
@@ -410,7 +416,7 @@ def summary(db, project=None):
     return {"projects":projects,"tasks":tasks,"deliveries":deliveries,
             "file_dispatches":file_dispatches,
             "file_dispatch_events":file_dispatch_events,
-            "browser_followups":followups,
+            "browser_followups":followups,"browser_initial_dispatches":browser_dispatches,
             "orchestrator_gates":gates,"active_work":active_work_counts(db),
             "owned_tabs":tab_lifecycle_summary(db),
             "navigation_budget":navigation,

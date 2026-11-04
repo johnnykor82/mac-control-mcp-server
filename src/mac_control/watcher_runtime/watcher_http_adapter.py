@@ -91,6 +91,8 @@ def setup(db: sqlite3.Connection):
     )""")
     from .watcher_browser_followups import setup as setup_followups
     setup_followups(db)
+    from .watcher_browser_dispatch import setup as setup_initial_dispatch
+    setup_initial_dispatch(db)
     from .watcher_busy_batch import setup as setup_batches
     setup_batches(db)
     # Local gateway request lookup and bounded remote polling. Both are
@@ -578,11 +580,29 @@ def poll_executor_tasks(db, dry_run: bool = False):
         ORDER BY t.project_id,t.id
     """).fetchall()
     events = []
+    from .watcher_browser_dispatch import poll_initial
     for task in rows:
         name = f"{task['project_id']}/{task['id']}"
         if dry_run:
             events.append({"task": name, "state": "watching", "would_poll": True})
             continue
+        initial_record=db.execute('SELECT state FROM chatbridge_browser_dispatches WHERE project_id=? AND task_id=?',
+                                  (task['project_id'],task['id'])).fetchone()
+        # Initial receipt stays immutable after completion; revision 1+ MUST
+        # return to the existing ACK-gated browser followup monitor.
+        if initial_record and initial_record['state']!='completed':
+            try:
+                initial_events=poll_initial(db,task,api)
+                if initial_events is not None:
+                    events.extend(initial_events)
+                    continue
+            except (TransportError,ValueError,KeyError) as exc:
+                db.execute("UPDATE chatbridge_browser_dispatches SET state='uncertain',last_error='initial_result_validation_failed' WHERE project_id=? AND task_id=? AND state='submitted'",
+                           (task['project_id'],task['id']))
+                db.execute("UPDATE tasks SET state='blocked',error='initial_result_validation_failed' WHERE project_id=? AND id=? AND state='watching'",
+                           (task['project_id'],task['id']))
+                events.append({'task':name,'state':'uncertain','reason':type(exc).__name__})
+                continue
         try:
             mapping = db.execute(
                 "SELECT session_id FROM chatbridge_task_sessions WHERE project_id=? AND task_id=?",
@@ -780,7 +800,11 @@ def iteration(db, dry_run=False):
 
     results = []
     results.extend(reconcile_uncertain_followups(db, dry_run=dry_run))
-    results.extend(dispatch_prepared_followups(db, dry_run=dry_run))
+    from .watcher_browser_dispatch import dispatch_prepared as dispatch_initial
+    initial=dispatch_initial(db,api,dry_run=dry_run)
+    results.extend(initial)
+    if not any(event.get('state')=='submitted' for event in initial):
+        results.extend(dispatch_prepared_followups(db, dry_run=dry_run))
     results.extend(poll_executor_tasks(db, dry_run=dry_run))
     results.extend(recover_missing_revision_deliveries(db, dry_run=dry_run))
     if not dry_run:
@@ -876,8 +900,11 @@ def main():
                 os.chmod(lockfile, 0o600)
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 recovered=quarantine_crashed_followups(db)
+                from .watcher_browser_dispatch import quarantine_inflight
+                initial_recovered=quarantine_inflight(db)
                 print(json.dumps({"http_watcher": "started", "api": BASE,
-                                  "crashed_followups": recovered}), flush=True)
+                                  "crashed_followups": recovered,
+                                  "crashed_initial_dispatches":initial_recovered}), flush=True)
                 while True:
                     try:
                         events = iteration(db)

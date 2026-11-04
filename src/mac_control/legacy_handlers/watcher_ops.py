@@ -1,7 +1,8 @@
 """MCP interface for multi-project ChatGPT watcher.
 
-Uses only fixed-subcommand CLI. Chrome is owned by ChatBridge HTTP, not Watcher.
-No dynamic shell strings, no ChatGPT private API calls from Watcher.
+Legacy operations use fixed-subcommand CLI. Authenticated BF-20 browser
+registration/dispatch execute in the original OAuth-verified MCP process.
+Chrome is owned by ChatBridge HTTP, not Watcher; no ChatGPT private API calls.
 """
 from contextlib import closing
 import hashlib
@@ -69,15 +70,17 @@ def register(mcp):
     def watcher_guide() -> dict:
         """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs.
 
-        At the start of a new project, call watcher_guide and then
-        watcher_register_project(project_id, exact_current_orchestrator_chat_url).
-        Create an executor chat, then prefer watcher_register_file_task
-        for a new task. Supply submission_token only to that executor prompt,
-        and retain orchestrator_token privately. The executor saves immutable
-        revisioned reports via watcher_submit_report; Watcher checks local
-        files without polling the executor's ChatGPT page. On notification
-        call watcher_read_report, verify claims, and use watcher_resume_task
-        for needs_input/blocked continuation in the SAME expert conversation.
+        For new owner-authenticated tokenless browser handoffs, first call
+        watcher_register_browser_project with a NEW project ID and the exact
+        orchestrator chat URL, then watcher_dispatch_browser_task for each
+        new executor chat. The Watcher queues an initial ChatBridge message
+        in that verified conversation; inspect status and verify immutable
+        reports and ACK before continuation. No bearer token reaches executors.
+        Legacy file-mode tasks remain supported via
+        watcher_register_project / watcher_register_file_task:
+        keep the orchestrator capability private and give only a scoped
+        submission capability to trusted existing file-mode clients.
+        The old platform-blocked chrome_chat_send MUST NOT be retried.
         Existing watcher_register_task browser polling remains supported.
         Delivery uses durable request IDs and ChatBridge-owned sessions;
         external chat checks respect a conservative polling budget.
@@ -93,7 +96,8 @@ def register(mcp):
             "guide":text[:28000],
             "mcp_operations":[
                 "watcher_guide","watcher_register_project",
-                "watcher_register_task","watcher_status",
+                "watcher_register_task","watcher_register_browser_project",
+                "watcher_dispatch_browser_task","watcher_status",
                 "watcher_read_result","watcher_ack_delivery",
                 "watcher_pause_project","watcher_resume_project",
                 "watcher_register_file_task","watcher_followup_browser_task","watcher_submit_report",
@@ -115,6 +119,42 @@ def register(mcp):
         to that project. Conversation URLs cannot be assigned to multiple projects.
         """
         return _cli("register-project",_name(project_id),orchestrator_url)
+
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    def watcher_register_browser_project(project_id:str,orchestrator_url:str)->dict:
+        """Register a browser-mode project bound to the authenticated GitHub owner.
+
+        Unauthenticated local calls fail closed. Preserve all legacy project
+        registrations and file capabilities untouched.
+        """
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_browser_dispatch as dispatch
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            return dispatch.register_owned_project(db,_name(project_id),
+                                                   orchestrator_url,owner)
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_dispatch_browser_task(project_id:str,task_id:str,executor_url:str,
+                                      prompt:str,request_key:str)->dict:
+        """Prepare an owner-authenticated browser task without bearer handoff.
+
+        The Watcher daemon asynchronously delivers a single idempotent
+        ChatBridge request and verifies its exact assistant turn; never
+        repeat a platform-denied historical chrome_chat_send.
+        """
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_browser_dispatch as dispatch
+        from ..watcher_runtime import watcher_http_adapter as adapter
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            adapter.setup(db)
+            return dispatch.prepare_owner_dispatch(
+                db,_name(project_id),_name(task_id),
+                executor_url,prompt,request_key,owner,adapter.api)
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
     def watcher_register_task(project_id:str,task_id:str,executor_url:str)->dict:
