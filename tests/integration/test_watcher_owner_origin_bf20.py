@@ -60,3 +60,19 @@ def test_internal_cli_cannot_claim_to_be_remote_owner():
     code=inspect.getsource(core.main)
     assert "sub.add_parser('prepare-browser')" not in code
     assert "sub.add_parser('register-owned-project')" not in code
+
+
+def test_dev_static_inventory_includes_owner_authenticated_browser_tools():
+    """Dev preview remains in sync with the audited frozen source registry."""
+    from mac_control.legacy_adapter import _EXPECTED
+    from mac_control.dev_enabled_operations import (
+        READ_ONLY_PREVIEW_OPERATIONS, LOCAL_MUTATION_OPERATIONS,
+        LOCAL_COMPAT_READ_OPERATIONS, LOCAL_GUI_READ_OPERATIONS,
+        LOCAL_TERMINAL_READ_OPERATIONS, LOCAL_BRIDGE_READ_OPERATIONS,
+    )
+    actual = (READ_ONLY_PREVIEW_OPERATIONS | LOCAL_MUTATION_OPERATIONS |
+              LOCAL_COMPAT_READ_OPERATIONS | LOCAL_GUI_READ_OPERATIONS |
+              LOCAL_TERMINAL_READ_OPERATIONS | LOCAL_BRIDGE_READ_OPERATIONS)
+    assert actual == _EXPECTED
+    assert len(actual) == 108
+    assert {'watcher_register_browser_project', 'watcher_dispatch_browser_task'} <= LOCAL_MUTATION_OPERATIONS

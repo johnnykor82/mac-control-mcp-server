@@ -104,6 +104,8 @@ LOCAL_MUTATION_OPERATIONS = frozenset({
     'terminal_resize',
     'terminal_send',
     'watcher_followup_browser_task',
+    'watcher_register_browser_project',
+    'watcher_dispatch_browser_task',
     'watcher_resolve_current_chat',
     'watcher_ack_delivery',
     'watcher_ack_wakeup',
