@@ -55,6 +55,14 @@ def test_browser_origin_authenticated_inside_mcp_not_claimed_in_subprocess(monke
         ('dispatch','pilot01','worker-a','https://chatgpt.com/c/22222222-2222-4222-8222-222222222222','verified-owner-123')
     ]
 
+def test_bf20_runtime_module_is_in_installer_release_manifest():
+    """The public source archive must actually install the BF20 runtime module."""
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[2]
+    manifest=(root/'scripts/install_manifest.txt').read_text(encoding='utf-8').splitlines()
+    assert 'src/mac_control/watcher_runtime/watcher_browser_dispatch.py' in manifest
+
+
 def test_internal_cli_cannot_claim_to_be_remote_owner():
     """No untrusted CLI verbs that authorize by passing an arbitrary owner_subject."""
     code=inspect.getsource(core.main)
