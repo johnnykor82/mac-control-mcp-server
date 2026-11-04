@@ -41,6 +41,15 @@ class RemoteAuthTests(unittest.TestCase):
         self.assertGreaterEqual(len(tools), 102)
         self.assertIn("terminal_exec", {tool.name for tool in tools})
 
+    def test_oauth_proxy_wires_local_background_cached_verifier(self):
+        from mac_control.github_oauth_cache import CachedAllowedGitHubVerifier
+        auth=build_auth(self.path)
+        self.assertIsInstance(auth._token_validator,CachedAllowedGitHubVerifier)
+        self.assertEqual(auth._token_validator._ttl,86400)
+        self.assertEqual(auth._token_validator._interval,3600)
+        self.assertEqual(auth._token_validator._cache_file,
+                         self.path.parent/'github-oauth-cache.enc')
+
     def test_world_readable_config_is_rejected(self):
         self.write(sample_config(), 0o644)
         with self.assertRaises(PermissionError):

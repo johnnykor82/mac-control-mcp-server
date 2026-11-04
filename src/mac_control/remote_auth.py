@@ -11,22 +11,10 @@ import os
 from pathlib import Path
 
 from fastmcp.server.auth import OAuthProxy
-from fastmcp.server.auth.providers.github import GitHubTokenVerifier
+from .github_oauth_cache import CachedAllowedGitHubVerifier
 
 from .runtime_paths import DATA_ROOT
 from .remote_http import public_service_url
-
-
-class AllowedGitHubUsersVerifier(GitHubTokenVerifier):
-    def __init__(self, allowed_ids: set[str]):
-        super().__init__(required_scopes=["read:user"])
-        self._allowed_ids = allowed_ids
-
-    async def verify_token(self, token: str):
-        verified = await super().verify_token(token)
-        if verified is None or str(verified.subject) not in self._allowed_ids:
-            return None
-        return verified
 
 
 def _read_config(path: Path) -> dict:
@@ -67,13 +55,20 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def build_auth(path: Path | None = None) -> OAuthProxy:
-    config = load_config(path)
+    config_path = path or (DATA_ROOT / "remote_auth.json")
+    config = load_config(config_path)
+    verifier = CachedAllowedGitHubVerifier(
+        allowed_ids=set(config["github_allowed_ids"]),
+        signing_secret=config["jwt_signing_key"],
+        config_path=config_path,
+        cache_path=config_path.parent / "github-oauth-cache.enc",
+    )
     return OAuthProxy(
         upstream_authorization_endpoint="https://github.com/login/oauth/authorize",
         upstream_token_endpoint="https://github.com/login/oauth/access_token",
         upstream_client_id=config["github_client_id"],
         upstream_client_secret=config["github_client_secret"],
-        token_verifier=AllowedGitHubUsersVerifier(set(config["github_allowed_ids"])),
+        token_verifier=verifier,
         base_url=config["public_url"].rstrip("/"),
         jwt_signing_key=config["jwt_signing_key"],
         require_authorization_consent=True,

@@ -477,3 +477,7 @@ After bootstrapping beta.33 using the normal `maccontrol update` CLI, the authen
 
 
 **BF-18 provider cooldown:** On an existing owner-proven Mac Control + Watcher installation, `maccontrol update --without-chatbridge` may complete during a temporary ChatGPT provider rate limit. It reports `readiness_deferred=provider_cooldown` and does **not** claim ChatGPT authentication. A foreign or Legacy ChatBridge cannot satisfy the ownership check; neither ChatBridge instance is changed by the Mac Control-only update. New installations, real login failure and `--with-chatbridge` keep their strict readiness requirements.
+
+### BF-21: background GitHub OAuth verification (beta.38)
+
+Previously verified owner GitHub tokens are served from a 24-hour owner-private encrypted validation cache with no per-request GitHub network dependency. Active token identities are rechecked hourly in the background; only successful validation advances their expiry. Network timeouts, 403/429/5xx preserve the previous time bound, never extend it. Explicit GitHub 401 revokes immediately; unknown tokens and tokens older than 24 hours require a new online check. An encrypted 0600 snapshot contains HMAC fingerprints and identity metadata, not bearer tokens. GitHub OAuthProxy client JWT and Tailscale/ChatBridge/Watcher lifetimes are separate and unchanged.

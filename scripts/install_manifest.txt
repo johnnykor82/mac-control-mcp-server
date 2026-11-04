@@ -93,6 +93,7 @@ src/mac_control/legacy_handlers/system_ops.py
 src/mac_control/legacy_handlers/watcher_ops.py
 src/mac_control/maintenance_ops.py
 src/mac_control/operations.py
+src/mac_control/github_oauth_cache.py
 src/mac_control/remote_auth.py
 src/mac_control/remote_http.py
 src/mac_control/remote_mount.py
