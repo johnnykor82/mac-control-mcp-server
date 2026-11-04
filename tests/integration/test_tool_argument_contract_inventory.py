@@ -15,7 +15,7 @@ class ArgumentContractInventoryTests(unittest.TestCase):
     def test_whole_shipped_catalog_including_opt_in_tools(self):
         summary = self.report["summary"]
         self.assertEqual(summary["tools"], 135)
-        self.assertEqual(summary["frozen"], 106)
+        self.assertEqual(summary["frozen"], 108)
         self.assertEqual(summary["additional"], 29)
         self.assertEqual(len({x["name"] for x in self.report["tools"]}), 135)
 

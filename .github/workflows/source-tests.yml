@@ -61,6 +61,12 @@ jobs:
           echo '{"op":"native_backend","native_op":"apps"}' | build/MacControlMCPServer.app/Contents/MacOS/MacControlMCPServer > "$RUNNER_TEMP/native-staging-smoke.json"
           python -c 'import json, os, pathlib; d=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"native-staging-smoke.json").read_text()); assert d["ok"] is True and isinstance(d["data"]["apps"],list)'
           python -c 'import json, os, pathlib; r=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"gui-build.json").read_text()); assert r["started"] is False and r["tcc_permissions_requested"] is False'
+      - name: Run BF20 isolated browser handoff tests
+        env:
+          PYTHONPATH: "src:."
+        run: |
+          python -m pip install 'pytest==8.4.2'
+          python -P -B -m pytest -q tests/integration/test_watcher_initial_dispatch_bf20.py tests/integration/test_watcher_initial_e2e_bf20.py tests/integration/test_watcher_owner_origin_bf20.py
       - name: Run source unit and integration tests
         env:
           PYTHONPATH: "src:."
