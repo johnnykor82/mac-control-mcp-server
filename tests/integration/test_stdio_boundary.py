@@ -38,7 +38,7 @@ class StdioBoundaryTests(unittest.TestCase):
         for name in LOCAL_BRIDGE_READ_OPERATIONS:
             self.assertTrue(local[name])
             self.assertNotIn(name,web)
-        self.assertEqual(len(stdio),121)
+        self.assertEqual(len(stdio),123)
         legacy = inspect_existing_handlers()
         for n in LOCAL_MUTATION_OPERATIONS:
             self.assertIn(n,legacy)

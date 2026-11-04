@@ -3,7 +3,7 @@
 Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
 инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **135** инструментов (106 frozen, 29 дополнительных).
+- Всего: **137** инструментов (108 frozen, 29 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=137.
 - Не классифицированных статических сообщений: **28**.
@@ -36,7 +36,7 @@
 | ssh | 17 |
 | system | 1 |
 | terminal | 8 |
-| watcher | 20 |
+| watcher | 22 |
 | workspace | 1 |
 | write | 1 |
 
@@ -160,6 +160,7 @@
 | watcher_ack_delivery | event_id, project_id | 2 | frozen |
 | watcher_ack_wakeup | wakeup_id | 1 | frozen |
 | watcher_cancel_wakeup | wakeup_id | 1 | frozen |
+| watcher_dispatch_browser_task | executor_url, project_id, prompt, request_key, task_id | 5 | frozen |
 | watcher_error_status | — | 1 | frozen |
 | watcher_followup_browser_task | project_id, prompt, request_key, task_id | 4 | frozen |
 | watcher_get_wakeup | wakeup_id | 1 | frozen |
@@ -168,6 +169,7 @@
 | watcher_pause_project | project_id | 1 | frozen |
 | watcher_read_report | project_id, task_id | 3 | frozen |
 | watcher_read_result | project_id, task_id | 3 | frozen |
+| watcher_register_browser_project | orchestrator_url, project_id | 2 | frozen |
 | watcher_register_file_task | executor_url, project_id, task_id | 3 | frozen |
 | watcher_register_project | orchestrator_url, project_id | 2 | frozen |
 | watcher_register_task | executor_url, project_id, task_id | 3 | frozen |
