@@ -116,6 +116,23 @@ def test_two_unique_executor_turns_reports_acks_followup(db,tmp_path):
         'bf20-second-turn-a')
     assert continuation['revision']==1 and continuation['state']=='prepared'
 
+@pytest.mark.parametrize('http_code,expected_state',[(401,'blocked'),(403,'blocked'),(429,'uncertain'),(503,'uncertain')])
+def test_gateway_http_denial_vs_unknown_post_outcome(db,http_code,expected_state):
+    """Actual ChatBridge HTTP error codes must classify permanent denial separately."""
+    from mac_control.watcher_runtime.watcher_http_adapter import TransportError
+    gateway=Gateway()
+    enqueue(db,gateway,'worker-a',CHAT2,'session-a','bf20-initial-a')
+    def api(method,path,body=None):
+        if method=='POST' and path.endswith('/messages'):
+            raise TransportError('ChatBridge HTTP '+str(http_code))
+        return gateway(method,path,body)
+    outcome=dispatch.dispatch_prepared(db,api)
+    assert outcome[0]['state']==expected_state
+    assert db.execute('SELECT state FROM chatbridge_browser_dispatches').fetchone()[0]==expected_state
+    assert db.execute('SELECT state FROM tasks').fetchone()[0]=='blocked'
+    assert dispatch.dispatch_prepared(db,api)==[]
+
+
 def test_platform_denial_is_terminal_no_retry(db):
     gateway=Gateway()
     enqueue(db,gateway,'worker-a',CHAT2,'session-a','bf20-initial-a')

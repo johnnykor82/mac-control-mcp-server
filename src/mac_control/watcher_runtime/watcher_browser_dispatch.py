@@ -287,7 +287,18 @@ def dispatch_prepared(db,api,*,dry_run=False):
         db.execute("UPDATE chatbridge_browser_dispatches SET state='blocked',last_error='platform_policy_denial' WHERE project_id=? AND task_id=? AND state='sending'",(project,task))
         db.execute("UPDATE tasks SET state='blocked',error='platform_policy_denial' WHERE project_id=? AND id=? AND state='dispatch_prepared'",(project,task))
         return [{'task':name,'state':'blocked','reason':'platform_policy_denial'}]
-    except (Exception,) as exc:
+    except Exception as exc:
+        from .watcher_http_adapter import TransportError
+        # ChatBridge normalizes explicit HTTP authorization denials into
+        # TransportError. These are terminal, not ambiguous delivery outcomes.
+        if isinstance(exc, TransportError) and str(exc) in ('ChatBridge HTTP 401', 'ChatBridge HTTP 403'):
+            reason=('gateway_auth_denied' if str(exc).endswith('401')
+                    else 'platform_policy_denial')
+            db.execute("UPDATE chatbridge_browser_dispatches SET state='blocked',last_error=? WHERE project_id=? AND task_id=? AND state='sending'",
+                       (reason,project,task))
+            db.execute("UPDATE tasks SET state='blocked',error=? WHERE project_id=? AND id=? AND state='dispatch_prepared'",
+                       (reason,project,task))
+            return [{'task':name,'state':'blocked','reason':reason}]
         # Never resend: gateway may have accepted the original POST.
         db.execute("""UPDATE chatbridge_browser_dispatches SET
              state='uncertain',last_error='initial_post_outcome_unknown'
