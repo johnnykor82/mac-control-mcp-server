@@ -84,3 +84,39 @@ def test_dev_static_inventory_includes_owner_authenticated_browser_tools():
     assert actual == _EXPECTED
     assert len(actual) == 108
     assert {'watcher_register_browser_project', 'watcher_dispatch_browser_task'} <= LOCAL_MUTATION_OPERATIONS
+
+
+def test_marker_lookup_only_has_extended_http_timeout(monkeypatch):
+    """A slow read-only ChatGPT search must not relax normal gateway request limits."""
+    import io
+    timeouts = []
+
+    def fake_open(request, timeout):
+        timeouts.append((request.get_method(), request.full_url, timeout))
+        return io.BytesIO(b'{"ok":true}')
+
+    monkeypatch.setattr(adapter._HTTP, 'open', fake_open)
+    monkeypatch.setattr(adapter, 'api_key', lambda: None)
+    assert adapter.api('POST', '/v1/chats/resolve-marker', {'marker':'WATCHER-CHAT-'+'a'*32})['ok']
+    assert adapter.api('GET', '/v1/system/status')['ok']
+    assert timeouts[0][2] == 180
+    assert timeouts[1][2] == 30
+    assert timeouts[0][0] == 'POST' and timeouts[1][0] == 'GET'
+
+
+def test_marker_lookup_mcp_waits_longer_than_gateway_search(monkeypatch):
+    """The CLI wrapper must outlive the specialized HTTP timeout."""
+    mcp = FakeMCP()
+    watcher_ops.register(mcp)
+    calls = []
+
+    def fake_cli(command, payload, timeout=45):
+        calls.append((command, payload, timeout))
+        return {'evidence_verified':True}
+
+    monkeypatch.setattr(watcher_ops, '_cli_payload', fake_cli)
+    marker='WATCHER-CHAT-'+'b'*32
+    assert mcp.tools['watcher_resolve_current_chat'](marker)['evidence_verified']
+    assert calls == [('resolve-chat', {'evidence_text':marker}, 210)]
+    assert inspect.signature(watcher_ops._cli).parameters['timeout'].default == 45
+    assert inspect.signature(watcher_ops._cli_payload).parameters['timeout'].default == 45

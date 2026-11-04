@@ -180,7 +180,7 @@ def register(mcp):
         On a cache miss ChatBridge searches the normal UI and verifies the exact
         marker in a user message before storing the URL. Watcher never owns Chrome.
         """
-        return _cli_payload("resolve-chat",{"evidence_text":evidence_text})
+        return _cli_payload("resolve-chat",{"evidence_text":evidence_text}, timeout=210)
 
     @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
     def watcher_get_wakeup(wakeup_id:str)->dict:

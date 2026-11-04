@@ -27,6 +27,8 @@ from .config import api_key, gateway
 BASE = gateway()
 TERMINAL = {"completed", "failed", "interrupted", "unknown"}
 TIMEOUT = 30
+# ChatGPT's indexed chat search may take much longer than normal HTTP calls.
+MARKER_LOOKUP_TIMEOUT = 180
 POLL_SECONDS = 20
 
 
@@ -57,7 +59,10 @@ def api(method: str, path: str, payload: dict | None = None):
     started = time.monotonic()
     outcome = "ok"
     try:
-        with _HTTP.open(req, timeout=TIMEOUT) as response:
+        timeout = (MARKER_LOOKUP_TIMEOUT
+                   if method == 'POST' and path == '/v1/chats/resolve-marker'
+                   else TIMEOUT)
+        with _HTTP.open(req, timeout=timeout) as response:
             return json.loads(response.read(6 * 1024 * 1024))
     except urllib.error.HTTPError as e:
         outcome = "http_429" if e.code == 429 else ("http_503" if e.code == 503 else "http_error")
