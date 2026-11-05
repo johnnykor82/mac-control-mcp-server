@@ -22,7 +22,7 @@ ACTIONS = frozenset({
     "budget_exhausted",
 })
 TRANSIENT = ("review_pending", "supervisor_session_ready",
-             "supervisor_submitted", "continuation_pending", "executor_submitted")
+             "supervisor_submitted", "supervisor_recovering", "continuation_pending", "executor_submitted")
 INFLIGHT = ("supervisor_session_creating","supervisor_sending","executor_sending")
 
 
@@ -289,6 +289,14 @@ def _submit_reviewer(db,row,api):
 
 
 def _parse_decision(text,turn):
+    # ChatGPT sometimes returns strict JSON enclosed in the renderer's exact
+    # <escape>...</escape> transport wrapper. Remove only that single, entire
+    # envelope. All other text, nested wrappers, markdown and mixed content
+    # continue to fail the original strict JSON/schema/source validation.
+    if isinstance(text,str):
+        stripped=text.strip()
+        if stripped.startswith('<escape>') and stripped.endswith('</escape>'):
+            text=stripped[len('<escape>'):-len('</escape>')]
     try:
         decision=json.loads(text)
     except (ValueError,TypeError):
@@ -456,13 +464,16 @@ def pump(db,api,*,dry_run=False,now=None):
     if not row:return []
     if dry_run:return [{"state":row["state"],"would_process":True}]
     at=time.time() if now is None else float(now)
-    if at-row["created_ts"]>row["max_elapsed_seconds"]:
+    if (at-row["created_ts"]>row["max_elapsed_seconds"]
+            and row["state"]!="supervisor_recovering"):
         return [_mark(db,row,"budget_exhausted","max_elapsed_seconds_reached")]
+    # An owner-reconciled review is ALREADY completed: the next edge only
+    # re-reads immutable source proof. Elapsed budget still forbids new sends.
     if row["state"]=="review_pending":
         result=_create_reviewer(db,row,api)
     elif row["state"]=="supervisor_session_ready":
         result=_submit_reviewer(db,row,api)
-    elif row["state"]=="supervisor_submitted":
+    elif row["state"] in ("supervisor_submitted","supervisor_recovering"):
         result=_poll_reviewer(db,row,api)
     elif row["state"]=="continuation_pending":
         result=_send_continuation(db,row,api)
@@ -478,6 +489,64 @@ def quarantine_inflight(db):
         updated_at=? WHERE state IN
         ('supervisor_session_creating','supervisor_sending','executor_sending')""",
         (legacy.utc(),)).rowcount
+
+
+def reconcile_blocked_review(db,project,task,owner,api):
+    """Safely unstick one completed, owner-bound Supervisor review; never POST.
+
+    Restore a distinct durable, GET-only supervisor_recovering state. The Watcher tick
+    then re-reads that *same* completed request and verifies provenance before
+    producing at most one immutable delivery. A crash cannot trigger a resend.
+    """
+    setup(db)
+    row=_goal(db,project,task)
+    if row is None:
+        raise ValueError("No opt-in goal")
+    if (not isinstance(owner,str) or row["owner_subject"]!=owner):
+        raise PermissionError("Goal belongs to another authenticated owner")
+    if (row["state"] in ("supervisor_recovering","review_ready")
+            and row["supervisor_request_id"] and row["last_error"] is None):
+        return {"state":row["state"],"duplicate":True}
+    if (row["state"]!="blocked" or
+            row["last_error"]!="invalid_supervisor_decision_or_route"):
+        raise ValueError("Goal is not eligible for completed-review reconciliation")
+    if (not row["supervisor_session_id"] or not row["supervisor_request_id"]
+            or not row["supervisor_client_id"] or row["delivery_id"]):
+        raise ValueError("Missing durable Supervisor request identity")
+    turn=_latest_turn(db,row)
+    if not turn or db.execute(
+            "SELECT 1 FROM goal_decisions WHERE supervisor_request_id=?",
+            (row["supervisor_request_id"],)).fetchone():
+        raise ValueError("Supervisor review has no unique pending source turn")
+    # Only two read-only provider calls. A lost or changed request is NOT
+    # replayed, and the original model is never asked to answer a second time.
+    req=api("GET","/v1/requests/"+row["supervisor_request_id"])
+    if (not isinstance(req,dict) or req.get("status")!="completed"
+            or req.get("request_id")!=row["supervisor_request_id"]
+            or req.get("session_id")!=row["supervisor_session_id"]
+            or req.get("client_request_id")!=row["supervisor_client_id"]
+            or not req.get("assistant_message_id")):
+        return {"state":"blocked","reason":"supervisor_request_identity_mismatch"}
+    from .watcher_autonomous import _canonical_request_url
+    try:
+        url=_canonical_request_url(req)
+        session=api("GET","/v1/sessions/"+row["supervisor_session_id"])
+        initial.validate_session(session,row["supervisor_session_id"],url)
+        if row["supervisor_url"] and row["supervisor_url"]!=url:
+            raise ValueError("Supervisor route changed")
+        _parse_decision(req.get("answer"),turn)
+    except (ValueError,TypeError,KeyError):
+        return {"state":"blocked","reason":"supervisor_reply_or_route_invalid"}
+    changed=db.execute("""UPDATE goals
+        SET state='supervisor_recovering',last_error=NULL,updated_at=?
+        WHERE project_id=? AND task_id=? AND owner_subject=? AND state='blocked'
+        AND last_error='invalid_supervisor_decision_or_route'
+        AND supervisor_request_id=?""",
+        (legacy.utc(),project,task,owner,row["supervisor_request_id"])).rowcount
+    if changed!=1:
+        raise ValueError("Concurrent Supervisor review changed")
+    return {"project_id":project,"task_id":task,
+            "state":"supervisor_recovering","recovered":True}
 
 
 def _review_gate(db,row,owner,expected_revision):

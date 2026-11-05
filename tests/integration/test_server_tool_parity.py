@@ -124,6 +124,7 @@ STABLE_TOOLS = frozenset({
     'watcher_register_project',
     'watcher_register_task',
     'watcher_resolve_current_chat',
+    'watcher_reconcile_goal_review',
     'watcher_return_for_rework',
     'watcher_resume_project',
     'watcher_resume_task',
@@ -185,8 +186,8 @@ print(json.dumps({'full': full, 'disabled': disabled}))
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             report = json.loads(result.stdout)
             full = set(report['full'])
-            self.assertEqual(len(STABLE_TOOLS), 121)
-            self.assertEqual(len(full), 133)
+            self.assertEqual(len(STABLE_TOOLS), 122)
+            self.assertEqual(len(full), 134)
             self.assertIn("self_update_status", full)
             self.assertIn("self_update_start", full)
             self.assertFalse(STABLE_TOOLS - full, sorted(STABLE_TOOLS - full))

@@ -82,7 +82,7 @@ def test_dev_static_inventory_includes_owner_authenticated_browser_tools():
               LOCAL_COMPAT_READ_OPERATIONS | LOCAL_GUI_READ_OPERATIONS |
               LOCAL_TERMINAL_READ_OPERATIONS | LOCAL_BRIDGE_READ_OPERATIONS)
     assert actual == _EXPECTED
-    assert len(actual) == 111
+    assert len(actual) == 112
     assert {'watcher_register_browser_project', 'watcher_dispatch_browser_task'} <= LOCAL_MUTATION_OPERATIONS
 
 

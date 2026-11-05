@@ -14,10 +14,10 @@ class ArgumentContractInventoryTests(unittest.TestCase):
 
     def test_whole_shipped_catalog_including_opt_in_tools(self):
         summary = self.report["summary"]
-        self.assertEqual(summary["tools"], 140)
-        self.assertEqual(summary["frozen"], 111)
+        self.assertEqual(summary["tools"], 141)
+        self.assertEqual(summary["frozen"], 112)
         self.assertEqual(summary["additional"], 29)
-        self.assertEqual(len({x["name"] for x in self.report["tools"]}), 140)
+        self.assertEqual(len({x["name"] for x in self.report["tools"]}), 141)
 
     def test_missing_arguments_and_types_are_visible(self):
         by_name = {x["name"]: x for x in self.report["tools"]}

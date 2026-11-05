@@ -99,7 +99,7 @@ def register(mcp):
                 "watcher_guide","watcher_register_project",
                 "watcher_register_task","watcher_register_browser_project",
                 "watcher_dispatch_browser_task","watcher_spawn_subagent",
-                "watcher_approve_goal","watcher_return_for_rework",
+                "watcher_approve_goal","watcher_reconcile_goal_review","watcher_return_for_rework",
                 "watcher_status",
                 "watcher_read_result","watcher_ack_delivery",
                 "watcher_pause_project","watcher_resume_project",
@@ -163,6 +163,23 @@ def register(mcp):
                                 goal_criteria=goal_criteria,max_turns=max_turns,
                                 max_elapsed_seconds=max_elapsed_seconds,
                                 max_no_progress=max_no_progress)
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_reconcile_goal_review(project_id:str,task_id:str)->dict:
+        """Reconcile one previously completed blocked Supervisor reply.
+
+        Owner-authenticated, GET-only: verifies stored review request/source and
+        moves it back to durable polling. No new ChatBridge message is sent;
+        a duplicate call cannot create a second review or delivery.
+        """
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_goal_supervisor as goals
+        from ..watcher_runtime import watcher_http_adapter as adapter
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            return goals.reconcile_blocked_review(
+                db,_name(project_id),_name(task_id),owner,adapter.api)
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_approve_goal(project_id:str,task_id:str,expected_revision:int)->dict:

@@ -27,6 +27,7 @@ EXPECTED["watcher_resolve_current_chat"] = False
 EXPECTED["watcher_spawn_subagent"] = False
 EXPECTED["watcher_approve_goal"] = False
 EXPECTED["watcher_return_for_rework"] = False
+EXPECTED["watcher_reconcile_goal_review"] = False
 
 for _name in ("ssh_upload","ssh_download","ssh_write_text","ssh_transfer_begin",
               "ssh_transfer_chunk","ssh_transfer_finish","ssh_transfer_cancel"):
@@ -34,7 +35,7 @@ for _name in ("ssh_upload","ssh_download","ssh_write_text","ssh_transfer_begin",
 
 
 class FastMCPRegistrationTests(unittest.TestCase):
-    def test_frozen_handlers_register_exactly_111_tools(self):
+    def test_frozen_handlers_register_exactly_112_tools(self):
         async def probe():
             server = FastMCP("Mac Control offline metadata test")
             for source in (fs_ops, git_ops, system_ops, command_plugins):
@@ -42,7 +43,7 @@ class FastMCPRegistrationTests(unittest.TestCase):
             return await server.list_tools()
 
         tools = asyncio.run(probe())
-        self.assertEqual(len(tools), 111)
+        self.assertEqual(len(tools), 112)
         self.assertEqual(
             {tool.name: tool.annotations.read_only_hint for tool in tools},
             EXPECTED,

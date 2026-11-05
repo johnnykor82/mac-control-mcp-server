@@ -3,7 +3,7 @@
 Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
 инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **140** инструментов (111 frozen, 29 дополнительных).
+- Всего: **141** инструментов (112 frozen, 29 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=137.
 - Не классифицированных статических сообщений: **28**.
@@ -36,7 +36,7 @@
 | ssh | 17 |
 | system | 1 |
 | terminal | 8 |
-| watcher | 25 |
+| watcher | 26 |
 | workspace | 1 |
 | write | 1 |
 
@@ -170,6 +170,7 @@
 | watcher_pause_project | project_id | 1 | frozen |
 | watcher_read_report | project_id, task_id | 3 | frozen |
 | watcher_read_result | project_id, task_id | 3 | frozen |
+| watcher_reconcile_goal_review | project_id, task_id | 2 | frozen |
 | watcher_register_browser_project | orchestrator_url, project_id | 2 | frozen |
 | watcher_register_file_task | executor_url, project_id, task_id | 3 | frozen |
 | watcher_register_project | orchestrator_url, project_id | 2 | frozen |

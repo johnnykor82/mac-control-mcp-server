@@ -268,3 +268,129 @@ def test_malformed_supervisor_model_reply_never_approves(db):
     goals.pump(db,bridge)
     assert db.execute("SELECT state FROM goals").fetchone()[0] in ("blocked","needs_input")
     assert db.execute("SELECT COUNT(*) FROM goal_decisions").fetchone()[0]==0
+
+
+# BF23-P12-BF1: exactly one ChatBridge-rendered <escape> envelope is transport
+# formatting, not a change to the strict Supervisor decision JSON contract.
+def test_supervisor_chatbridge_escape_json_envelope(db):
+    registered_goal(db)
+    turn=db.execute("SELECT * FROM goal_turns LIMIT 1").fetchone()
+    decision={"action":"ready_for_orchestrator_review",
+        "source_turn_id":turn["assistant_message_id"],
+        "criteria_assessment":[{"criterion":"exact match","met":True}],
+        "rationale":"Verified exact executor response",
+        "next_instruction":"Ask orchestrator to review."}
+    answer=" <escape>"+json.dumps(decision)+"</escape> "
+    parsed=goals._parse_decision(answer,turn)
+    assert parsed == decision
+
+
+def test_supervisor_escape_wrapper_never_allows_mixed_or_nested_content(db):
+    registered_goal(db)
+    turn=db.execute("SELECT * FROM goal_turns LIMIT 1").fetchone()
+    decision={"action":"ready_for_orchestrator_review",
+        "source_turn_id":turn["assistant_message_id"],
+        "criteria_assessment":[],"rationale":"Verified result","next_instruction":"Review it."}
+    good=json.dumps(decision)
+    for invalid in (
+        "prefix<escape>"+good+"</escape>",
+        "<escape>"+good+"</escape> trailing",
+        "<escape><escape>"+good+"</escape></escape>",
+        "<escape>{bad json}</escape>",
+        "```json\n"+good+"\n```",
+    ):
+        with pytest.raises(ValueError):goals._parse_decision(invalid,turn)
+    decision["source_turn_id"]="foreign-turn"
+    with pytest.raises(ValueError):
+        goals._parse_decision("<escape>"+json.dumps(decision)+"</escape>",turn)
+
+
+def _prepare_exact_blocked_supervisor(db,bridge):
+    registered_goal(db)
+    for _ in range(2):goals.pump(db,bridge)
+    req=bridge.requests["supervisor-request-1"]
+    req["answer"]="<escape>"+req["answer"]+"</escape>"
+    db.execute("UPDATE goals SET state='blocked',last_error='invalid_supervisor_decision_or_route'")
+    return req
+
+
+def test_reconcile_blocked_supervisor_reads_existing_completed_reply_once(db):
+    bridge=Bridge()
+    req=_prepare_exact_blocked_supervisor(db,bridge)
+    sent_before=list(bridge.sent)
+    out=goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)
+    # Recovery is one durable CAS transition; the existing Watcher tick
+    # re-polls the SAME completed request to create the immutable delivery.
+    assert out["state"]=="supervisor_recovering"
+    assert db.execute("SELECT count(*) FROM goal_decisions").fetchone()[0]==0
+    assert goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)["duplicate"]
+    goals.pump(db,bridge)
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    assert db.execute("SELECT count(*) FROM goal_decisions").fetchone()[0]==1
+    assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==1
+    assert "Результат требует проверки оркестратором." in db.execute("SELECT payload FROM deliveries").fetchone()[0]
+    assert sent_before==bridge.sent  # ZERO new ChatBridge POSTs
+    again=goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)
+    assert again["duplicate"] is True
+    assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==1
+    assert sent_before==bridge.sent
+
+
+def test_reconcile_blocked_supervisor_rejects_foreign_owner_and_wrong_error(db):
+    bridge=Bridge();_prepare_exact_blocked_supervisor(db,bridge)
+    sent_before=list(bridge.sent)
+    with pytest.raises(PermissionError):
+        goals.reconcile_blocked_review(db,"pilot23","agent-a","999",bridge)
+    assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==0
+    db.execute("UPDATE goals SET last_error='platform_policy_denial'")
+    with pytest.raises(ValueError):
+        goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)
+    assert sent_before==bridge.sent
+
+
+def test_reconcile_blocked_supervisor_rejects_changed_reply_or_route(db):
+    bridge=Bridge();req=_prepare_exact_blocked_supervisor(db,bridge)
+    req["client_request_id"]="not-the-saved-id"
+    out=goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)
+    assert out["state"] in ("blocked","uncertain")
+    assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==0
+    assert db.execute("SELECT count(*) FROM goal_decisions").fetchone()[0]==0
+    assert bridge.executor_messages==0
+
+
+def test_mcp_reconcile_uses_authenticated_owner_only(monkeypatch):
+    import sys,types
+    from mac_control.legacy_handlers import watcher_ops
+    from mac_control.watcher_runtime import multi_project_watcher as core
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    class FakeMCP:
+        def __init__(self): self.tools={}
+        def tool(self,**kwargs):
+            def decorate(fn): self.tools[fn.__name__]=fn;return fn
+            return decorate
+    class Conn:
+        def close(self): pass
+    identity=types.ModuleType('mac_control.account_profile')
+    identity.authenticated_profile=lambda:{'id':'123'}
+    monkeypatch.setitem(sys.modules,'mac_control.account_profile',identity)
+    monkeypatch.setattr(core,'connect',lambda:Conn())
+    calls=[]
+    monkeypatch.setattr(goals,'reconcile_blocked_review',
+        lambda db,project,task,owner,api: calls.append((project,task,owner,api is adapter.api)) or {'state':'supervisor_recovering'})
+    mcp=FakeMCP();watcher_ops.register(mcp)
+    assert mcp.tools['watcher_reconcile_goal_review']('pilot23','agent-a')['state']=='supervisor_recovering'
+    assert calls==[('pilot23','agent-a','123',True)]
+
+
+def test_completed_supervisor_recovery_survives_elapsed_budget(db):
+    # Already completed review was blocked by display formatting; elapsed
+    # budget may stop NEW model work, but must not discard old audited proof.
+    bridge=Bridge();_prepare_exact_blocked_supervisor(db,bridge)
+    sent_before=list(bridge.sent)
+    db.execute("UPDATE goals SET created_ts=?",(__import__('time').time()-12000,))
+    out=goals.reconcile_blocked_review(db,"pilot23","agent-a","123",bridge)
+    assert out["recovered"] is True
+    goals.pump(db,bridge,now=__import__('time').time())
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==1
+    assert bridge.sent==sent_before

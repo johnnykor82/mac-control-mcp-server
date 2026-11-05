@@ -83,6 +83,17 @@ Use `watcher_status.goal_supervisor` for redacted state. Goal review and
 bounded budgets apply only to explicitly enabled tasks. BF-19/BF-20 manual-URL
 protocols remain supported.
 
+If an older Supervisor model reply completed but was blocked only because the
+ChatGPT renderer wrapped otherwise strict decision JSON in one exact
+`<escape>...</escape>` envelope, the authenticated owner may call
+`watcher_reconcile_goal_review(project_id,task_id)`. This tool checks the
+original completed review request, its verified Supervisor session, owner and
+source assistant turn via GET calls; it then resumes durable polling of that
+**same request**. It never sends a second executor or Supervisor message, and
+never bypasses invalid JSON, changed ownership, missing proof or model review.
+The Watcher must still deliver a report; ACK and explicit orchestrator approval
+remain separate. On any other blocked error, do not use this recovery tool.
+
 ## BF-20: first browser dispatch (owner-authenticated, tokenless)
 
 For a **NEW** browser-mode project on the remote OAuth-protected Mac Control MCP,
