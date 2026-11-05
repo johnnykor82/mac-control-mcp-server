@@ -3,7 +3,7 @@
 Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
 инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **137** инструментов (108 frozen, 29 дополнительных).
+- Всего: **140** инструментов (111 frozen, 29 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=137.
 - Не классифицированных статических сообщений: **28**.
@@ -36,7 +36,7 @@
 | ssh | 17 |
 | system | 1 |
 | terminal | 8 |
-| watcher | 22 |
+| watcher | 25 |
 | workspace | 1 |
 | write | 1 |
 
@@ -159,6 +159,7 @@
 | terminal_send | session | 3 | frozen |
 | watcher_ack_delivery | event_id, project_id | 2 | frozen |
 | watcher_ack_wakeup | wakeup_id | 1 | frozen |
+| watcher_approve_goal | expected_revision, project_id, task_id | 3 | frozen |
 | watcher_cancel_wakeup | wakeup_id | 1 | frozen |
 | watcher_dispatch_browser_task | executor_url, project_id, prompt, request_key, task_id | 5 | frozen |
 | watcher_error_status | — | 1 | frozen |
@@ -176,7 +177,9 @@
 | watcher_resolve_current_chat | evidence_text | 1 | frozen |
 | watcher_resume_project | project_id | 1 | frozen |
 | watcher_resume_task | capability_token, expected_revision, project_id, task_id | 4 | frozen |
+| watcher_return_for_rework | expected_revision, instruction, project_id, request_key, task_id | 5 | frozen |
 | watcher_schedule_wakeup | delay_minutes, objective | 5 | frozen |
+| watcher_spawn_subagent | orchestrator_marker, project_id, prompt, request_key, task_id | 9 | frozen |
 | watcher_status | — | 1 | frozen |
 | watcher_submit_report | capability_token, content, project_id, revision, status, task_id | 6 | frozen |
 | workspace_policy | — | 0 | additional |

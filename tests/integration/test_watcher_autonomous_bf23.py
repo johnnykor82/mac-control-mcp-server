@@ -71,6 +71,9 @@ class Bridge:
             if self.marker_status == "ambiguous":
                 from mac_control.watcher_runtime.watcher_http_adapter import TransportError
                 raise TransportError("ChatBridge HTTP 409")
+            if self.marker_status == "denied":
+                from mac_control.watcher_runtime.watcher_http_adapter import TransportError
+                raise TransportError("ChatBridge HTTP 403")
             assert payload == {"marker": MARKER}
             return {"chat_url": ORCH, "verification":
                     "assistant_message" if self.assistant_role else "user_message",
@@ -129,6 +132,25 @@ def test_owner_api_registers_without_any_urls_or_network(db):
     with pytest.raises((PermissionError, ValueError)):
         autonomous.enqueue(db, "pilot23", "agent-a", MARKER, PROMPT,
                            "bf23-agent-a-0001", "999")
+
+
+def test_supervisor_goal_optin_is_atomic_with_autonomous_enqueue(db):
+    from mac_control.watcher_runtime import watcher_goal_supervisor as supervisor
+    result=autonomous.enqueue(
+        db,"pilot23","agent-a",MARKER,PROMPT,"bf23-agent-a-0001","123",
+        goal_criteria="Ensure the executor satisfies the precise requested result.",
+        max_turns=4,max_elapsed_seconds=3600,max_no_progress=2)
+    assert result["state"]=="marker_pending"
+    assert supervisor.is_goal(db,"pilot23","agent-a")
+    assert autonomous.enqueue(
+        db,"pilot23","agent-a",MARKER,PROMPT,"bf23-agent-a-0001","123",
+        goal_criteria="Ensure the executor satisfies the precise requested result.",
+        max_turns=4,max_elapsed_seconds=3600,max_no_progress=2)["duplicate"]
+    with pytest.raises(ValueError):
+        autonomous.enqueue(db,"pilot23","agent-a",MARKER,PROMPT,
+                           "bf23-agent-a-0001","123",
+                           goal_criteria="Different review criteria demand a new task.",
+                           max_turns=4,max_elapsed_seconds=3600,max_no_progress=2)
 
 
 def test_owner_api_prevents_credential_payloads_and_changed_duplicate(db):
@@ -227,6 +249,17 @@ def test_ambiguous_or_user_role_marker_fails_closed(db):
         db.execute("DELETE FROM autonomous_subagents")
 
 
+def test_explicit_marker_lookup_403_blocks_without_retries_or_sessions(db):
+    b=Bridge();b.marker_status="denied"
+    autonomous.enqueue(db,"pilot23","agent-a",MARKER,PROMPT,
+                       "bf23-agent-a-0001","123")
+    autonomous.pump(db,b,now=1_000_000)
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0]=="blocked"
+    n=len(b.calls)
+    for _ in range(8): autonomous.pump(db,b,now=2_000_000)
+    assert len(b.calls)==n and not b.sessions
+
+
 def test_create_session_lost_ack_quarantines_without_second_create(db):
     b=Bridge();b.fail_session=True
     autonomous.enqueue(db,"pilot23","agent-a",MARKER,PROMPT,"bf23-agent-a-0001","123")
@@ -279,7 +312,7 @@ def test_owner_authenticated_mcp_spawn_uses_inprocess_subject(monkeypatch):
     monkeypatch.setattr(core, "connect", lambda: FakeConnection())
     calls = []
     monkeypatch.setattr(watcher_autonomous,"enqueue",
-        lambda db,project,task,marker,prompt,key,owner:
+        lambda db,project,task,marker,prompt,key,owner,**kwargs:
         calls.append((project,task,marker,owner)) or {"state":"marker_pending"})
     out=mcp.tools["watcher_spawn_subagent"](
         "pilot23","agent-a",MARKER,PROMPT,"bf23-agent-a-0001")

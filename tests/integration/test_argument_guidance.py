@@ -11,7 +11,7 @@ class ArgumentGuidanceTests(unittest.TestCase):
         from mac_control.legacy_adapter import inspect_existing_handlers
         from mac_control.dev_enabled_operations import guided_handler
         entries = inspect_existing_handlers()
-        self.assertEqual(len(entries), 108)
+        self.assertEqual(len(entries), 111)
         for name, entry in entries.items():
             with self.subTest(name=name):
                 wrapped = guided_handler(name, entry.handler)

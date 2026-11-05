@@ -77,7 +77,9 @@ def _validate(project, task, marker, prompt, key, owner):
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
-def enqueue(db, project, task, marker, prompt, key, owner):
+def enqueue(db, project, task, marker, prompt, key, owner, *,
+            goal_criteria="", max_turns=12, max_elapsed_seconds=7200,
+            max_no_progress=3):
     """Persist immutable pending request BEFORE any external browser operation."""
     digest = _validate(project, task, marker, prompt, key, owner)
     setup(db)
@@ -94,6 +96,14 @@ def enqueue(db, project, task, marker, prompt, key, owner):
                     or known["prompt_sha256"] != digest
                     or known["request_key"] != key):
                 raise ValueError("Idempotency key or task differs from immutable request")
+            from . import watcher_goal_supervisor as goals
+            previous_goal=goals.is_goal(db,project,task)
+            if previous_goal != bool(goal_criteria):
+                raise ValueError("Opt-in goal contract cannot be changed")
+            if goal_criteria:
+                goals.register_goal(db,project,task,owner,goal_criteria,
+                    max_turns=max_turns,max_elapsed_seconds=max_elapsed_seconds,
+                    max_no_progress=max_no_progress)
             result = {"project_id": project, "task_id": task,
                       "state": known["state"], "duplicate": True}
             db.execute("COMMIT")
@@ -119,6 +129,11 @@ def enqueue(db, project, task, marker, prompt, key, owner):
              prompt,prompt_sha256,request_key,state,created_at,updated_at)
              VALUES(?,?,?,?,?,?,?,'marker_pending',?,?)""",
                    (project,task,marker,owner,prompt,digest,key,now,now))
+        if goal_criteria:
+            from . import watcher_goal_supervisor as goals
+            goals.register_goal(db,project,task,owner,goal_criteria,
+                max_turns=max_turns,max_elapsed_seconds=max_elapsed_seconds,
+                max_no_progress=max_no_progress)
         db.execute("COMMIT")
         return {"project_id":project,"task_id":task,
                 "state":"marker_pending","duplicate":False}
@@ -179,6 +194,11 @@ def _lookup(db, row, api, now):
     except Exception as exc:
         from .watcher_http_adapter import TransportError
         detail=str(exc)
+        if isinstance(exc,TransportError) and (
+                "HTTP 401" in detail or "HTTP 403" in detail):
+            # Explicit owner/provider denial is terminal. Never retry it as an
+            # ordinary search-index delay or use another delivery channel.
+            return _mark(db,row,"blocked","marker_authorization_denied")
         if isinstance(exc,TransportError) and "HTTP 404" in detail:
             attempts=row["marker_attempts"]+1
             if attempts >= MAX_MARKER_ATTEMPTS:

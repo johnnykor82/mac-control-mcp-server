@@ -421,8 +421,10 @@ def summary(db, project=None):
         (project,) if project else ()).fetchall()]
     from .watcher_tab_lifecycle import summary as tab_lifecycle_summary
     from .watcher_autonomous import safe_status as autonomous_status
+    from .watcher_goal_supervisor import safe_status as supervisor_status
     return {"projects":projects,"tasks":tasks,"deliveries":deliveries,
             "autonomous_subagents":autonomous_status(db,project),
+            "goal_supervisor":supervisor_status(db,project),
             "file_dispatches":file_dispatches,
             "file_dispatch_events":file_dispatch_events,
             "browser_followups":followups,"browser_initial_dispatches":browser_dispatches,

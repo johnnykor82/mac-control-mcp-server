@@ -109,6 +109,7 @@ STABLE_TOOLS = frozenset({
     'terminal_resize',
     'terminal_send',
     'watcher_ack_delivery',
+    'watcher_approve_goal',
     'watcher_ack_wakeup',
     'watcher_cancel_wakeup',
     'watcher_error_status',
@@ -123,9 +124,11 @@ STABLE_TOOLS = frozenset({
     'watcher_register_project',
     'watcher_register_task',
     'watcher_resolve_current_chat',
+    'watcher_return_for_rework',
     'watcher_resume_project',
     'watcher_resume_task',
     'watcher_schedule_wakeup',
+    'watcher_spawn_subagent',
     'watcher_status',
     'watcher_submit_report',
     'write_file',
@@ -182,8 +185,8 @@ print(json.dumps({'full': full, 'disabled': disabled}))
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             report = json.loads(result.stdout)
             full = set(report['full'])
-            self.assertEqual(len(STABLE_TOOLS), 118)
-            self.assertEqual(len(full), 130)
+            self.assertEqual(len(STABLE_TOOLS), 121)
+            self.assertEqual(len(full), 133)
             self.assertIn("self_update_status", full)
             self.assertIn("self_update_start", full)
             self.assertFalse(STABLE_TOOLS - full, sorted(STABLE_TOOLS - full))

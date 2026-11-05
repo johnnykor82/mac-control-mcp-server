@@ -57,7 +57,7 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
                            + os.pathsep + str(dest)}
             completed = subprocess.run([sys.executable, "-P", "-B", "-c",
                 "from mac_control.legacy_adapter import inspect_existing_handlers; "
-                "assert len(inspect_existing_handlers()) == 108; "
+                "assert len(inspect_existing_handlers()) == 111; "
                 "from scripts.doctor_mac_control import REQUIRED_COMPONENTS; "
                 "assert 'chatbridge' in REQUIRED_COMPONENTS; "
                 "from scripts.dev_mcp_server import make_server; import asyncio; "
@@ -72,7 +72,7 @@ class ReleaseFullCapabilitiesTests(unittest.TestCase):
         with patch.object(installer, "run") as runner:
             installer.smoke(Path("/mock/release"), Path("/mock/data"))
         command = runner.call_args.args[0]
-        self.assertTrue(any("len(x) == 108" in str(x) for x in command))
+        self.assertTrue(any("len(x) == 111" in str(x) for x in command))
         self.assertFalse(any("len(x) == 109" in str(x) for x in command))
 
 

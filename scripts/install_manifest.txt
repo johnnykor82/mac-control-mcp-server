@@ -113,6 +113,7 @@ src/mac_control/watcher_runtime/watcher_browser_followups.py
 src/mac_control/watcher_runtime/watcher_busy_batch.py
 src/mac_control/watcher_runtime/watcher_chat_resolver.py
 src/mac_control/watcher_runtime/watcher_file_runtime.py
+src/mac_control/watcher_runtime/watcher_goal_supervisor.py
 src/mac_control/watcher_runtime/watcher_http_adapter.py
 src/mac_control/watcher_runtime/watcher_schedule_store.py
 src/mac_control/watcher_runtime/watcher_tab_lifecycle.py

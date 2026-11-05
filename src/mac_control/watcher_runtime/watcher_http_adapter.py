@@ -608,6 +608,11 @@ def poll_executor_tasks(db, dry_run: bool = False):
                            (task['project_id'],task['id']))
                 events.append({'task':name,'state':'uncertain','reason':type(exc).__name__})
                 continue
+        from . import watcher_goal_supervisor as goals
+        if goals.is_goal(db,task['project_id'],task['id']):
+            # Supervisor owns goal turn routing, including automatic rework;
+            # the legacy browser watcher must never notify an intermediate.
+            continue
         try:
             mapping = db.execute(
                 "SELECT session_id FROM chatbridge_task_sessions WHERE project_id=? AND task_id=?",
@@ -819,6 +824,11 @@ def iteration(db, dry_run=False):
     results.extend(poll_executor_tasks(db, dry_run=dry_run))
     if not dry_run:
         sync_completed(db)
+    # Opt-in BF22 Supervisor owns separate model turns and followups.
+    # The provider capacity gate within pump prevents concurrent sends.
+    from .watcher_goal_supervisor import pump as pump_supervisor
+    if not any(e.get("state")=="submitted" for e in initial+autonomous):
+        results.extend(pump_supervisor(db,api,dry_run=dry_run))
     results.extend(recover_missing_revision_deliveries(db, dry_run=dry_run))
     if not dry_run:
         results.extend(due_to_deliveries(db))
@@ -917,10 +927,13 @@ def main():
                 initial_recovered=quarantine_inflight(db)
                 from .watcher_autonomous import quarantine_inflight as quarantine_subagents
                 autonomous_recovered=quarantine_subagents(db)
+                from .watcher_goal_supervisor import quarantine_inflight as quarantine_goals
+                goals_recovered=quarantine_goals(db)
                 print(json.dumps({"http_watcher": "started", "api": BASE,
                                   "crashed_followups": recovered,
                                   "crashed_initial_dispatches":initial_recovered,
-                                  "crashed_autonomous_subagents":autonomous_recovered}), flush=True)
+                                  "crashed_autonomous_subagents":autonomous_recovered,
+                                  "crashed_goal_sends":goals_recovered}), flush=True)
                 while True:
                     try:
                         events = iteration(db)

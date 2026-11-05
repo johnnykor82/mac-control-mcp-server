@@ -63,9 +63,25 @@ Use `watcher_status.autonomous_subagents` to inspect redacted status.
 progress states, **not proof of completion**. `uncertain` requires reconciliation,
 never a blind second ChatGPT POST. Existing BF-20 immutable reports and
 delivery/ACK logic apply once the new chat has been verified and registered.
-BF-22 Goal Supervisor adds a separate model-based readiness decision and
-requires explicit orchestrator approval before closing a goal; ordinary ACK
-means receipt only. BF-19/BF-20 manual-URL protocols remain supported.
+BF-22 Goal Supervisor is opt-in: pass `goal_criteria` and finite
+`max_turns`, `max_elapsed_seconds`, `max_no_progress` to the same spawn
+operation. A distinct persistent ChatBridge Supervisor LLM session evaluates
+every settled executor turn. It may ask the SAME executor chat to continue;
+intermediate answers are not delivered to the orchestrator.
+
+When Supervisor returns `ready_for_orchestrator_review`, Watcher sends an
+immutable report with `Результат требует проверки оркестратором. При
+невыполненных критериях верни задачу на доработку.`. Orchestrator fetches
+the report, calls `watcher_ack_delivery` for receipt, then separately calls
+`watcher_approve_goal(project_id,task_id,expected_revision)` or
+`watcher_return_for_rework(project_id,task_id,instruction,request_key,expected_revision)`.
+The latter stays in the ORIGINAL executor chat and triggers another Supervisor
+review. Neither an ACK nor the Supervisor's opinion closes a goal without
+explicit owner-authenticated orchestrator approval.
+
+Use `watcher_status.goal_supervisor` for redacted state. Goal review and
+bounded budgets apply only to explicitly enabled tasks. BF-19/BF-20 manual-URL
+protocols remain supported.
 
 ## BF-20: first browser dispatch (owner-authenticated, tokenless)
 

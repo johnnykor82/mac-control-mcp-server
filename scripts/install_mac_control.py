@@ -107,7 +107,7 @@ def smoke(release: Path, data: Path) -> None:
     env = {**os.environ, "PYTHONPATH": str(release / "src") + os.pathsep + str(release),
            "MAC_CONTROL_DATA_ROOT": str(data), "PYTHONNOUSERSITE": "1"}
     statement = ("from mac_control.legacy_adapter import inspect_existing_handlers; "
-                 "x=inspect_existing_handlers(); assert len(x) == 108; "
+                 "x=inspect_existing_handlers(); assert len(x) == 111; "
                  "from scripts.dev_mcp_server import make_server; "
                  "assert make_server(include_mutations=True)")
     run([str(py), "-P", "-B", "-c", statement], cwd=release,

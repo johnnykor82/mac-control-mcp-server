@@ -99,6 +99,7 @@ def register(mcp):
                 "watcher_guide","watcher_register_project",
                 "watcher_register_task","watcher_register_browser_project",
                 "watcher_dispatch_browser_task","watcher_spawn_subagent",
+                "watcher_approve_goal","watcher_return_for_rework",
                 "watcher_status",
                 "watcher_read_result","watcher_ack_delivery",
                 "watcher_pause_project","watcher_resume_project",
@@ -141,7 +142,9 @@ def register(mcp):
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_spawn_subagent(project_id:str,task_id:str,
                                orchestrator_marker:str,prompt:str,
-                               request_key:str)->dict:
+                               request_key:str,goal_criteria:str="",
+                               max_turns:int=12,max_elapsed_seconds:int=7200,
+                               max_no_progress:int=3)->dict:
         """Queue a new autonomous worker WITHOUT manual ChatGPT chat URLs.
 
         The orchestrator places a unique WATCHER-CHAT marker in its OWN
@@ -156,7 +159,38 @@ def register(mcp):
         owner=authenticated_profile()["id"]
         with closing(core.connect()) as db:
             return auto.enqueue(db,_name(project_id),_name(task_id),
-                                orchestrator_marker,prompt,request_key,owner)
+                                orchestrator_marker,prompt,request_key,owner,
+                                goal_criteria=goal_criteria,max_turns=max_turns,
+                                max_elapsed_seconds=max_elapsed_seconds,
+                                max_no_progress=max_no_progress)
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_approve_goal(project_id:str,task_id:str,expected_revision:int)->dict:
+        """After delivered+ACKed Supervisor review, explicitly approve goal closure.
+
+        ACK means receipt only; this separate authenticated owner decision
+        closes the goal at an exact reviewed revision, never model text.
+        """
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_goal_supervisor as goals
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            return goals.approve_goal(db,_name(project_id),_name(task_id),
+                                      owner,expected_revision=expected_revision)
+
+    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    def watcher_return_for_rework(project_id:str,task_id:str,
+                                  instruction:str,request_key:str,
+                                  expected_revision:int)->dict:
+        """After review+ACK, continue SAME executor session for a new revision."""
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_goal_supervisor as goals
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            return goals.return_for_rework(db,_name(project_id),_name(task_id),
+                owner,instruction,request_key,expected_revision=expected_revision)
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_dispatch_browser_task(project_id:str,task_id:str,executor_url:str,

@@ -93,7 +93,7 @@ async def audit() -> dict:
             "parameters": sorted(props),
             "exceptions": issues,
         })
-    if len(frozen) != 108 or not set(frozen) <= {r["name"] for r in results}:
+    if len(frozen) != 111 or not set(frozen) <= {r["name"] for r in results}:
         raise AssertionError("Frozen operations missing or changed")
     raised = Counter(e["type"] for item in results for e in item["exceptions"])
     return {
@@ -126,7 +126,7 @@ def render_markdown(data: dict) -> str:
         "Автоматически воспроизводимый аудит исходников и схем MCP; без вызова",
         "инструментов, доступа к пользовательским аргументам и изменения production.",
         "",
-        f"- Всего: **{len(tools)}** инструментов (108 frozen, {len(tools)-108} дополнительных).",
+        f"- Всего: **{len(tools)}** инструментов (111 frozen, {len(tools)-111} дополнительных).",
         "- Опциональные background-инструменты зарегистрированы только в памяти.",
         "- Статические исключения из 20 модулей: " + ", ".join(
             f"{name}={count}" for name, count in sorted(counts.items())) + ".",

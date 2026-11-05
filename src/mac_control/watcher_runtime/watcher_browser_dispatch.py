@@ -367,6 +367,16 @@ def poll_initial(db,task,api,*,dry_run=False):
     current_session=api('GET','/v1/sessions/'+row['session_id'])
     validate_session(current_session,row['session_id'],row['executor_url'])
     message_id=verify_completed_result(db,project,name,req)
+    from . import watcher_goal_supervisor as goals
+    if goals.is_goal(db,project,name):
+        # Opt-in goal uses the separate Supervisor model, not legacy direct
+        # completion/delivery; a settled gateway request cannot be replayed.
+        goals.record_settled(db,project,name,req)
+        db.execute("""UPDATE chatbridge_browser_dispatches
+            SET state='completed',assistant_message_id=?,reported_status='goal_review'
+            WHERE project_id=? AND task_id=? AND state='submitted'""",
+            (message_id,project,name))
+        return []
     complete=legacy.completion_test(db,project,name,req['answer'],
                    generating=False,now_monotonic=__import__('time').monotonic())
     if not complete:
