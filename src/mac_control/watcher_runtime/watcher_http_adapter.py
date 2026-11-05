@@ -240,6 +240,47 @@ def ensure_session(db: sqlite3.Connection, delivery):
     return row["session_id"], row["request_id"]
 
 
+def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> bool:
+    """Prove the exact original notification exists as a provider user message.
+
+    Only local ChatBridge GET endpoints. Used for already-submitted requests
+    whose model response may never finish (or was interrupted on restart).
+    A mere 'thinking' state, marker substring or client key is not proof.
+    """
+    did = delivery["id"]
+    target = legacy.canonical_url(delivery["orchestrator_url"])
+    expected_cid = target.rsplit("/c/", 1)[1]
+    if (
+        not isinstance(request, dict)
+        or request.get("request_id") != rid
+        or request.get("session_id") != sid
+        or request.get("client_request_id") != "watcher-delivery-" + did
+        or request.get("conversation_id") != expected_cid
+        or not isinstance(request.get("user_message_id"), str)
+        or not request["user_message_id"]
+        or not delivery["payload"].startswith(f"[MC-WATCH:{did}]")
+    ):
+        return False
+    cursor = 0
+    for _ in range(100):
+        result = api("GET",
+            f"/v1/sessions/{sid}/messages?limit=500&after={cursor}")
+        rows = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(rows, list):
+            raise TransportError("Invalid local ChatBridge message receipt")
+        for msg in rows:
+            if (msg.get("role") == "user"
+                    and msg.get("request_id") == rid
+                    and msg.get("message_id") == request["user_message_id"]
+                    and msg.get("content") == delivery["payload"]):
+                return True
+        next_cursor = result.get("next_cursor", cursor)
+        if not rows or next_cursor == cursor:
+            return False
+        cursor = next_cursor
+    raise TransportError("Local receipt verification exceeded history limit")
+
+
 def finish(db, delivery_id, request, status):
     if status == "completed":
         db.execute(
@@ -277,7 +318,39 @@ def process_one(db, delivery, dry_run: bool = False):
                 "project_id": delivery["project_id"]}
     sid, rid = ensure_session(db, delivery)
     if rid:
-        status = api("GET", f"/v1/requests/{rid}")["status"]
+        request = api("GET", f"/v1/requests/{rid}")
+        status = request["status"]
+        if _verified_delivery_receipt(delivery, sid, rid, request):
+            db.execute(
+                "UPDATE deliveries SET state='delivered',delivered_at=?,last_error=NULL "
+                "WHERE id=? AND state IN ('ready','attempting')",
+                (legacy.utc(), did),
+            )
+            db.execute(
+                "UPDATE chatbridge_delivery_links SET last_status='receipt_confirmed',"
+                "last_checked_at=? WHERE delivery_id=?",
+                (legacy.utc(), did),
+            )
+            return {"id": did, "state": "delivered", "receipt_confirmed": True,
+                    "request_id": rid}
+        # A modern ChatBridge receipt-bearing terminal request is NOT proof
+        # on its own: the exact immutable local user message must match. Keep
+        # legacy status-only responses compatible, but never accept a tampered
+        # completed request with source metadata and no matching receipt.
+        if status == "completed" and any(
+            key in request for key in ("user_message_id", "client_request_id", "request_id")
+        ):
+            db.execute(
+                "UPDATE deliveries SET state='delivery_uncertain',last_error=? WHERE id=?",
+                ("completed_request_receipt_unverified", did),
+            )
+            db.execute(
+                "UPDATE chatbridge_delivery_links SET last_status='receipt_unverified',"
+                "last_checked_at=? WHERE delivery_id=?",
+                (legacy.utc(), did),
+            )
+            return {"id": did, "state": "delivery_uncertain",
+                    "reason": "completed_request_receipt_unverified"}
         db.execute(
             "UPDATE chatbridge_delivery_links SET last_status=?,last_checked_at=? WHERE delivery_id=?",
             (status, legacy.utc(), did),
