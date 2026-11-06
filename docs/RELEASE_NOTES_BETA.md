@@ -559,3 +559,19 @@ and approval documents remain outside the source checkout.
 - В журнале и mclog показываются эти поля; гистограмма сплошная, аргументы разделены цветом.
 - НЕСОВМЕСТИМОЕ ИЗМЕНЕНИЕ схемы: после установки необходимо обновить описание инструментов в ChatGPT и повторно подключить MCP. Без этого старые вызовы будут отклоняться; безопасный откат должен быть доступен до переключения.
 - Исходники проверены 822 тестами и CI. Публикация сама по себе не меняет установленные Mac Server и jkmac.
+
+## v0.1.0-beta.50 — MClog terminal UX and experimental GUI
+
+- Three terminal display modes: compact single-line, fully wrapped ARGUMENTS, and detailed task/action/authorization basis/command lines. All four detailed fields independently wrap inside ARGUMENTS. Choose using 1/2/3, m, or --mode.
+- Faster physical-line scrolling: coalesced keyboard repeat, wheel and PageUp/PageDown; even an overlong single audit record can be scrolled. Redraw occurs only on input, data changes or resize.
+- Muted palette using terminal-default foreground; vertically continuous box-drawing histogram columns replace separated bright bricks. Owner-only redaction remains intact.
+- The experimental read-only Tk GUI is kept solely in the owner's AgentWorkspace and private SDD notes, excluded from the public GitHub release and installer.
+- No MCP schema/auth/Watcher/SQLite/ChatBridge changes. ChatGPT tool definitions need no refresh.
+
+## v0.1.0-beta.50 — MClog: три режима и нейтральные цвета
+
+- Режимы: одна строка, перенос в столбце «Аргументы», отдельные «Задача / Действие / Основание / Команда». Все четыре поля самостоятельно переносятся внутри столбца. Переключение: 1/2/3, m, параметр --mode.
+- Быстрая прокрутка физическими строками, поддержка колеса, PgUp/PgDn и длинных записей; лишние перерисовки устранены.
+- Приглушённые цвета с основным текстом палитры терминала, непрерывные вертикальные линии вместо кирпичиков; маскирование секретов сохранено.
+- Экспериментальный GUI на Tkinter существует только в AgentWorkspace владельца, публичная сборка его не включает.
+- MCP-описания инструментов и службы не изменены; обновлять список инструментов ChatGPT не нужно.
