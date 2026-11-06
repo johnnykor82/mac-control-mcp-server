@@ -172,6 +172,14 @@ def register_preview_operations(mcp, *, include_mutations: bool = False) -> None
             continue
         found = registry[name]
         desc = (found.handler.__doc__ or name).strip()
+        if name.startswith("watcher_") and name != "watcher_guide":
+            desc += (
+                "\n\nOrchestration: call watcher_guide before first use for the full"
+                " BF23 workflow. Use watcher_status to reconcile durable states."
+                " Queueing is not completion; verify the immutable report,"
+                " acknowledge receipt with watcher_ack_delivery, then independently"
+                " approve or return for rework. Never resend an uncertain request."
+            )
         if not found.read_only:
             desc += "\n\n" + workspace_short_instruction()
         mcp.tool(name=name, description=desc, annotations={"readOnlyHint": found.read_only,

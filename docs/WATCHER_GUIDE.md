@@ -137,3 +137,13 @@ requires real authorized executor dispatch and independently verified reports.
 `watcher_status.file_dispatch_events` retains the latest 100 immutable receipt
 transitions even after credential recovery, with no tokens, hashes or prompt text.
 Concurrent identical receipts use a SQLite write lock to stay idempotent.
+
+## BF24: agent-facing MCP guidance
+
+Each Watcher operation advertises `watcher_guide` as the entry point.
+Use marker → spawn → status → report verification → ACK → independent
+approval/rework; do not retry uncertain deliveries. Built-in Mac Control
+alternatives suggested for validation or compatibility errors may be used
+without fresh user approval when scope and authorization are unchanged.
+Explicit security/policy denials are never a reason to reroute. See
+`src/mac_control/watcher_runtime/WATCHER_USAGE.md` for the detailed protocol.

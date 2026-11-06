@@ -68,13 +68,18 @@ def _cli_payload(command, payload, timeout=45):
 def register(mcp):
     @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
     def watcher_guide() -> dict:
-        """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs.
+        """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs. Call watcher_guide to read the full live usage protocol.
 
         For autonomous BF23 tasks, publish a unique WATCHER-CHAT marker in the
         orchestrator assistant message and call watcher_spawn_subagent WITHOUT
-        any manual chat URLs. Watcher verifies the marker via ChatBridge,
-        creates a new persistent executor session, and reports via the same
-        SHA256/ACK pipeline. The API returns queued state, not completion.
+        any manual chat URLs. Watcher verifies the marker via ChatBridge
+        and creates a persistent executor session. The API returns queued
+        state, not completion. Check watcher_status; when a verified immutable
+        result arrives, use watcher_read_report and independently inspect
+        the evidence. Then watcher_ack_delivery acknowledges the notification
+        only. Call watcher_approve_goal after acceptance, or
+        watcher_return_for_rework for the SAME original executor chat.
+        Never resend an uncertain request; reconcile exact durable IDs.
         Legacy manual-URL BF20 tasks still use watcher_register_browser_project
         then watcher_dispatch_browser_task. No bearer token reaches executors.
         Legacy file-mode tasks remain supported via

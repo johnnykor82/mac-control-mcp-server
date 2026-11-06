@@ -121,7 +121,10 @@ def guided_validation_error(operation: str, handler: Callable,
             f"Next: {_alternative(operation)} "
             + ("Inspect the audit and actual state before any retry. "
                if not classified else "")
-            + "If a permission/policy check is denied, stop rather than bypass it.")
+            + "An already-exposed Mac Control alternative suggested for a recoverable"
+              " validation/compatibility error can be used without additional user approval"
+              " when intent, scope and effective authorization remain unchanged."
+              " If a permission/policy check is denied, stop rather than bypass it.")
     return ValueError(text[:760])
 
 
