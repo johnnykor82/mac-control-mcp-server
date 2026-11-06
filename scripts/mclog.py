@@ -137,7 +137,24 @@ def load(log_dir):
 
 
 def display_args(event, limit=80):
-    """Prefer actual locally stored call parameters; retain old audit fallbacks."""
+    """Show owner-visible task context first, then actual tool parameters."""
+    arguments = event.get("arguments")
+    context = event.get("audit_context")
+    if not isinstance(context, dict) and isinstance(arguments, dict):
+        context = arguments.get("audit_context")
+    if isinstance(context, dict) and all(
+        isinstance(context.get(k), str)
+        for k in ("task_id", "action", "authorization_basis")
+    ):
+        task = safe_args(context["task_id"], 96)
+        action = safe_args(context["action"], 512)
+        basis = safe_args(context["authorization_basis"], 512)
+        base = f"Задача: {task} | Действие: {action} | Основание: {basis}"
+        others = (dict(arguments) if isinstance(arguments, dict) else {})
+        others.pop("audit_context", None)
+        if others:
+            base += " | " + safe_args(others, 512)
+        return base[:limit - 1] + "…" if limit > 0 and len(base) > limit else base[:max(0, limit)]
     if "arguments" in event and event.get("arguments") is not None:
         payload = event["arguments"]
         return safe_args(payload, limit) if payload != {} else "нет"
@@ -149,6 +166,33 @@ def display_args(event, limit=80):
 
 def is_error(event):
     return str(event.get("status", "")).lower() not in ("ok", "success", "running", "unfinished")
+
+
+def histogram_cell(level, row):
+    """Render one vertically continuous hourly column; one horizontal spacer."""
+    return "████ " if level >= row else "     "
+
+
+def argument_segments(value):
+    """Split redacted display text into colorable spans without modifying it."""
+    if not isinstance(value, str):
+        value = str(value)
+    if not value:
+        return []
+    pattern = re.compile(r"((?:[A-Za-z][A-Za-z0-9_-]*=)|(?:Задача: |Действие: |Основание: ))")
+    pieces = pattern.split(value)
+    spans = []
+    for part in pieces:
+        if not part:
+            continue
+        if pattern.fullmatch(part):
+            spans.append((part, "key"))
+            continue
+        fragments = re.split(r"(\[скрыто\]|\[REDACTED\])", part)
+        for fragment in fragments:
+            if fragment:
+                spans.append((fragment, "secret" if fragment in ("[скрыто]", "[REDACTED]") else "value"))
+    return spans
 
 
 def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
@@ -195,7 +239,7 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
             cells = []
             for stamp in slots:
                 level = (counts[stamp] * chart_height + peak - 1) // peak
-                cells.append(" ███ " if level >= chart_height - y else "     ")
+                cells.append(histogram_cell(level, chart_height - y))
             line(4 + y, "     " + "".join(cells), curses.color_pair(3))
         def cells(prefix, fn):
             return f"{prefix:<5}" + "".join(f"{str(fn(t))[:4]:^5}" for t in slots)
@@ -237,7 +281,27 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False):
         chat = event.get("chat_ref", "")
         chat_part = f" {('Чат ' + chat[:8]) if isinstance(chat, str) and chat else '—':{chat_width}}" if has_chat else ""
         row = f" {tm:8}{chat_part} {command[:cmd_width]:{cmd_width}} {args:{args_width}} {result}"
-        line(header_y + 1 + i, row, curses.color_pair(color))
+        row_y = header_y + 1 + i
+        line(row_y, row, curses.color_pair(color))
+        # Overlay only already-redacted arguments in contrasting syntax colors.
+        # Fixed-column content and old one-color terminals still render intact.
+        x = len(f" {tm:8}{chat_part} {command[:cmd_width]:{cmd_width}} ")
+        left = min(args_width, max(0, width - 1 - x))
+        styles = {
+            "key": curses.color_pair(4) | bold,
+            "value": curses.color_pair(3),
+            "secret": curses.color_pair(1) | bold,
+        }
+        for span, kind in argument_segments(args):
+            if left <= 0:
+                break
+            fragment = span[:left]
+            try:
+                scr.addnstr(row_y, x, fragment, len(fragment), styles.get(kind, 0))
+            except curses.error:
+                break
+            x += len(fragment)
+            left -= len(fragment)
     line(height - 1,
          f" {offset+1 if filtered else 0}–{min(len(filtered), offset + visible)} из {len(filtered)} | «—» — параметры не записаны | обновление 2 с",
          curses.A_DIM)

@@ -19,6 +19,18 @@ def event(eid, kind, status=None, instant="2026-10-24T12:30:00.000+00:00"):
 
 
 class MacLogTests(unittest.TestCase):
+    def test_solid_histogram_columns_and_color_tokens(self):
+        self.assertEqual(mclog.histogram_cell(4, 3), "████ ")
+        self.assertEqual(mclog.histogram_cell(2, 3), "     ")
+        self.assertEqual(mclog.histogram_cell(2, 2), "████ ")
+        parts = mclog.argument_segments("command=echo hello, project=workspace, access_token=[скрыто]")
+        self.assertEqual("".join(text for text, kind in parts),
+                         "command=echo hello, project=workspace, access_token=[скрыто]")
+        self.assertIn(("command=", "key"), parts)
+        self.assertIn(("access_token=", "key"), parts)
+        self.assertIn(("[скрыто]", "secret"), parts)
+        self.assertEqual(mclog.argument_segments("нет"), [("нет", "value")])
+
     def test_redaction_and_arguments(self):
         text = mclog.safe_args({"command": "echo hello world",
                                 "timeout_seconds": 15, "access_token": "supersecret"}, 140)
@@ -39,7 +51,10 @@ class MacLogTests(unittest.TestCase):
                 self.rows={}
             def getmaxyx(self): return (self.height,self.width)
             def erase(self):self.rows.clear()
-            def addnstr(self,y,x,text,n,style=0):self.rows[y]=text[:n]
+            def addnstr(self,y,x,text,n,style=0):
+                existing=self.rows.get(y,"").ljust(x)
+                part=text[:n]
+                self.rows[y]=existing[:x]+part+existing[x+len(part):]
             def refresh(self):pass
         e={"started":dt.datetime.now(dt.timezone.utc),
            "tool":"terminal_exec","status":"ok"}
@@ -71,7 +86,10 @@ class MacLogTests(unittest.TestCase):
             def __init__(self,w): self.w=w;self.rows={}
             def getmaxyx(self): return (15,self.w)
             def erase(self): self.rows.clear()
-            def addnstr(self,y,x,text,n,style=0): self.rows[y]=text[:n]
+            def addnstr(self,y,x,text,n,style=0):
+                existing=self.rows.get(y,"").ljust(x)
+                part=text[:n]
+                self.rows[y]=existing[:x]+part+existing[x+len(part):]
             def refresh(self): pass
         e={"started":dt.datetime.now(dt.timezone.utc),"tool":"terminal_exec",
            "status":"ok","chat_ref":"0123456789","arguments":{"command":"echo hello"}}

@@ -12,12 +12,14 @@ from mac_control.operations import system_info
 from mac_control.dev_enabled_operations import register_preview_operations
 from mac_control import background_browser_ops, background_native_ops, workspace_policy, maintenance_ops, account_profile
 from mac_control.audit_middleware import AuditMiddleware
+from mac_control.mandatory_audit_context import install_registration
 from mac_control.runtime_paths import DATA_ROOT
 import os
 
 
 def make_server(*, include_mutations: bool = False, auth=None) -> FastMCP:
     mcp = FastMCP("Mac Control MCP Server", auth=auth, instructions=workspace_policy.instructions())
+    install_registration(mcp)  # Every externally registered tool requires the same audit schema.
     # Owner-scoped audit records bounded actual arguments locally; remote audit API stays metadata-only.
     # Uninstalled read-only DEV preview creates no public-install files.
     if os.environ.get("MAC_CONTROL_DATA_ROOT"):

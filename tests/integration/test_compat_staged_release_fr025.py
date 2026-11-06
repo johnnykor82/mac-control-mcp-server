@@ -45,8 +45,13 @@ class StagedReleaseCompatibilityE2ETests(unittest.TestCase):
                     names = {t.name for t in await server.list_tools()}
                     assert 'write_file' in names and 'fs_write' in names
                     relative = 'projects/android-license-audit/reports/INITIAL_AUDIT.md'
+                    audit_context = {
+                        'task_id': 'FR025-E2E',
+                        'action': 'Exercise isolated staged file alias with a versioned CAS write and read',
+                        'authorization_basis': 'User-approved offline integration fixture on 2026-11-06',
+                    }
                     first = await server.call_tool('write_file',
-                        {'path': relative, 'content': '# staged v1'})
+                        {'path': relative, 'content': '# staged v1', 'audit_context':audit_context})
                     assert not first.is_error, first
                     digest = first.structured_content['sha256']
 
@@ -54,11 +59,11 @@ class StagedReleaseCompatibilityE2ETests(unittest.TestCase):
                         'project': 'workspace',
                         'path': relative,
                         'content': '# staged v2',
-                        'expected_sha256': digest,
+                        'expected_sha256': digest, 'audit_context': audit_context,
                     })
                     assert not second.is_error, second
                     read = await server.call_tool('read_file',
-                        {'path': 'workspace/' + relative})
+                        {'path': 'workspace/' + relative, 'audit_context': audit_context})
                     assert read.structured_content['content'] == '# staged v2'
                     assert (ws / relative).read_text() == '# staged v2'
                     assert (root / 'backups' / 'fs_recovery').is_dir()

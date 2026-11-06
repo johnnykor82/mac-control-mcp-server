@@ -33,10 +33,10 @@ class ActualMCPErrorResponseTests(unittest.TestCase):
                 for tool, arguments, code in cases:
                     with self.subTest(tool=tool):
                         with self.assertRaises(Exception) as error:
-                            await server.call_tool(tool, arguments)
+                            await server.call_tool(tool, {**arguments, 'audit_context':{"task_id":"BF26-REGRESSION", "action":"Run isolated validation and inspect expected error without changing external state", "authorization_basis":"User approved development testing on 2026-11-06"}})
                         self.assertIn(code, str(error.exception))
                 response = await server.call_tool("background_browser_action", {
-                    "session_token": "bad", "action": "click"})
+                    "session_token": "bad", "action": "click", "audit_context":{"task_id":"BF26-REGRESSION", "action":"Run isolated validation and inspect expected error without changing external state", "authorization_basis":"User approved development testing on 2026-11-06"}})
                 self.assertEqual(response.structured_content["error"]["code"],
                                  "INVALID_ARGUMENT")
                 self.assertIn("session_token",

@@ -161,6 +161,19 @@ def capture_arguments(arguments):
     return result
 
 
+def extract_audit_context(arguments: object) -> dict | None:
+    """Read three declared intention fields only; not an authorization check."""
+    if not isinstance(arguments, dict):
+        return None
+    value = arguments.get("audit_context")
+    if not isinstance(value, dict):
+        return None
+    fields = ("task_id", "action", "authorization_basis")
+    if not all(isinstance(value.get(k), str) and value[k].strip() for k in fields):
+        return None
+    return {key: value[key][:512] for key in fields}
+
+
 def conversation_ref(meta):
     """Anonymous best-effort conversation correlation, never authorization."""
     if not isinstance(meta, dict):
@@ -227,6 +240,9 @@ class AuditMiddleware(Middleware):
             "arguments": capture_arguments(arguments),
             "argument_info": safe_argument_info(arguments),
         }
+        purpose = extract_audit_context(arguments)
+        if purpose is not None:
+            record["audit_context"] = purpose
         chat = conversation_ref(getattr(context.message, "meta", None))
         if chat:
             record["chat_ref"] = chat

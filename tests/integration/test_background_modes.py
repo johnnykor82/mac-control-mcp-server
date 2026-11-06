@@ -19,7 +19,7 @@ class ModeSemanticsTests(unittest.TestCase):
         patch('mac_control.background_native_ops.execute',side_effect=AssertionError('unexpected native dispatch')):
     for name,args in [('background_browser_action',browser),('background_app_action',native)]:
      for mode,code in [('foreground','REQUIRES_FOREGROUND'),('surprise','INVALID_MODE')]:
-      result=await server.call_tool(name,{**args,'mode':mode})
+      result=await server.call_tool(name,{**args,'mode':mode,'audit_context':{"task_id":"BF26-REGRESSION", "action":"Run isolated validation and inspect expected error without changing external state", "authorization_basis":"User approved development testing on 2026-11-06"}})
       self.assertFalse(result.structured_content['ok'])
       self.assertEqual(result.structured_content['error']['code'],code)
   asyncio.run(scenario())

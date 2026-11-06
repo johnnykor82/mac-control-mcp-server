@@ -21,8 +21,8 @@ class AuthenticatedProfileTests(unittest.TestCase):
         self.assertNotIn("get_profile", local)
         self.assertIn("get_profile", remote)
         tool = remote["get_profile"]
-        self.assertEqual(tool.parameters["properties"], {})
-        self.assertEqual(tool.parameters.get("required", []), [])
+        self.assertEqual(set(tool.parameters["properties"]), {"audit_context"})
+        self.assertEqual(tool.parameters.get("required", []), ["audit_context"])
         self.assertFalse(tool.parameters.get("additionalProperties", True))
         self.assertEqual(tool.meta["openai/profile"], True)
         self.assertTrue(tool.annotations.read_only_hint)
@@ -42,7 +42,9 @@ class AuthenticatedProfileTests(unittest.TestCase):
                 account_profile, "load_config",
                 return_value={"github_allowed_ids": ["12345678", "87654321"]}
             ):
-                result = asyncio.run(self.remote.call_tool("get_profile", {}))
+                result = asyncio.run(self.remote.call_tool("get_profile", {"audit_context": {
+                    "task_id": "FR025-PROFILE", "action": "Inspect authenticated provider profile in isolated test",
+                    "authorization_basis": "Owner approved legacy integration test scope on 2026-11-06"}}))
                 self.assertEqual(result.structured_content["id"], "12345678")
                 self.assertEqual(set(result.structured_content), {"id"})
                 self.assertFalse(result.is_error)
@@ -56,7 +58,9 @@ class AuthenticatedProfileTests(unittest.TestCase):
                 account_profile, "load_config",
                 return_value={"github_allowed_ids": ["12345678", "87654321"]}
             ):
-                result = asyncio.run(self.remote.call_tool("get_profile", {}))
+                result = asyncio.run(self.remote.call_tool("get_profile", {"audit_context": {
+                    "task_id": "FR025-PROFILE", "action": "Inspect authenticated provider profile in isolated test",
+                    "authorization_basis": "Owner approved legacy integration test scope on 2026-11-06"}}))
                 self.assertEqual(result.structured_content["id"], who)
 
     def test_unauthorized_profiles_fail_closed(self):

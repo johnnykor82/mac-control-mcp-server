@@ -147,3 +147,14 @@ alternatives suggested for validation or compatibility errors may be used
 without fresh user approval when scope and authorization are unchanged.
 Explicit security/policy denials are never a reason to reroute. See
 `src/mac_control/watcher_runtime/WATCHER_USAGE.md` for the detailed protocol.
+
+
+## BF25: автоматическое обнаружение чата без ручного URL
+
+Оркестратор размещает уникальную метку WATCHER-CHAT в собственном сообщении.
+ChatBridge самостоятельно получает кандидатов из последних разговоров боковой
+панели ChatGPT через управляемый браузер. Если они не подтверждены, применяет
+штатный полнотекстовый поиск. Ссылка из списка — не доказательство: требуется
+полная метка, роль сообщения и подтверждённый идентификатор разговора.
+Пользователь не должен предоставлять URL, и агент не должен его запрашивать.
+При неопределённости Watcher сохраняет задачу в очереди без повторной отправки.

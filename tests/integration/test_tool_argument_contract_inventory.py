@@ -21,9 +21,9 @@ class ArgumentContractInventoryTests(unittest.TestCase):
 
     def test_missing_arguments_and_types_are_visible(self):
         by_name = {x["name"]: x for x in self.report["tools"]}
-        self.assertEqual(by_name["ssh_exec"]["required"], ["command", "host"])
+        self.assertEqual(by_name["ssh_exec"]["required"], ["audit_context", "command", "host"])
         self.assertIn("timeout_seconds", by_name["ssh_exec"]["parameters"])
-        self.assertEqual(by_name["custom_command"]["required"], ["operation"])
+        self.assertEqual(by_name["custom_command"]["required"], ["audit_context", "operation"])
         self.assertIn("session_token", by_name["background_browser_action"]["required"])
         self.assertTrue(by_name["audit_search"]["read_only"])
         self.assertTrue(by_name["self_update_status"]["read_only"])

@@ -124,7 +124,10 @@ class ArgumentGuidanceTests(unittest.TestCase):
         async def exercise():
             with self.assertRaises(Exception) as captured:
                 await mcp.call_tool("custom_command",{
-                    "operation":"ssh_exec","arguments":{"host":"example"}})
+                    "operation":"ssh_exec","arguments":{"host":"example"},
+                    "audit_context":{"task_id":"FR023-GUIDANCE",
+                    "action":"Test invalid nested SSH command preflight without dispatch",
+                    "authorization_basis":"Approved regression tests on 2026-11-06"}})
             msg=str(captured.exception)
             self.assertIn("VALIDATION_ERROR",msg)
             self.assertIn("ssh_exec",msg)
@@ -137,7 +140,10 @@ class ArgumentGuidanceTests(unittest.TestCase):
         mcp=make_server(include_mutations=True)
         async def exercise():
             with self.assertRaises(Exception) as x:
-                await mcp.call_tool("custom_query", {"operation":"not_a_tool","arguments":{}})
+                await mcp.call_tool("custom_query", {"operation":"not_a_tool","arguments":{},
+                    "audit_context":{"task_id":"FR023-GUIDANCE",
+                    "action":"Test unknown operation validation without external dispatch",
+                    "authorization_basis":"Approved regression tests on 2026-11-06"}})
             self.assertIn("custom_query(operation='help')",str(x.exception))
         asyncio.run(exercise())
 

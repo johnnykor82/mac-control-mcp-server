@@ -49,6 +49,12 @@ Publish tested source through GitHub; jkmac is a **different** personal
 MacBook with jkmac-mcp. Install GitHub releases there to validate the fresh
 user experience. Do not treat the jkmac installation as development source.
 
+Conversation discovery is automatic: ChatBridge checks bounded recent
+conversation links through its managed browser, then falls back to indexed
+search. It validates the complete marker, message role and conversation
+identity. Never ask the owner for the current chat URL; never infer a
+destination from an unverified sidebar/search hit.
+
 Before using orchestration, read the live `watcher_guide` and check
 `watcher_status`; choose BF23 autonomous spawn for new tasks. The orchestrator
 owns the unique WATCHER-CHAT marker and stable request key. A queued result is

@@ -88,3 +88,14 @@ For mutation tools, sensitive/hidden name denial remains unchanged.
 Root containment, relative fs paths, symlink and traversal checks remain.
 Do not treat read permission as authorization to write or to bypass an
 upstream tool/platform block.
+
+
+## BF26: обязательное описание каждого вызова (2026-11-06)
+
+Все MCP-инструменты требуют audit_context — объект с task_id, action
+(операция, затрагиваемые объекты, ожидаемый результат) и authorization_basis
+(разрешение пользователя либо утверждённый план с датой). Схема FastMCP
+отклоняет отсутствие/ошибку этих полей до запуска обработчика; проверка
+аргументов и авторизации самого инструмента не меняется. Указание
+основания разрешения не расширяет полномочия. Владелец может увидеть
+эти данные в owner-only audit.jsonl и mclog. Не включайте секреты.

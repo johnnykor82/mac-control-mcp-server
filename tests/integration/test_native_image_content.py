@@ -19,7 +19,7 @@ class NativeImageContentTests(unittest.TestCase):
        'image_data':encoded,'mime_type':'image/jpeg','image_bytes':len(jpeg),
        'window_ref':'a'*64,'capture_mode':'desktopIndependentWindow'}}):
     return await native_test_server().call_tool('background_app_capture',{
-       'session_token':'test','window_ref':'a'*64})
+       'session_token':'test','window_ref':'a'*64,'audit_context':{"task_id":"BF26-REGRESSION", "action":"Run isolated validation and inspect expected error without changing external state", "authorization_basis":"User approved development testing on 2026-11-06"}})
   answer=asyncio.run(run())
   self.assertFalse(answer.is_error)
   self.assertEqual(len(answer.content),1)
@@ -32,6 +32,6 @@ class NativeImageContentTests(unittest.TestCase):
    with patch.object(n,'execute',return_value={'ok':False,
         'error':{'code':'NOT_AUTHORIZED','message':'No session'}}):
     return await native_test_server().call_tool('background_app_capture',{
-       'session_token':'bad','window_ref':'a'*64})
+       'session_token':'bad','window_ref':'a'*64,'audit_context':{"task_id":"BF26-REGRESSION", "action":"Run isolated validation and inspect expected error without changing external state", "authorization_basis":"User approved development testing on 2026-11-06"}})
   answer=asyncio.run(run())
   self.assertEqual(answer.structured_content['error']['code'],'NOT_AUTHORIZED')

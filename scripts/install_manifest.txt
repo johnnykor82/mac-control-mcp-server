@@ -73,6 +73,7 @@ src/mac_control/audit_middleware.py
 src/mac_control/background_browser_ops.py
 src/mac_control/background_native_ops.py
 src/mac_control/dev_enabled_operations.py
+src/mac_control/mandatory_audit_context.py
 src/mac_control/legacy_adapter.py
 src/mac_control/legacy_handlers/__init__.py
 src/mac_control/legacy_handlers/bridge_media.py

@@ -27,7 +27,7 @@ class LinkIdBoundaryTests(unittest.TestCase):
         for operation, keys in expected.items():
             with self.subTest(operation=operation):
                 schema = self.tools[operation].parameters
-                self.assertEqual(set(schema["properties"]), keys)
+                self.assertEqual(set(schema["properties"]), keys | {"audit_context"})
                 self.assertEqual(schema.get("additionalProperties"), False)
                 self.assertNotIn("link_id", schema["properties"])
                 # This is an external routing key; the handler must not

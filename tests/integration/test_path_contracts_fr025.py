@@ -17,19 +17,19 @@ class CrossToolArgumentContractTests(unittest.TestCase):
     def test_maintenance_alias_keeps_original_json_schema(self):
         maintenance = self.tools["write_file"].parameters
         self.assertEqual(set(maintenance["properties"]), {
-            "path", "content", "expected_sha256"
+            "path", "content", "expected_sha256", "audit_context"
         })
-        self.assertEqual(set(maintenance["required"]), {"path", "content"})
+        self.assertEqual(set(maintenance["required"]), {"path", "content", "audit_context"})
         self.assertFalse(maintenance.get("additionalProperties", True))
         Draft202012Validator.check_schema(maintenance)
 
     def test_legacy_fs_write_retains_project_path_signature(self):
         legacy = self.tools["fs_write"].parameters
         self.assertEqual(set(legacy["properties"]), {
-            "project", "path", "content", "expected_sha256"
+            "project", "path", "content", "expected_sha256", "audit_context"
         })
         self.assertEqual(set(legacy["required"]), {
-            "project", "path", "content"
+            "project", "path", "content", "audit_context"
         })
         self.assertFalse(legacy.get("additionalProperties", True))
         Draft202012Validator.check_schema(legacy)
