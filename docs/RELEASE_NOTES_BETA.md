@@ -544,3 +544,18 @@ and approval documents remain outside the source checkout.
 - Completes beta.43 by handling existing `delivery_uncertain` records whose **exact** stored error is `ChatBridge unknown: request_id=<same persisted request_id>`. Watcher automatically performs bounded GET-only verification of original project, target chat/session, source request/client key, provider user-message ID and **entire immutable delivery text**, then atomically marks delivered without another POST. Other uncertain reasons remain blocked.
 - Affected project `bf23-live-20261105/agent-a` had already advanced to unknown after old 30-minute model wait, while the user-visible user message persisted; beta.44 specifically handles that state. ChatBridge beta.14 releases the model slot after true receipt for future notifications.
 - 18 focused source tests, full 813 integration pytest PASS (1 skipped), 738 unittest PASS (1 skipped), 248 tracked-source manifest and source/history audit 0 critical. Exact beta.44 release archive and JKMac live recovery must still pass before claiming completion.
+
+
+## v0.1.0-beta.48 — mandatory per-tool audit context
+
+- All 141 registered MCP operations now require a typed audit_context object with task_id, action and authorization_basis. Missing or whitespace-only fields are rejected by FastMCP before the handler executes; this context documents user consent and does not override OAuth/tool authorization.
+- Owner-only audit.jsonl records the three fields separately, and mclog renders task, action, approval basis with syntax-colored arguments and contiguous histogram columns.
+- BREAKING SCHEMA: existing ChatGPT client tool definitions must be refreshed at deployment. Install only after a verified rollback and client-side metadata refresh plan; do not replace an actively used MCP connector blindly.
+- Local 822 integration tests, 1 skipped, 1143 subtests; macOS CI green for source commit cb60fc1. No installed Mac is changed merely by publishing this release.
+
+## v0.1.0-beta.48 — обязательный контекст каждого вызова
+
+- Все 141 инструмент Mac Control MCP требуют audit_context: task_id (задача), action (действие/объекты/результат) и authorization_basis (основание разрешения владельца с датой). Отсутствующие и пустые поля отклоняются до выполнения. Описание разрешения не заменяет фактические проверки доступа.
+- В журнале и mclog показываются эти поля; гистограмма сплошная, аргументы разделены цветом.
+- НЕСОВМЕСТИМОЕ ИЗМЕНЕНИЕ схемы: после установки необходимо обновить описание инструментов в ChatGPT и повторно подключить MCP. Без этого старые вызовы будут отклоняться; безопасный откат должен быть доступен до переключения.
+- Исходники проверены 822 тестами и CI. Публикация сама по себе не меняет установленные Mac Server и jkmac.
