@@ -537,3 +537,10 @@ and approval documents remain outside the source checkout.
 - Modern ChatBridge `completed` records with inconsistent/missing local receipt cannot be silently promoted to delivered: fail closed as `delivery_uncertain`. Legacy status-only test fixture compatibility preserved.
 - Paired with ChatBridge **beta.14**, which releases its global model slot immediately after confirmed delivery of Watcher-only notifications rather than waiting up to 30 minutes for an unneeded assistant reply. Other chat messages retain normal completion semantics. Prior BF22/23 reports, ACK, orchestrator approval and owner checks unchanged.
 - TDD RED→GREEN 12 new Watcher proof cases (thinking/unknown/completed and forged/tampered evidence); full regression and exact package audit required before publishing. The live A/B queue, ACK and approval remain pending acceptance until tested on JKMac-2.
+
+
+## beta.44 — safe recovery of already-uncertain notification (2026-11-06)
+
+- Completes beta.43 by handling existing `delivery_uncertain` records whose **exact** stored error is `ChatBridge unknown: request_id=<same persisted request_id>`. Watcher automatically performs bounded GET-only verification of original project, target chat/session, source request/client key, provider user-message ID and **entire immutable delivery text**, then atomically marks delivered without another POST. Other uncertain reasons remain blocked.
+- Affected project `bf23-live-20261105/agent-a` had already advanced to unknown after old 30-minute model wait, while the user-visible user message persisted; beta.44 specifically handles that state. ChatBridge beta.14 releases the model slot after true receipt for future notifications.
+- 18 focused source tests, full 813 integration pytest PASS (1 skipped), 738 unittest PASS (1 skipped), 248 tracked-source manifest and source/history audit 0 critical. Exact beta.44 release archive and JKMac live recovery must still pass before claiming completion.

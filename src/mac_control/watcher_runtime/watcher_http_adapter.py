@@ -281,6 +281,64 @@ def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> b
     raise TransportError("Local receipt verification exceeded history limit")
 
 
+def reconcile_uncertain_receipts(db, dry_run: bool = False):
+    """Recover only an old ChatBridge-unknown delivery with proven user receipt.
+
+    A separate historical delivery may already have reached the orchestrator
+    before the gateway request timed out. Only GET against the recorded
+    session/request and exact user message is permitted. Never resend.
+    """
+    rows = db.execute("""
+        SELECT d.*,l.session_id AS linked_session_id,
+               l.request_id AS linked_request_id
+        FROM deliveries d
+        JOIN projects p ON p.id=d.project_id
+        JOIN chatbridge_delivery_links l ON l.delivery_id=d.id
+        WHERE p.status='enabled' AND d.state='delivery_uncertain'
+          AND l.request_id IS NOT NULL
+          AND d.last_error='ChatBridge unknown: request_id='||l.request_id
+        ORDER BY d.created_at,d.rowid LIMIT 20
+    """).fetchall()
+    results = []
+    for row in rows:
+        did=row["id"]
+        sid=row["linked_session_id"]
+        rid=row["linked_request_id"]
+        try:
+            target=legacy.canonical_url(row["orchestrator_url"])
+            if legacy.canonical_url(db.execute(
+                "SELECT orchestrator_url FROM projects WHERE id=?",
+                (row["project_id"],)).fetchone()["orchestrator_url"])!=target:
+                continue
+            session=api("GET",f"/v1/sessions/{sid}")
+            verify_route(session,sid,target)
+            request=api("GET",f"/v1/requests/{rid}")
+            if not _verified_delivery_receipt(row,sid,rid,request):
+                continue
+            if dry_run:
+                results.append({"id":did,"state":"delivered","would_recover":True})
+                continue
+            changed=db.execute("""
+                UPDATE deliveries SET state='delivered',delivered_at=?,
+                  last_error=NULL
+                WHERE id=? AND state='delivery_uncertain'
+                  AND last_error=?
+            """,(legacy.utc(),did,"ChatBridge unknown: request_id="+rid)).rowcount
+            if changed!=1:
+                continue
+            db.execute("""
+                UPDATE chatbridge_delivery_links
+                SET last_status='receipt_confirmed',last_checked_at=?
+                WHERE delivery_id=? AND session_id=? AND request_id=?
+            """,(legacy.utc(),did,sid,rid))
+            results.append({"id":did,"state":"delivered",
+                            "receipt_confirmed":True,"recovered":True})
+        except (TransportError,ValueError,TypeError,KeyError):
+            # Retain uncertain state; independent evidence may become available.
+            continue
+    return results
+
+
 def finish(db, delivery_id, request, status):
     if status == "completed":
         db.execute(
@@ -882,6 +940,7 @@ def iteration(db, dry_run=False):
     from .watcher_schedule_store import due_to_deliveries
 
     results = []
+    results.extend(reconcile_uncertain_receipts(db, dry_run=dry_run))
     results.extend(reconcile_uncertain_followups(db, dry_run=dry_run))
     from .watcher_browser_dispatch import dispatch_prepared as dispatch_initial
     initial=dispatch_initial(db,api,dry_run=dry_run)

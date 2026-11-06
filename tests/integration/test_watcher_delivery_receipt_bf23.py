@@ -43,6 +43,9 @@ def fixture_gateway(db,monkeypatch,*,status="thinking",changes=None,msg_changes=
     calls=[]
     def api(method,path,body=None):
         calls.append((method,path))
+        if (method,path)==("GET",f"/v1/sessions/{SID}"):
+            return {"session_id":SID,"mode":"persistent",
+                    "conversation_id":URL.rsplit("/c/",1)[1],"project_id":None}
         if (method,path)==("GET","/v1/requests/"+RID):return request
         if (method,path)==("GET",f"/v1/sessions/{SID}/messages?limit=500&after=0"):
             return {"data":[message],"next_cursor":0}
@@ -90,3 +93,35 @@ def test_completed_with_wrong_provenance_is_never_delivered(db,monkeypatch):
     assert result["state"]=="delivery_uncertain"
     assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivery_uncertain"
     assert all(method=="GET" for method,_ in calls)
+
+
+def test_uncertain_delivery_auto_reconciles_exact_original_receipt(db,monkeypatch):
+    calls=fixture_gateway(db,monkeypatch,status="unknown")
+    db.execute("UPDATE deliveries SET state='delivery_uncertain',last_error=?",
+        ("ChatBridge unknown: request_id="+RID,))
+    out=adapter.reconcile_uncertain_receipts(db)
+    assert out and out[0]["state"]=="delivered"
+    assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivered"
+    assert db.execute("SELECT last_status FROM chatbridge_delivery_links").fetchone()[0]=="receipt_confirmed"
+    assert all(m=="GET" for m,_ in calls)
+    assert adapter.reconcile_uncertain_receipts(db)==[]
+
+
+@pytest.mark.parametrize("error",["route_changed", "session_route_mismatch",
+    "ChatBridge unknown: request_id=unrelated", "platform_denied"])
+def test_uncertain_delivery_never_recovers_unrelated_errors(db,monkeypatch,error):
+    calls=fixture_gateway(db,monkeypatch,status="unknown")
+    db.execute("UPDATE deliveries SET state='delivery_uncertain',last_error=?",(error,))
+    assert adapter.reconcile_uncertain_receipts(db)==[]
+    assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivery_uncertain"
+    assert not calls
+
+
+def test_uncertain_delivery_with_tampered_local_message_remains_blocked(db,monkeypatch):
+    calls=fixture_gateway(db,monkeypatch,status="unknown",
+        msg_changes={"content":"not identical to immutable report"})
+    db.execute("UPDATE deliveries SET state='delivery_uncertain',last_error=?",
+        ("ChatBridge unknown: request_id="+RID,))
+    assert adapter.reconcile_uncertain_receipts(db)==[]
+    assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivery_uncertain"
+    assert all(m=="GET" for m,_ in calls)
