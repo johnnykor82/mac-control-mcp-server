@@ -162,5 +162,91 @@ class SelfUpdateTests(unittest.TestCase):
         self.assertIn('--worker', args[0])
 
 
+    def test_with_chatbridge_never_reports_success_when_owned_version_unverified(self):
+        """Regression: watchdog used to report SUCCESS while ChatBridge stayed b12."""
+        def update(*_):
+            self.switch()
+            return 0
+
+        def rollback(root, _baseline):
+            (root / "current").unlink()
+            (root / "current").symlink_to(self.release_a)
+
+        with patch.object(watchdog, "_preflight_health", return_value=True), \
+             patch.object(watchdog, "_update", side_effect=update), \
+             patch.object(watchdog, "_poll_health", return_value=True), \
+             patch.object(watchdog, "_rollback", side_effect=rollback) as restored:
+            outcome = watchdog.run_transaction(
+                self.root, self.release_a, True, self.report.append)
+        self.assertEqual(outcome, "rolled_back")
+        self.assertNotIn("verified", self.report)
+        restored.assert_called_once_with(self.root, self.release_a)
+
+    def test_with_chatbridge_success_requires_verified_latest_owned_service(self):
+        def update(*_):
+            self.switch()
+            return 0
+
+        with patch.object(watchdog, "_preflight_health", return_value=True), \
+             patch.object(watchdog, "_update", side_effect=update), \
+             patch.object(watchdog, "_poll_health", return_value=True), \
+             patch.object(watchdog, "_verify_latest_owned_chatbridge", return_value=True) as verify:
+            outcome = watchdog.run_transaction(
+                self.root, self.release_a, True, self.report.append)
+        self.assertEqual(outcome, "succeeded")
+        verify.assert_called_once_with(self.root)
+
+    def test_chatbridge_opt_out_never_triggers_latest_version_lookup(self):
+        def update(*_):
+            self.switch()
+            return 0
+
+        with patch.object(watchdog, "_preflight_health", return_value=True), \
+             patch.object(watchdog, "_update", side_effect=update), \
+             patch.object(watchdog, "_poll_health", return_value=True), \
+             patch.object(watchdog, "_verify_latest_owned_chatbridge") as verify:
+            outcome = watchdog.run_transaction(
+                self.root, self.release_a, False, self.report.append)
+        self.assertEqual(outcome, "succeeded")
+        verify.assert_not_called()
+
+
+    def test_latest_owned_chatbridge_checks_exact_source_and_runtime_versions(self):
+        from scripts import setup_chatbridge_dependency as bridge
+
+        source = self.root / "deps/chatbridge-source"
+        source.mkdir(parents=True)
+        (source / "pyproject.toml").write_text('version = "0.2.0b12"\n')
+        with patch.object(bridge, "verify_managed_install") as owner, \
+             patch.object(bridge, "managed_paths",
+                          return_value=(source, self.root, self.root)), \
+             patch.object(bridge, "managed_installed_runtime_version",
+                          return_value="0.2.0b12") as runtime, \
+             patch.object(bridge, "latest_published_release",
+                          return_value={"version": "0.2.0b20"}) as official:
+            self.assertFalse(watchdog._verify_latest_owned_chatbridge(self.root))
+            (source / "pyproject.toml").write_text('version = "0.2.0b20"\n')
+            runtime.return_value = "0.2.0b20"
+            self.assertTrue(watchdog._verify_latest_owned_chatbridge(self.root))
+            owner.assert_called()
+            official.assert_called()
+            runtime.assert_called()
+
+    def test_source_runtime_version_mismatch_fails_closed(self):
+        from scripts import setup_chatbridge_dependency as bridge
+
+        source = self.root / "deps/chatbridge-source"
+        source.mkdir(parents=True)
+        (source / "pyproject.toml").write_text('version = "0.2.0b12"\n')
+        with patch.object(bridge, "verify_managed_install"), \
+             patch.object(bridge, "managed_paths",
+                          return_value=(source, self.root, self.root)), \
+             patch.object(bridge, "managed_installed_runtime_version",
+                          return_value="0.2.0b20"), \
+             patch.object(bridge, "latest_published_release") as official:
+            self.assertFalse(watchdog._verify_latest_owned_chatbridge(self.root))
+            official.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

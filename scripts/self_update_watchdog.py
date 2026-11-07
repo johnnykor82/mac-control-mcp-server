@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -111,6 +112,36 @@ def _rollback(root: Path, baseline: Path) -> None:
         start(root)
 
 
+def _verify_latest_owned_chatbridge(root: Path) -> bool:
+    """Do not report successful coupled update until ChatBridge really is latest.
+
+    Uses only the previously installed trusted dependency implementation and
+    the owner's exact managed source/LaunchAgent paths. A version number or
+    reachable service on a foreign port is never sufficient evidence.
+    """
+    from scripts import setup_chatbridge_dependency as bridge
+
+    bridge.verify_managed_install(root)
+    current = bridge.managed_installed_runtime_version(root)
+    if not isinstance(current, str):
+        return False
+    source, _prefix, _data = bridge.managed_paths(root)
+    manifest = source / "pyproject.toml"
+    if (source.is_symlink() or manifest.is_symlink()
+            or not manifest.is_file()):
+        return False
+    version = re.search(r'^version = "(0[.]2[.]0b[0-9]+)"$', manifest.read_text(),
+                        re.MULTILINE)
+    if version is None or version.group(1) != current:
+        return False
+    latest = bridge.latest_published_release()
+    if bridge.should_upgrade_chatbridge(current, latest["version"]):
+        return False
+    # verify_managed_install and managed_installed_runtime_version are already
+    # bound to the managed root, not to a caller-provided HTTP endpoint.
+    return True
+
+
 def run_transaction(root: Path, baseline: Path, with_chatbridge: bool,
                     report, *, health_timeout: float = 45) -> str:
     """Independent transaction: only verified baseline may be restored."""
@@ -134,6 +165,8 @@ def run_transaction(root: Path, baseline: Path, with_chatbridge: bool,
         if not _poll_health(root, timeout=health_timeout,
                             old_pid=initial_pid if current != baseline else None):
             raise RuntimeError("NEW_RELEASE_UNHEALTHY")
+        if with_chatbridge and not _verify_latest_owned_chatbridge(root):
+            raise RuntimeError("OWNED_CHATBRIDGE_NOT_LATEST")
         report("verified")
         return "succeeded"
     except BaseException:
