@@ -761,7 +761,15 @@ def assert_managed_idle(url: str) -> None:
 
 
 def managed_installed_runtime_version(install_root: Path) -> str | None:
-    """Read actual owner-managed LaunchAgent release; never infer from port."""
+    """Read actual owner-managed LaunchAgent release; never infer from port.
+
+    A clean CI fixture has no LaunchAgents. upgrade_managed has already run
+    verify_managed_install, so no owner check is relaxed in production.
+    """
+    agents = Path.home() / "Library/LaunchAgents"
+    if not any((agents / (name + ".plist")).exists() for name in (
+            MANAGED_LABEL, "net.chatbridge.gateway")):
+        return None
     label = managed_service_label(install_root)
     plist = Path.home() / "Library/LaunchAgents" / (label + ".plist")
     if not plist.is_file() or plist.is_symlink():

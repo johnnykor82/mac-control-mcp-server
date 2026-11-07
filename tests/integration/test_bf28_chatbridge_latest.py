@@ -133,3 +133,11 @@ def test_newer_runtime_blocks_upgrade_from_stale_source(tmp_path, monkeypatch):
     monkeypatch.setattr(dep, "download_latest_source",
                         lambda *_: pytest.fail("Do not downgrade running ChatBridge"))
     assert dep.upgrade_managed(tmp_path)["status"] == "current"
+
+
+def test_clean_runner_without_launchagents_has_no_runtime_version(tmp_path, monkeypatch):
+    """CI fixture has no owner service; upgrade_managed's owner guard stays strict."""
+    monkeypatch.setattr(dep.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(dep, "managed_service_label",
+                        lambda *_: pytest.fail("No service, so don't inspect ownership"))
+    assert dep.managed_installed_runtime_version(tmp_path / "MacControlMCP") is None
