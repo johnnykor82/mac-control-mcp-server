@@ -1,15 +1,15 @@
-"""Durable mapping of user-posted conversation markers to verified ChatGPT URLs.
+"""Durable mapping of user- or assistant-posted markers to verified ChatGPT URLs.
 
 Watcher never attaches to the Chrome browser. On cache miss it asks the
 ChatBridge owner to search in the normal ChatGPT UI and to verify the exact
-marker in a user message. A failed/ambiguous lookup cannot poison the cache.
+marker in a real user or assistant message. A failed/ambiguous lookup cannot poison the cache.
 """
 from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
 
-MARKER = re.compile(r"WATCHER-CHAT-[a-f0-9]{32}\Z")
+MARKER = re.compile(r"(?:WC[a-f0-9]{16}|WATCHER-CHAT-[a-f0-9]{32})\Z")
 
 
 def choose(matches):
@@ -49,7 +49,7 @@ def setup(db):
 def resolve(evidence_text, allow_search=True, db=None, transport=None):
     """Cache-first exact match. Never invent a target from current browser tab."""
     if not isinstance(evidence_text, str) or not MARKER.fullmatch(evidence_text):
-        raise ValueError("Provide a dedicated WATCHER-CHAT-<32 lowercase hex> user-message marker")
+        raise ValueError("Provide WC followed by 16 lowercase hex characters (legacy WATCHER-CHAT + 32 hex also accepted)")
     if db is None:
         from .multi_project_watcher import connect
         with connect() as connection:

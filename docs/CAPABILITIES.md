@@ -233,7 +233,7 @@ An unknown delivery must not be blindly resent. See the [full guide](WATCHER_GUI
 ## Delayed checks, pause, and availability
 
 `watcher_schedule_wakeup` stores a delayed check for one verified conversation.
-An exact chat URL or verified `WATCHER-CHAT-<32 lowercase hex>` marker identifies
+An exact chat URL or verified `WC<16 lowercase hex>` marker identifies
 the destination. A marker is a locator, not permission to perform arbitrary work.
 Use list/get/cancel/ack tools to manage checks and explicit project pause/resume
 to control monitoring. One delayed check does not create a recurring automation.

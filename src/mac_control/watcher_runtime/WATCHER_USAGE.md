@@ -57,7 +57,7 @@ destination from an unverified sidebar/search hit.
 
 Before using orchestration, read the live `watcher_guide` and check
 `watcher_status`; choose BF23 autonomous spawn for new tasks. The orchestrator
-owns the unique WATCHER-CHAT marker and stable request key. A queued result is
+owns the unique WC+16-hex marker and stable request key. A queued result is
 not execution completion. Await a verified immutable report, compare it with
 the goal, acknowledge its notification, then separately approve or return for
 rework in the original executor session. Do not equate ACK with goal closure.
@@ -76,7 +76,7 @@ Never confuse a suggested alternative with authorization to bypass a denial.
 
 ## BF-23: autonomous no-URL subagent spawn (owner-authenticated)
 
-The orchestrator publishes a fresh unique `WATCHER-CHAT-<32 lowercase hex>`
+The orchestrator publishes a fresh unique `WC<16 lowercase hex>`
 marker in its **own assistant response** before delegating. Invoke
 `watcher_spawn_subagent(project_id, task_id, orchestrator_marker, prompt, request_key)`
 on owner-authenticated remote MCP. Never supply a user-created executor URL.
@@ -178,8 +178,9 @@ Paused projects stay paused, and provider cooldowns are respected.
 
 ## Delayed checks and verified chat markers
 
-Publish `WATCHER-CHAT-` followed by 32 random lowercase hexadecimal characters
-in the intended conversation. Pass that exact marker to
+Publish `WC` followed by 16 random lowercase hexadecimal characters (`"WC" + secrets.token_hex(8)` in Python)
+in the intended conversation. Previously registered WATCHER-CHAT plus 32 lowercase
+hex characters remains valid for backward compatibility. Pass the exact marker to
 `watcher_resolve_current_chat` or `watcher_schedule_wakeup` as `evidence_text`.
 Watcher checks its local registry first. On a cache miss ChatBridge searches the
 normal interface and verifies a unique exact marker in a user or assistant

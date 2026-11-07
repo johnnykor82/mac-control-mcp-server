@@ -29,7 +29,7 @@ class BF24AgentGuidanceTests(unittest.TestCase):
         for token in ("watcher_spawn_subagent", "watcher_status",
                       "watcher_read_report", "watcher_ack_delivery",
                       "watcher_approve_goal", "watcher_return_for_rework",
-                      "WATCHER-CHAT"):
+                      "WC"):
             self.assertIn(token, guide)
 
     def test_policy_denial_remains_unmodified(self):

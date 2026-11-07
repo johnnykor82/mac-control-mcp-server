@@ -9,7 +9,7 @@ from mac_control.watcher_runtime import multi_project_watcher as legacy
 from mac_control.watcher_runtime import watcher_autonomous as autonomous
 
 ORCH = "https://chatgpt.com/c/11111111-1111-4111-8111-111111111111"
-MARKER = "WATCHER-CHAT-" + "a" * 32
+MARKER = "WC" + "a" * 16
 PROMPT = "Return exactly EXECUTOR_READY for this isolated watcher integration test."
 CONVO = (
     "22222222-2222-4222-8222-222222222222",

@@ -81,8 +81,10 @@ For example:
 > This conversation's exact URL is [URL].
 
 `watcher_schedule_wakeup` accepts a minute delay and a specific objective. If the
-URL is unknown, first place a unique `WATCHER-CHAT-` marker followed by 32 random
-hex characters in the destination conversation and verify it with
+URL is unknown, first place a unique `WC` marker followed by 16 random lowercase
+hex characters in the destination conversation (Python: "WC" + secrets.token_hex(8),
+after import secrets). Legacy WATCHER-CHAT plus 32 hex remains supported.
+Verify the marker with
 `watcher_resolve_current_chat`. The active browser tab is not sufficient evidence.
 
 Use `watcher_list_wakeups`, `watcher_get_wakeup` and `watcher_cancel_wakeup` to
@@ -151,7 +153,7 @@ Explicit security/policy denials are never a reason to reroute. See
 
 ## BF25: автоматическое обнаружение чата без ручного URL
 
-Оркестратор размещает уникальную метку WATCHER-CHAT в собственном сообщении.
+Оркестратор размещает уникальную метку WC + 16 строчных hex-символов в собственном сообщении.
 ChatBridge самостоятельно получает кандидатов из последних разговоров боковой
 панели ChatGPT через управляемый браузер. Если они не подтверждены, применяет
 штатный полнотекстовый поиск. Ссылка из списка — не доказательство: требуется

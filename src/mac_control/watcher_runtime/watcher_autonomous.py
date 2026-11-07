@@ -65,7 +65,7 @@ def _validate(project, task, marker, prompt, key, owner):
     legacy.require_name(project)
     legacy.require_name(task)
     if not isinstance(marker, str) or not marker_resolver.MARKER.fullmatch(marker):
-        raise ValueError("A unique WATCHER-CHAT-<32 lowercase hex> marker is required")
+        raise ValueError("A unique WC + 16 lowercase hex marker is required (legacy WATCHER-CHAT + 32 accepted)")
     if not isinstance(owner, str) or not owner.isascii() or not owner.isdecimal():
         raise PermissionError("Verified GitHub owner required")
     if not isinstance(key, str) or initial.KEY_RX.fullmatch(key) is None:

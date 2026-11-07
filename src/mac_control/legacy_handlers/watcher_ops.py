@@ -70,7 +70,7 @@ def register(mcp):
     def watcher_guide() -> dict:
         """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs. Call watcher_guide to read the full live usage protocol.
 
-        For autonomous BF23 tasks, publish a unique WATCHER-CHAT marker in the
+        For autonomous BF23 tasks, publish a unique WC+16-hex marker in the
         orchestrator assistant message and call watcher_spawn_subagent WITHOUT
         any manual chat URLs. Watcher verifies the marker via ChatBridge
         and creates a persistent executor session. The API returns queued
@@ -152,7 +152,7 @@ def register(mcp):
                                max_no_progress:int=3)->dict:
         """Queue a new autonomous worker WITHOUT manual ChatGPT chat URLs.
 
-        The orchestrator places a unique WATCHER-CHAT marker in its OWN
+        The orchestrator places a unique WC+16-hex marker in its OWN
         assistant response. Watcher resolves that marker through ChatBridge,
         then provisions a distinct persistent executor session. The verified
         GitHub OAuth owner, not the marker, authorizes the request.
@@ -243,7 +243,7 @@ def register(mcp):
     def watcher_schedule_wakeup(delay_minutes:int,objective:str,evidence_text:str="",chat_url:str="",request_key:str="")->dict:
         """Schedule a later verification in THIS SAME verified ChatGPT chat.
 
-        Normally omit chat_url and supply a user-posted WATCHER-CHAT marker
+        Normally omit chat_url and supply a user- or assistant-posted WC+16-hex marker
         as evidence_text; the saved marker registry or ChatBridge built-in UI
         search resolves the exact URL. If ambiguous, fail closed.
         The scheduler is persistent through Mac restarts. Read watcher_guide.
@@ -254,9 +254,9 @@ def register(mcp):
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
     def watcher_resolve_current_chat(evidence_text:str)->dict:
-        """Resolve a WATCHER-CHAT-<32 hex> marker from persistent SQLite first.
+        """Resolve a WC+16-hex marker (or legacy WATCHER-CHAT+32 hex) from SQLite first.
         On a cache miss ChatBridge searches the normal UI and verifies the exact
-        marker in a user message before storing the URL. Watcher never owns Chrome.
+        marker in a user or assistant message before storing the URL. Watcher never owns Chrome.
         """
         return _cli_payload("resolve-chat",{"evidence_text":evidence_text}, timeout=210)
 

@@ -321,7 +321,7 @@ class WatcherRuntimeTest(unittest.TestCase):
 
     def test_marker_cache_reuses_verified_identity(self):
         resolver = importlib.import_module('mac_control.watcher_runtime.watcher_chat_resolver')
-        marker = 'WATCHER-CHAT-' + 'a' * 32
+        marker = 'WC' + 'a' * 16
         response = {'chat_url': URL, 'evidence_verified': True,
                     'verification': 'user_message', 'matches': 1}
         with patch.object(self.adapter, 'api', return_value=response) as api:
