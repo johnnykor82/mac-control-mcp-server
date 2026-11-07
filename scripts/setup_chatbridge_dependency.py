@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reuse ChatBridge or install its checksum-pinned independent release."""
+"""Reuse ChatBridge or install the newest verified official compatible release."""
 from __future__ import annotations
 import argparse
 from contextlib import contextmanager
@@ -27,6 +27,111 @@ RELEASE_SHA256 = "5fc826b36e87e370a6747d5fa95e133aeb808e8b94bfe8fe69536acc0525ff
 RELEASE_DIRECTORY = "chatbridge_gateway-0.2.0b12"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
+# BF28: official published releases replace the legacy beta.12 fallback.
+OFFICIAL_REPO = "johnnykor82/chatbridge"
+RELEASES_API = ("https://api.github.com/repos/" + OFFICIAL_REPO
+                + "/releases?per_page=40")
+RELEASE_TAG = re.compile(r"v0\.2\.0-beta\.([0-9]+)\Z")
+RELEASE_VERSION = re.compile(r"0\.2\.0b([0-9]+)\Z")
+MAX_METADATA = 2 * 1024 * 1024
+
+
+def select_latest_release(releases):
+    """Select newest numerically compatible beta; never trust list ordering."""
+    if not isinstance(releases, list):
+        raise TypeError("Invalid official ChatBridge releases metadata")
+    candidates = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft") or not release.get("prerelease"):
+            continue
+        tag = release.get("tag_name")
+        match = RELEASE_TAG.fullmatch(tag) if isinstance(tag, str) else None
+        if not match:
+            continue
+        number = int(match.group(1))
+        if number < 12:
+            continue
+        version = "0.2.0b" + str(number)
+        dirname = "chatbridge_gateway-" + version
+        archive = dirname + ".tar.gz"
+        root = "https://github.com/" + OFFICIAL_REPO + "/releases/download/" + tag + "/"
+        assets = release.get("assets")
+        urls = {}
+        for asset in assets if isinstance(assets, list) else []:
+            if not isinstance(asset, dict):
+                continue
+            name, url = asset.get("name"), asset.get("browser_download_url")
+            if name in (archive, "SHA256SUMS"):
+                if name in urls or url != root + name:
+                    raise RuntimeError("Untrusted ChatBridge release asset URL")
+                urls[name] = url
+        candidates.append((number, tag, version, dirname, archive, urls))
+    if not candidates:
+        raise RuntimeError("No compatible official ChatBridge beta releases")
+    number, tag, version, dirname, archive, urls = max(candidates, key=lambda pair: pair[0])
+    if len(urls) != 2:
+        raise RuntimeError("Latest ChatBridge release lacks SHA256 or source archive")
+    return {
+        "version": version, "version_number": number, "tag": tag,
+        "directory": dirname, "asset_name": archive,
+        "asset_url": urls[archive], "checksums_url": urls["SHA256SUMS"],
+    }
+
+
+def checksum_for_asset(contents, filename):
+    """Match one exact source asset in bounded official release SHA256SUMS."""
+    if not isinstance(contents, str) or len(contents) > 65536:
+        raise RuntimeError("Invalid ChatBridge SHA256SUMS")
+    digests = []
+    for line in contents.splitlines():
+        match = re.fullmatch(r"([a-f0-9]{64})[ \t]+\*?([A-Za-z0-9_.-]+)", line.strip())
+        if match and match.group(2) == filename:
+            digests.append(match.group(1))
+    if len(digests) != 1:
+        raise RuntimeError("Missing or ambiguous ChatBridge SHA256 checksum")
+    return digests[0]
+
+
+def should_upgrade_chatbridge(installed, available):
+    """Never downgrade a newer installed release or reinstall the same version."""
+    present = RELEASE_VERSION.fullmatch(str(installed))
+    latest = RELEASE_VERSION.fullmatch(str(available))
+    if present is None or latest is None:
+        raise RuntimeError("Unrecognized installed or official ChatBridge version")
+    return int(latest.group(1)) > int(present.group(1))
+
+
+def _trusted_release_response(response):
+    """Require TLS and official GitHub-controlled release asset redirect host."""
+    parsed = urlsplit(response.geturl())
+    if parsed.scheme != "https" or parsed.hostname not in (
+        "github.com", "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com", "api.github.com",
+    ):
+        raise RuntimeError("ChatBridge release request redirected outside GitHub HTTPS")
+
+
+def latest_published_release():
+    """Query official GitHub once, then authenticate exact asset SHA256."""
+    req = urllib.request.Request(RELEASES_API, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "MacControlMCP-ChatBridge-Update",
+    })
+    with urllib.request.urlopen(req, timeout=18) as response:
+        _trusted_release_response(response)
+        data = response.read(MAX_METADATA + 1)
+    if len(data) > MAX_METADATA:
+        raise RuntimeError("Oversized ChatBridge GitHub release metadata")
+    spec = select_latest_release(json.loads(data))
+    with urllib.request.urlopen(spec["checksums_url"], timeout=18) as response:
+        _trusted_release_response(response)
+        manifest = response.read(65537)
+    if len(manifest) > 65536:
+        raise RuntimeError("Oversized ChatBridge checksums")
+    spec["sha256"] = checksum_for_asset(manifest.decode("utf-8"), spec["asset_name"])
+    return spec
+
+
 DEFAULT_URL = "http://127.0.0.1:8787"
 MANAGED_LABEL = "net.chatbridge.gateway.maccontrol"
 
@@ -453,8 +558,13 @@ def assert_installable(url: str, *, label: str = "net.chatbridge.gateway") -> No
             raise RuntimeError("ChatBridge port is unavailable; inspect the existing service") from None
 
 
-def extract_release(archive: Path, destination: Path) -> Path:
+def extract_release(archive: Path, destination: Path, expected_directory=None) -> Path:
     """Extract only bounded regular files/directories from the pinned source distribution."""
+    dirname = expected_directory if expected_directory is not None else RELEASE_DIRECTORY
+    if not isinstance(dirname, str) or not re.fullmatch(
+            r"chatbridge_gateway-0[.]2[.]0b[0-9]+", dirname):
+        raise RuntimeError("Unexpected ChatBridge package root")
+
     total = 0
     seen = set()
     # Bound decompression before tarfile processes extended/PAX metadata.
@@ -472,7 +582,7 @@ def extract_release(archive: Path, destination: Path) -> Path:
     with tarfile.open(unpacked, "r|") as bundle:
         for number, member in enumerate(bundle, 1):
             parts = PurePosixPath(member.name).parts
-            if (number > 2048 or not parts or parts[0] != RELEASE_DIRECTORY
+            if (number > 2048 or not parts or parts[0] != dirname
                     or member.name.startswith("/") or ".." in parts
                     or "\\" in member.name or member.name in seen
                     or not (member.isdir() or member.isfile())
@@ -497,7 +607,7 @@ def extract_release(archive: Path, destination: Path) -> Path:
                             break
                         output.write(chunk)
                 target.chmod(0o700 if member.mode & 0o111 else 0o600)
-    return destination / RELEASE_DIRECTORY
+    return destination / dirname
 
 
 def download_pinned_source(root: Path) -> Path:
@@ -531,30 +641,98 @@ def download_pinned_source(root: Path) -> Path:
     return source
 
 
+def download_latest_source(root: Path, release: dict) -> Path:
+    """Download only SHA256-verified latest source, extract bounded files."""
+    expected = release["directory"]
+    version = release["version"]
+    version_match = RELEASE_VERSION.fullmatch(str(version))
+    if version_match is None:
+        raise RuntimeError("Invalid latest ChatBridge version")
+    tag = release.get("tag") or "v0.2.0-beta." + version_match.group(1)
+    filename = expected + ".tar.gz"
+    expected_url = ("https://github.com/" + OFFICIAL_REPO
+                    + "/releases/download/" + tag + "/" + filename)
+    if (release.get("asset_url") != expected_url
+            or not isinstance(release.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", release["sha256"])):
+        raise RuntimeError("Invalid official ChatBridge release specification")
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    archive = root / "release.tar.gz"
+    downloaded = 0
+    digest = hashlib.sha256()
+    deadline = time.monotonic() + 90
+    try:
+        with urllib.request.urlopen(expected_url, timeout=20) as response, archive.open("xb") as output:
+            _trusted_release_response(response)
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                downloaded += len(chunk)
+                if downloaded > MAX_ARCHIVE or time.monotonic() > deadline:
+                    raise RuntimeError("ChatBridge archive download too large or slow")
+                output.write(chunk)
+                digest.update(chunk)
+    except (OSError, urllib.error.URLError):
+        raise RuntimeError("Could not download current official ChatBridge release") from None
+    if digest.hexdigest() != release["sha256"]:
+        raise RuntimeError("Latest ChatBridge SHA256 mismatch; no installer executed")
+    try:
+        source = extract_release(archive, root / "source", expected)
+    except (OSError, tarfile.TarError, EOFError):
+        raise RuntimeError("Invalid ChatBridge source archive; no installer executed") from None
+    manifest = source / "pyproject.toml"
+    if not manifest.is_file() or not re.search(
+            r'^version = "' + re.escape(version) + r'"$', manifest.read_text(),
+            re.MULTILINE):
+        raise RuntimeError("ChatBridge archive version does not match verified release")
+    return source
+
+
+def _install_verified_source(source: Path, url: str, install_root: Path | None) -> dict:
+    """Keep the verified source under the same owner-controlled install root."""
+    if install_root is not None:
+        permanent, _, _ = managed_paths(install_root)
+        if permanent.is_symlink():
+            raise RuntimeError("Unsafe ChatBridge source directory")
+        if permanent.exists():
+            if not (permanent / "scripts/installer.py").is_file():
+                raise RuntimeError("Unexpected managed ChatBridge source directory")
+            # Never silently install stale source instead of the verified archive.
+            existing_manifest = permanent / "pyproject.toml"
+            candidate_manifest = source / "pyproject.toml"
+            if (not existing_manifest.is_file() or not candidate_manifest.is_file()
+                    or existing_manifest.read_text() != candidate_manifest.read_text()):
+                raise RuntimeError("Existing managed ChatBridge source differs from verified release")
+        else:
+            permanent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            staging = permanent.with_name(".chatbridge-source-pending-" + os.urandom(6).hex())
+            try:
+                shutil.copytree(source, staging, symlinks=False)
+                staging.rename(permanent)
+            finally:
+                if staging.exists():
+                    shutil.rmtree(staging)
+        source = permanent
+    return install(source, url=url, install_root=install_root)
+
+
+def install_latest(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
+    """Install newest verified official release without affecting foreign services."""
+    assert_installable(url, label=MANAGED_LABEL if install_root is not None
+                       else "net.chatbridge.gateway")
+    release = latest_published_release()
+    with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-latest-") as tmp:
+        source = download_latest_source(Path(tmp), release)
+        return _install_verified_source(source, url, install_root)
+
+
 def install_pinned(url: str = DEFAULT_URL, install_root: Path | None = None) -> dict:
     assert_installable(url, label=MANAGED_LABEL if install_root is not None else "net.chatbridge.gateway")
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-") as temporary:
         root = Path(temporary)
         source = download_pinned_source(root)
-        if install_root is not None:
-            permanent, _, _ = managed_paths(install_root)
-            if permanent.is_symlink():
-                raise RuntimeError("Unsafe ChatBridge source directory")
-            if permanent.exists():
-                # A second install never overwrites an unreviewed source checkout.
-                if not (permanent / "scripts/installer.py").is_file():
-                    raise RuntimeError("Unexpected managed ChatBridge source directory")
-            else:
-                permanent.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                staging = permanent.with_name(".chatbridge-source-pending-" + os.urandom(6).hex())
-                try:
-                    shutil.copytree(source, staging, symlinks=False)
-                    staging.rename(permanent)
-                finally:
-                    if staging.exists():
-                        shutil.rmtree(staging)
-            source = permanent
-        return install(source, url=url, install_root=install_root)
+        return _install_verified_source(source, url, install_root)
 
 
 def assert_managed_idle(url: str) -> None:
@@ -582,8 +760,29 @@ def assert_managed_idle(url: str) -> None:
         raise RuntimeError("ChatBridge has active requests; retry update after they finish")
 
 
+def managed_installed_runtime_version(install_root: Path) -> str | None:
+    """Read actual owner-managed LaunchAgent release; never infer from port."""
+    label = managed_service_label(install_root)
+    plist = Path.home() / "Library/LaunchAgents" / (label + ".plist")
+    if not plist.is_file() or plist.is_symlink():
+        return None  # Pre-install fixture or unavailable owner metadata.
+    with plist.open("rb") as stream:
+        info = plistlib.load(stream)
+    release = Path(info["WorkingDirectory"]).expanduser().resolve()
+    _, prefix, _ = managed_paths(install_root)
+    if release.parent != (prefix / "releases").resolve():
+        # A standalone service belongs to a different root: never inspect it
+        # as the currently installed managed dependency (ownership already
+        # established separately by verify_managed_install).
+        return None
+    match = re.fullmatch(r"0[.]2[.]0b([0-9]+)(?:-[a-f0-9]+)?", release.name)
+    if not match:
+        raise RuntimeError("Unrecognized owned ChatBridge running release version")
+    return "0.2.0b" + match.group(1)
+
+
 def upgrade_managed(install_root: Path, *, url: str = DEFAULT_URL) -> dict:
-    """Upgrade only the owner's exact managed service from a pinned release.
+    """Upgrade only owner's exact managed service to newest official release.
 
     The standalone ChatBridge installer controls service rollback and persistent
     Chrome/SQLite; old source is retained if the service upgrade succeeds.
@@ -600,18 +799,23 @@ def upgrade_managed(install_root: Path, *, url: str = DEFAULT_URL) -> dict:
     if not match:
         raise RuntimeError("Cannot identify managed ChatBridge version; upgrade refused")
     previous_version = int(match.group(1))
-    if previous_version >= 12:
-        return {"status": "current", "version": "0.2.0b" + str(previous_version)}
+    release = latest_published_release()
+    current = "0.2.0b" + str(previous_version)
+    running = managed_installed_runtime_version(install_root)
+    if running and should_upgrade_chatbridge(current, running):
+        current = running
+    if not should_upgrade_chatbridge(current, release["version"]):
+        return {"status": "current", "version": current}
     assert_managed_idle(url)
     with tempfile.TemporaryDirectory(prefix="mac-control-chatbridge-upgrade-") as temporary:
-        new_source = download_pinned_source(Path(temporary))
+        new_source = download_latest_source(Path(temporary), release)
         staging = source.with_name(".chatbridge-source-pending-" + os.urandom(6).hex())
         if staging.exists() or staging.is_symlink():
             raise RuntimeError("Unsafe ChatBridge source staging path")
         shutil.copytree(new_source, staging, symlinks=False)
         try:
-            if 'version = "0.2.0b12"' not in (staging / "pyproject.toml").read_text():
-                raise RuntimeError("Pinned ChatBridge source version mismatch")
+            if ('version = "' + release["version"] + '"') not in (staging / "pyproject.toml").read_text():
+                raise RuntimeError("Latest ChatBridge source version mismatch")
             command = [sys.executable, str(staging / "scripts/installer.py"),
                        "upgrade", "--prefix", str(prefix), "--state-dir", str(state),
                        "--label", managed_service_label(install_root)]
@@ -632,7 +836,7 @@ def upgrade_managed(install_root: Path, *, url: str = DEFAULT_URL) -> dict:
             except OSError:
                 retained.rename(source)
                 raise
-            return {"status": "upgraded", "version": "0.2.0b12",
+            return {"status": "upgraded", "version": release["version"],
                     "previous_source": str(retained)}
         finally:
             if staging.exists():
@@ -670,7 +874,7 @@ def ensure(url: str = DEFAULT_URL, source: Path | None = None, install_root: Pat
         if existing.is_dir() and (existing / "scripts/installer.py").is_file():
             return install(existing, url=url, install_root=install_root)
     return (install(source, url=url, install_root=install_root) if source is not None
-            else install_pinned(url, install_root=install_root))
+            else install_latest(url, install_root=install_root))
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

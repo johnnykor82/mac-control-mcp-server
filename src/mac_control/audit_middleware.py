@@ -8,6 +8,8 @@ The local audit file is owner-only and rotated daily.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+from .chat_identity import valid_chat_marker
 import json
 import hashlib
 import logging
@@ -171,7 +173,10 @@ def extract_audit_context(arguments: object) -> dict | None:
     fields = ("task_id", "action", "authorization_basis")
     if not all(isinstance(value.get(k), str) and value[k].strip() for k in fields):
         return None
-    return {key: value[key][:512] for key in fields}
+    extracted = {key: value[key][:512] for key in fields}
+    if valid_chat_marker(value.get("chat_marker")):
+        extracted["chat_marker"] = value["chat_marker"]
+    return extracted
 
 
 def conversation_ref(meta):
@@ -243,6 +248,8 @@ class AuditMiddleware(Middleware):
         purpose = extract_audit_context(arguments)
         if purpose is not None:
             record["audit_context"] = purpose
+            if "chat_marker" in purpose:
+                record["chat_marker"] = purpose["chat_marker"]
         chat = conversation_ref(getattr(context.message, "meta", None))
         if chat:
             record["chat_ref"] = chat

@@ -72,8 +72,9 @@ src/mac_control/assets/gui_agent.swift
 src/mac_control/audit_middleware.py
 src/mac_control/background_browser_ops.py
 src/mac_control/background_native_ops.py
+src/mac_control/chat_identity.py
 src/mac_control/dev_enabled_operations.py
-src/mac_control/mandatory_audit_context.py
+src/mac_control/github_oauth_cache.py
 src/mac_control/legacy_adapter.py
 src/mac_control/legacy_handlers/__init__.py
 src/mac_control/legacy_handlers/bridge_media.py
@@ -93,8 +94,8 @@ src/mac_control/legacy_handlers/ssh_manage_ops.py
 src/mac_control/legacy_handlers/system_ops.py
 src/mac_control/legacy_handlers/watcher_ops.py
 src/mac_control/maintenance_ops.py
+src/mac_control/mandatory_audit_context.py
 src/mac_control/operations.py
-src/mac_control/github_oauth_cache.py
 src/mac_control/remote_auth.py
 src/mac_control/remote_http.py
 src/mac_control/remote_mount.py

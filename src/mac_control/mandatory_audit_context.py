@@ -10,6 +10,8 @@ import inspect
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .chat_identity import valid_chat_marker
+
 
 class AuditContext(BaseModel):
     """Structured per-call intent, recorded in the owner-only MCP audit."""
@@ -30,6 +32,25 @@ class AuditContext(BaseModel):
         description="User permission or pre-approved PLAN reference, including "
                     "approval date. An assertion is not permission to bypass MCP policy.",
     )
+
+    chat_marker: str | None = Field(
+        default=None,
+        max_length=45,
+        description=(
+            "Optional stable ChatGPT conversation marker: WC plus 16 lowercase "
+            "hex characters. Reuse the same marker on EVERY call in this chat "
+            "regardless of task_id. Publish it once in an assistant reply when "
+            "first issuing; do not create a new chat. Legacy long markers accepted. "
+            "Not an authorization credential."
+        ),
+    )
+
+    @field_validator("chat_marker")
+    @classmethod
+    def require_exact_marker(cls, value: str | None) -> str | None:
+        if value is not None and not valid_chat_marker(value):
+            raise ValueError("Expected WC plus 16 lowercase hex characters")
+        return value
 
     @field_validator("action", "authorization_basis")
     @classmethod
@@ -75,6 +96,12 @@ def _wrapped_handler(handler):
         " action (operation, affected targets and expected outcome), and"
         " authorization_basis (user consent or approved plan and date)."
         " This is an audit record, never permission to bypass tool security."
+        "\nChat identity: on FIRST Mac Control use in a new ChatGPT conversation,"
+        " call chat_marker_issue once if no WC marker is present; publish the"
+        " returned WC marker in your next assistant reply. Reuse the SAME"
+        " audit_context.chat_marker for EVERY subsequent call in that chat,"
+        " including different tasks/turns. Never create a new ChatGPT chat"
+        " to get an ID. Marker is correlation only, NOT authorization."
     )
     guard.__signature__ = signature
     guard.__annotations__ = {**getattr(handler, "__annotations__", {}),

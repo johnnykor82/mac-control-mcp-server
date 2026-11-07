@@ -271,6 +271,25 @@ def register(mcp) -> None:
                                      'openWorldHint': False})(fn)
 
     @readonly
+    def chat_marker_issue() -> dict:
+        """Issue a new WC+16hex label ONLY on first use in an unmarked chat.
+
+        The assistant publishes the new marker in its reply, then reuses the
+        same audit_context.chat_marker for every subsequent Mac Control call.
+        If the current chat already contains a WC marker, DO NOT issue another.
+        This is correlation, not authentication; it does not create a ChatGPT chat.
+        """
+        from .chat_identity import generate_chat_marker
+        marker = generate_chat_marker()
+        return {
+            "chat_marker": marker,
+            "instruction": "Publish once in this ChatGPT conversation and reuse "
+                           "in audit_context.chat_marker on all subsequent calls.",
+            "creates_chat": False,
+            "authorizes_actions": False,
+        }
+
+    @readonly
     def audit_tail(limit: int = 20) -> dict:
         """Read the latest metadata-only audit events, skipping malformed JSONL."""
         limit = max(1, min(int(limit), 100))

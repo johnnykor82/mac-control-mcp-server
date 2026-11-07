@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 import re
 import time
-import textwrap
 
 DEFAULT_LOG = (Path(os.environ["MAC_CONTROL_DATA_ROOT"]) / "logs"
                if os.environ.get("MAC_CONTROL_DATA_ROOT") else
@@ -150,7 +149,9 @@ def display_args(event, limit=80):
         task = safe_args(context["task_id"], 96)
         action = safe_args(context["action"], 512)
         basis = safe_args(context["authorization_basis"], 512)
-        base = f"Задача: {task} | Действие: {action} | Основание: {basis}"
+        label = context.get("chat_marker")
+        chat_label = f"Чат: {label} | " if isinstance(label, str) and label else ""
+        base = f"{chat_label}Задача: {task} | Действие: {action} | Основание: {basis}"
         others = (dict(arguments) if isinstance(arguments, dict) else {})
         others.pop("audit_context", None)
         if others:
@@ -163,6 +164,44 @@ def display_args(event, limit=80):
         payload = event["argument_info"]
         return safe_args(payload, limit) if isinstance(payload, dict) and payload else "нет"
     return "—"
+
+
+def event_chat_marker(event):
+    """Owner-visible chat label, falling back to anonymized client chat ref."""
+    context = event.get("audit_context")
+    if not isinstance(context, dict):
+        args = event.get("arguments")
+        context = args.get("audit_context") if isinstance(args, dict) else None
+    marker = event.get("chat_marker")
+    if not isinstance(marker, str) and isinstance(context, dict):
+        marker = context.get("chat_marker")
+    if isinstance(marker, str) and marker:
+        return marker
+    return event.get("chat_ref") or None
+
+
+def filter_by_chat(events, marker):
+    """Isolate all task IDs belonging to the same chat; do not rewrite logs."""
+    if marker is None:
+        return list(events)
+    return [e for e in events if event_chat_marker(e) == marker]
+
+
+def chat_groups(events):
+    """Return stable chat labels with counts sorted by activity."""
+    counts = collections.Counter(event_chat_marker(e) or "Без метки" for e in events)
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def next_chat_filter(current, labels):
+    """Cycle through existing conversation labels; never manufacture one."""
+    labels = list(dict.fromkeys(labels))
+    if not labels:
+        return None
+    if current is None or current not in labels:
+        return labels[0]
+    index = labels.index(current) + 1
+    return labels[index] if index < len(labels) else None
 
 
 def is_error(event):
@@ -302,8 +341,10 @@ def build_physical_rows(events, width, mode):
 
 
 def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
-         mode="compact", cache=None):
+         mode="compact", cache=None, chat_filter=None):
     """Render one frame; offset and page size are physical lines, not records."""
+    all_events = events
+    events = filter_by_chat(events, chat_filter)
     height, width = scr.getmaxyx()
     scr.erase()
 
@@ -338,8 +379,10 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
          now.astimezone().strftime("%d.%m.%Y  %H:%M:%S"), muted | bold)
     line(1, f" ЗА ЧАС: {len(recent)} запросов    {bad_hour} ошибок ({pct:.1f}%)    "
             f"{running} выполняется    среднее {mean:.2f} с", quiet)
+    groups_label = "ЧАТОВ" if width >= 95 else "ГРУПП"
     line(2, f" 24 ЧАСА: {len(day)} запросов / {sum(is_error(e) for e in day)} ошибок"
-            f"     АРХИВ: {len(events)} запросов / {bad_total} ошибок", muted)
+            f"     АРХИВ: {len(events)} запросов / {bad_total} ошибок"
+            f"     {groups_label}: {len(chat_groups(all_events))}", muted)
 
     chart_height = min(6, max(3, (height - 18) // 2)) if height >= 18 else 0
     header_y = 4
@@ -370,10 +413,10 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
     names = {"compact": "1:одна", "wrap": "2:перенос", "detail": "3:подробно"}
     line(header_y - 1,
          " " + names[mode] + " | m/1/2/3 — режим | e — ошибки | ↑↓/PgUp/PgDn/колесо — "
-         "прокрутка | g — начало | G — конец | q — выход", curses.A_DIM)
+         "прокрутка | c — чаты | a — все | g/G — край | q — выход", curses.A_DIM)
 
-    has_chat = width >= 95 and any(e.get("chat_ref") for e in events)
-    chat_width = 12 if has_chat else 0
+    has_chat = width >= 95 and any(event_chat_marker(e) for e in events)
+    chat_width = min(23, max(12, width // 5)) if has_chat else 0
     cmd_width = max(12, min(32, width // 4))
     chat_header = f" {'ЧАТ':{chat_width}}" if has_chat else ""
     args_x = 1 + 8 + (1 + chat_width if has_chat else 0) + 1 + cmd_width + 1
@@ -382,7 +425,7 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
          f"{'АРГУМЕНТЫ':{args_width}} ИТОГ", muted | bold)
 
     filtered = [e for e in events if is_error(e)] if errors_only else events
-    key = (id(events), len(events), mode, width, errors_only)
+    key = (id(all_events), len(events), mode, width, errors_only, chat_filter)
     if cache is not None and cache.get("key") == key:
         physical = cache["rows"]
     else:
@@ -405,9 +448,10 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
         if command in ("custom_command", "custom_query") and isinstance(payload, dict):
             command = str(payload.get("operation") or command)
         tm = event["started"].astimezone().strftime("%H:%M:%S") if first else ""
-        chat = event.get("chat_ref", "")
-        chat_part = (f" {('Чат ' + chat[:8]) if isinstance(chat, str) and chat else '—':{chat_width}}"
-                     if has_chat else "")
+        chat = event_chat_marker(event)
+        chat_name = (chat if chat.startswith(("WC", "WATCHER-CHAT-"))
+                     else "Чат " + chat[:8]) if isinstance(chat, str) and chat else "—"
+        chat_part = (f" {chat_name[:chat_width]:{chat_width}}" if has_chat else "")
         label = f" {tm:8}{chat_part} {command[:cmd_width] if first else '':{cmd_width}} "
         line(y, label + args[:args_width].ljust(args_width) +
              (" " + result if first else ""), quiet)
@@ -436,13 +480,14 @@ def draw(scr, events, invalid, log_dir, now, offset, errors_only=False,
     end = min(len(physical), offset + page_size)
     line(height - 1,
          f" Строки {offset+1 if physical else 0}–{end} из {len(physical)}"
-         f" | записей {len(filtered)} | режим: {names[mode]} | обновление 2 с",
+         f" | записей {len(filtered)} | чат: {chat_filter or 'все'}"
+         f" | режим: {names[mode]} | обновление 2 с",
          curses.A_DIM)
     scr.refresh()
     return offset, min(page_size, max(0, len(physical) - offset))
 
 
-def main(scr, log_dir, mode="compact"):
+def main(scr, log_dir, mode="compact", chat_filter=None):
     """Input-driven curses loop: batch keys, handle wheel, redraw on change."""
     try:
         curses.curs_set(0)
@@ -502,7 +547,8 @@ def main(scr, log_dir, mode="compact"):
             redraw = True
         if redraw:
             offset, visible = draw(scr, rows, invalid, log_dir, now, offset,
-                                   errors_only, mode=mode, cache=cache)
+                                   errors_only, mode=mode, cache=cache,
+                                   chat_filter=chat_filter)
             redraw = False
 
         # Consume a burst of up to 512 queued events without a sleep per key.
@@ -515,7 +561,7 @@ def main(scr, log_dir, mode="compact"):
             handled += 1
             if key in (ord("q"), ord("Q"), 27):
                 return
-            old_state = (offset, mode, errors_only)
+            old_state = (offset, mode, errors_only, chat_filter)
             delta = scroll_delta(key, visible)
             if key == curses.KEY_MOUSE:
                 try:
@@ -539,10 +585,20 @@ def main(scr, log_dir, mode="compact"):
                     mode = DISPLAY_MODES[key - ord("1")]
                 offset = 0
                 cache.clear()
+            elif key in (ord("c"), ord("C")):
+                labels = [name for name, _ in chat_groups(rows)
+                          if name != "Без метки"]
+                chat_filter = next_chat_filter(chat_filter, labels)
+                offset = 0
+                cache.clear()
+            elif key in (ord("a"), ord("A")):
+                chat_filter = None
+                offset = 0
+                cache.clear()
             if key == curses.KEY_RESIZE:
                 cache.clear()
                 redraw = True
-            if (offset, mode, errors_only) != old_state:
+            if (offset, mode, errors_only, chat_filter) != old_state:
                 redraw = True
         # Poll at 25ms rather than imposing 100ms per scrolling command.
         if not redraw:
@@ -554,5 +610,15 @@ if __name__ == "__main__":
     parser.add_argument("--log-dir", type=Path, default=DEFAULT_LOG)
     parser.add_argument("--mode", choices=DISPLAY_MODES, default="compact",
                         help="compact=1 line; wrap=wrapped arguments; detail=4 labelled fields")
+    parser.add_argument("--chat", help="Start in a single WC chat marker group")
+    parser.add_argument("--list-chats", action="store_true",
+                        help="List chat groups and call counts, no TUI")
     arguments = parser.parse_args()
-    curses.wrapper(main, arguments.log_dir.expanduser(), arguments.mode)
+    if arguments.list_chats:
+        events, invalid = load(arguments.log_dir.expanduser())
+        for marker, count in chat_groups(events):
+            print(f"{marker:48} {count} calls")
+        print(f"Invalid audit lines: {invalid}")
+    else:
+        curses.wrapper(main, arguments.log_dir.expanduser(), arguments.mode,
+                       arguments.chat)

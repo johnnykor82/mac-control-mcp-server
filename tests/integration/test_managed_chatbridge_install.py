@@ -254,7 +254,9 @@ class AdoptedLegacyChatBridgeLabelTests(unittest.TestCase):
             with patch.object(cb.Path, 'home', return_value=home), \
                  patch.object(cb.subprocess, 'run', return_value=launch), \
                  patch.object(cb, 'assert_managed_idle'), \
-                 patch.object(cb, 'download_pinned_source') as download:
+                 patch.object(cb, 'managed_installed_runtime_version', return_value='0.2.0b11'), \
+                 patch.object(cb, 'latest_published_release', return_value={'version':'0.2.0b12','version_number':12}), \
+                 patch.object(cb, 'download_latest_source') as download:
                 with tempfile.TemporaryDirectory() as source_dir:
                     package = Path(source_dir) / 'package'
                     package.mkdir()
@@ -459,7 +461,8 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             with patch.object(cb, 'verify_managed_install'), \
                  patch.object(cb, 'managed_service_label', return_value=cb.MANAGED_LABEL), \
                  patch.object(cb, 'assert_managed_idle'), \
-                 patch.object(cb, 'download_pinned_source', return_value=pinned), \
+                 patch.object(cb, 'latest_published_release', return_value={'version':'0.2.0b12','version_number':12}), \
+                 patch.object(cb, 'download_latest_source', return_value=pinned), \
                  patch.object(cb.subprocess, 'run',
                               return_value=SimpleNamespace(returncode=0)) as runner, \
                  patch.object(cb, 'verify', return_value={'status':'compatible'}):
@@ -477,7 +480,8 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             root = Path(directory)
             self.make_source(root, '0.2.0b11')
             with patch.object(cb, 'verify_managed_install'), \
-                 patch.object(cb, 'download_pinned_source') as download, \
+                 patch.object(cb, 'latest_published_release', return_value={'version':'0.2.0b12','version_number':12}), \
+                 patch.object(cb, 'download_latest_source') as download, \
                  patch.object(cb.subprocess, 'run') as runner, \
                  patch.object(cb.urllib.request, 'urlopen', return_value=io.BytesIO(
                     b'{"active":2,"browser":{"active_requests":1}}')):
@@ -491,7 +495,8 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             root = Path(directory)
             self.make_source(root, '0.2.0b12')
             with patch.object(cb, 'verify_managed_install'), \
-                 patch.object(cb, 'download_pinned_source') as download, \
+                 patch.object(cb, 'latest_published_release', return_value={'version':'0.2.0b12','version_number':12}), \
+                 patch.object(cb, 'download_latest_source') as download, \
                  patch.object(cb.subprocess, 'run') as runner:
                 result = cb.upgrade_managed(root, url=cb.DEFAULT_URL)
             self.assertEqual(result['status'], 'current')

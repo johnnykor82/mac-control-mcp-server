@@ -3,7 +3,7 @@
 Автоматически воспроизводимый аудит исходников и схем MCP; без вызова
 инструментов, доступа к пользовательским аргументам и изменения production.
 
-- Всего: **141** инструментов (112 frozen, 29 дополнительных).
+- Всего: **142** инструментов (112 frozen, 30 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
 - Статические исключения из 20 модулей: PermissionError=36, RuntimeError=36, TypeError=2, ValueError=137.
 - Не классифицированных статических сообщений: **28**.
@@ -16,6 +16,7 @@
 | --- | ---: |
 | audit | 2 |
 | background | 14 |
+| chat | 1 |
 | chrome | 13 |
 | custom | 2 |
 | fs | 10 |
@@ -60,6 +61,7 @@
 | background_browser_list | audit_context, session_tokens | 2 | additional |
 | background_browser_reopen | audit_context, session_token | 2 | additional |
 | background_browser_snapshot | audit_context, session_token | 4 | additional |
+| chat_marker_issue | audit_context | 1 | additional |
 | chrome_chat_adopt | audit_context, task_id | 2 | frozen |
 | chrome_chat_archive | audit_context, task_id | 2 | frozen |
 | chrome_chat_cleanup | audit_context | 1 | frozen |

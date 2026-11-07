@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 252
+Included files: 256
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -25,6 +25,7 @@ docs/CAPABILITIES.ru.md
 docs/CHATBRIDGE_BROWSER_MIGRATION.md
 docs/CHATGPT_LINK_ROUTING_DIAGNOSTICS.md
 docs/CHATGPT_SETUP.ru.md
+docs/CHAT_MARKER_AND_MClOG.md
 docs/DIAGNOSTICS_FIX.md
 docs/DIAGNOSTICS_FIX.ru.md
 docs/E9_RELEASE_PROVENANCE_AUDIT_2026-11-02.md
@@ -94,6 +95,7 @@ src/mac_control/assets/gui_agent.swift
 src/mac_control/audit_middleware.py
 src/mac_control/background_browser_ops.py
 src/mac_control/background_native_ops.py
+src/mac_control/chat_identity.py
 src/mac_control/dev_enabled_operations.py
 src/mac_control/github_oauth_cache.py
 src/mac_control/legacy_adapter.py
@@ -154,6 +156,8 @@ tests/integration/test_background_modes.py
 tests/integration/test_bf24_agent_tool_guidance.py
 tests/integration/test_bf26_mandatory_audit_context.py
 tests/integration/test_bf27_short_marker.py
+tests/integration/test_bf28_chat_marker.py
+tests/integration/test_bf28_chatbridge_latest.py
 tests/integration/test_chatbridge_bootstrap.py
 tests/integration/test_chatbridge_browser_adapter.py
 tests/integration/test_chatbridge_dependency.py

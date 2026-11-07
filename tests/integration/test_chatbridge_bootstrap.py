@@ -37,14 +37,14 @@ class BootstrapTests(unittest.TestCase):
         refused = urllib.error.URLError(ConnectionRefusedError(errno.ECONNREFUSED, "refused"))
         with patch.object(dependency, "verify", side_effect=refused), \
              patch.object(dependency, "assert_installable"), \
-             patch.object(dependency, "install_pinned", return_value={}) as install:
+             patch.object(dependency, "install_latest", return_value={}) as install:
             dependency.ensure("http://127.0.0.1:9999")
         install.assert_called_once_with("http://127.0.0.1:9999", install_root=None)
         for error in (TimeoutError(), urllib.error.URLError(socket.timeout()),
                       urllib.error.HTTPError(dependency.DEFAULT_URL, 401, "Unauthorized", {}, None),
                       RuntimeError("incompatible API"), ValueError("invalid JSON")):
             with patch.object(dependency, "verify", side_effect=error), \
-                 patch.object(dependency, "install_pinned") as install:
+                 patch.object(dependency, "install_latest") as install:
                 with self.assertRaises(RuntimeError):
                     dependency.ensure()
                 install.assert_not_called()
@@ -150,7 +150,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_cli_default_and_opt_out_plan_on_python39(self):
         script = Path(installer.__file__)
-        for flags, expected in (([], "reuse_or_install_pinned"), (["--without-chatbridge"], "skip_setup_preserve_existing")):
+        for flags, expected in (([], "reuse_or_install_latest_verified"), (["--without-chatbridge"], "skip_setup_preserve_existing")):
             result = subprocess.run(["/usr/bin/python3", str(script), "--plan", *flags], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(expected, result.stdout)

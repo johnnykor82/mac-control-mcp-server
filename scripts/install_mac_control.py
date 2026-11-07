@@ -1072,7 +1072,7 @@ def main() -> int:
                   "entrypoint": str(info["current"] / "bin/mac-control-stdio-mcp.sh"),
                   "installs_packages": True, "network_required": True,
                   "watcher": "install_with_chatbridge" if args.with_watcher and with_chatbridge else "skip",
-                  "chatbridge": "reuse_or_install_pinned" if with_chatbridge else "skip_setup_preserve_existing",
+                  "chatbridge": "reuse_or_install_latest_verified" if with_chatbridge else "skip_setup_preserve_existing",
                   "existing_stable_modified": False,
                   "native_background_gui": ("skip_preserve_existing" if args.with_gui is False else
                                             "explicit_prebuilt_install" if args.with_gui is True else

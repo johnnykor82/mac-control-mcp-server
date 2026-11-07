@@ -51,7 +51,7 @@ class MaintenanceTests(unittest.TestCase):
         self.tools = registry.tools
 
     def test_registers_all_compatibility_tools_with_safe_annotations(self):
-        self.assertEqual(set(self.tools), {'audit_tail', 'audit_search', 'list_workspace',
+        self.assertEqual(set(self.tools), {'audit_tail', 'audit_search', 'chat_marker_issue', 'list_workspace',
             'process_snapshot', 'read_service_log', 'mcp_diagnostics', 'read_file',
             'write_file', 'restart_server', 'self_update_start', 'self_update_status', 'custom_query', 'custom_command'})
         self.assertFalse(self.registry.annotations['custom_command']['readOnlyHint'])
