@@ -404,51 +404,67 @@ def _reserved_count(db):
                           'sending','submitted')""").fetchone()[0]
 
 
-def pump(db,api,*,now=None,dry_run=False,max_new_sends=2):
-    """Progress independent workers fairly, once each per tick, bounded."""
+def pump(db,api,*,now=None,dry_run=False,max_new_sends=2,pipeline=True):
+    """Start bounded workers within one tick; do not wait a tick per phase.
+
+    Each worker state may be attempted at most once per cycle, so failed
+    lookups and uncertain requests cannot be retried inside that cycle.
+    Three phases permit marker -> session -> submit for two independent
+    workers, while completed-turn GET polling is read-only and fair.
+    """
     setup(db)
     at=time.time() if now is None else float(now)
-    rows=db.execute("""SELECT a.* FROM autonomous_subagents a
-        LEFT JOIN projects p ON p.id=a.project_id
-        WHERE (p.id IS NULL OR p.status='enabled')
-          AND ((a.state='marker_pending' AND a.next_lookup_at<=?)
-               OR a.state IN ('session_pending','session_ready','submitted'))
-        ORDER BY CASE a.state WHEN 'submitted' THEN 0
-                 WHEN 'session_ready' THEN 1
-                 WHEN 'session_pending' THEN 2 ELSE 3 END,
-                 a.created_at,a.task_id LIMIT 64""",(at,)).fetchall()
     results=[]
     sends=0
-    for row in rows:
-        if len(results)>=MAX_EDGES_PER_TICK:
-            break
-        state=row["state"]
-        # New workers cannot consume unbounded sessions while old jobs run.
-        if state=="marker_pending" and _reserved_count(db)>=MAX_PARALLEL_WORKERS:
-            continue
-        if state=="session_ready" and sends>=min(MAX_NEW_SENDS_PER_TICK,max_new_sends):
-            continue
-        if dry_run:
-            results.append({"task":row["project_id"]+"/"+row["task_id"],
-                            "state":state,"would_process":True})
-            continue
-        if state=="marker_pending":
-            # Never search ChatGPT (including UI) during provider cooldown.
-            if not _status(api):
-                results.append({"task":row["project_id"]+"/"+row["task_id"],
-                                "state":"deferred"})
+    visited=set()
+    for phase in range(1 if dry_run or not pipeline else 3):
+        progressed=False
+        rows=db.execute("""SELECT a.* FROM autonomous_subagents a
+            LEFT JOIN projects p ON p.id=a.project_id
+            WHERE (p.id IS NULL OR p.status='enabled')
+              AND ((a.state='marker_pending' AND a.next_lookup_at<=?)
+                   OR a.state IN ('session_pending','session_ready','submitted'))
+            ORDER BY CASE a.state WHEN 'submitted' THEN 0
+                     WHEN 'session_ready' THEN 1
+                     WHEN 'session_pending' THEN 2 ELSE 3 END,
+                     a.created_at,a.task_id LIMIT 64""",(at,)).fetchall()
+        for row in rows:
+            if len(results)>=MAX_EDGES_PER_TICK:
+                break
+            state=row["state"]
+            visited_key=(row["project_id"],row["task_id"],state)
+            if visited_key in visited:
                 continue
-            result=_lookup(db,row,api,at)
-        elif state=="session_pending":
-            result=_create_session(db,row,api)
-        elif state=="session_ready":
-            result=_send_first(db,row,api)
-            if result.get("state")=="submitted":
-                sends+=1
-                result["new_post"]=True
-        else:
-            result=_bind_result(db,row,api)
-        results.append(result)
+            if state=="marker_pending" and _reserved_count(db)>=MAX_PARALLEL_WORKERS:
+                continue
+            if state=="session_ready" and sends>=min(
+                    MAX_NEW_SENDS_PER_TICK,max_new_sends):
+                continue
+            visited.add(visited_key)
+            if dry_run:
+                results.append({"task":row["project_id"]+"/"+row["task_id"],
+                                "state":state,"would_process":True})
+                continue
+            if state=="marker_pending":
+                if not _status(api):
+                    results.append({"task":row["project_id"]+"/"+row["task_id"],
+                                    "state":"deferred"})
+                    continue
+                result=_lookup(db,row,api,at)
+            elif state=="session_pending":
+                result=_create_session(db,row,api)
+            elif state=="session_ready":
+                result=_send_first(db,row,api)
+                if result.get("state")=="submitted":
+                    sends+=1
+                    result["new_post"]=True
+            else:
+                result=_bind_result(db,row,api)
+            results.append(result)
+            if result.get("state") not in ("deferred",state):
+                progressed=True
+        if len(results)>=MAX_EDGES_PER_TICK or not progressed:
+            break
     return results
 
 

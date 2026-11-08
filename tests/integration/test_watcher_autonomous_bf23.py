@@ -369,20 +369,19 @@ def test_bf33_paused_project_cannot_process_queued_work(db):
     autonomous.enqueue(db, "paused33", "worker-a", MARKER, PROMPT,
                        "bf33-paused-worker-01", "123")
     autonomous.pump(db, b, now=1_000_000)
-    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "session_pending"
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "submitted"
     db.execute("UPDATE projects SET status='paused' WHERE id='paused33'")
     before = len(b.calls)
     autonomous.pump(db, b, now=1_000_000)
     assert len(b.calls) == before
-    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "session_pending"
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "submitted"
 
 
 def test_bf33_completed_turn_waits_for_session_binding_without_resend(db):
     b = Bridge()
     autonomous.enqueue(db, "pilot33", "worker-a", MARKER, PROMPT,
                        "bf33-binding-worker-01", "123")
-    for _ in range(3):
-        autonomous.pump(db, b, now=1_000_000)
+    autonomous.pump(db, b, now=1_000_000)
     sid = next(iter(b.sessions))
     assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "submitted"
     conv = b.sessions[sid]["conversation_id"]
@@ -451,3 +450,36 @@ def test_bf33_paused_pending_workers_do_not_keep_watcher_active(db):
     counts=legacy.active_work_counts(db)
     assert counts["pending_autonomous_subagents"]==0
     assert counts["active"] is False
+
+
+def test_bf33_both_workers_receive_initial_post_in_one_scheduler_tick(db):
+    """Short model turns must still overlap rather than stagger by 20s ticks."""
+    b=DelayedBridge()
+    for n in (1,2):
+        autonomous.enqueue(db,"pilot33",f"worker-{n}",MARKER,PROMPT,
+                           f"bf33-single-tick-{n}-unique","123")
+    events=autonomous.pump(db,b,now=1_000_000)
+    assert len(b.sent)==2,events
+    assert db.execute("SELECT COUNT(*) FROM autonomous_subagents "
+        "WHERE state='submitted'").fetchone()[0]==2
+    assert len({path for path,key in b.sent})==2
+    assert len({key for path,key in b.sent})==2
+
+
+def test_bf33_pipeline_dispatches_two_before_either_completes(db):
+    """BF33 R9: short tasks must not need separate 20-second ticks to start."""
+    b=DelayedBridge()
+    for n in (1,2):
+        autonomous.enqueue(db,"pilot33",f"parallel-{n}",MARKER,PROMPT,
+                           f"bf33-pipeline-{n}-unique","123")
+    events=autonomous.pump(db,b,now=1_000_000,pipeline=True)
+    assert len(b.sent)==2, events
+    assert [b.requests[f"request-{n}"]["status"] for n in (1,2)] == [
+        "running","running"]
+    assert {r["state"] for r in db.execute(
+        "SELECT state FROM autonomous_subagents")}=={"submitted"}
+    assert sum(e.get("new_post",False) for e in events)==2
+    assert len({key for _,key in b.sent})==2
+    # No automatic redelivery or extra worker despite another tick.
+    autonomous.pump(db,b,now=1_000_001,pipeline=True)
+    assert len(b.sent)==2
