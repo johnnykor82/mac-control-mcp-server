@@ -286,16 +286,29 @@ class WatcherRuntimeTest(unittest.TestCase):
 
     def test_followup_queue_idempotency(self):
         module = importlib.import_module('mac_control.watcher_runtime.watcher_browser_followups')
-        self.core.register_task(self.db, 'project-one', 'task-one', EXECUTOR)
-        self.db.execute("UPDATE tasks SET state='completed'")
-        self.db.execute("INSERT INTO chatbridge_task_sessions VALUES('project-one','task-one','session-one')")
+        owned = importlib.import_module('mac_control.watcher_runtime.watcher_browser_dispatch')
+        owned.register_owned_project(self.db, 'owned-browser',
+            'https://chatgpt.com/c/33333333-3333-4333-8333-333333333333', '123')
+        self.core.register_task(self.db, 'owned-browser', 'task-one', EXECUTOR)
+        self.db.execute("UPDATE tasks SET state='completed' WHERE project_id='owned-browser'")
+        self.db.execute("INSERT INTO chatbridge_task_sessions VALUES('owned-browser','task-one','session-one')")
         prompt = 'Review this result and address the remaining acceptance criteria.'
-        first = module.enqueue(self.db, 'project-one', 'task-one', prompt, 'followup-one')
-        again = module.enqueue(self.db, 'project-one', 'task-one', prompt, 'followup-one')
+        first = module.enqueue(self.db, 'owned-browser', 'task-one', prompt, 'followup-one')
+        again = module.enqueue(self.db, 'owned-browser', 'task-one', prompt, 'followup-one')
         self.assertEqual(first['revision'], again['revision'])
         self.assertTrue(again['duplicate'])
+        goal=self.db.execute("SELECT state FROM goals WHERE project_id='owned-browser'").fetchone()
+        self.assertEqual(goal[0], 'running')
         with self.assertRaises(ValueError):
-            module.enqueue(self.db, 'project-one', 'task-one', prompt + ' Change.', 'followup-one')
+            module.enqueue(self.db, 'owned-browser', 'task-one', prompt + ' Change.', 'followup-one')
+        # A legacy browser project without verified owner is NOT an escape
+        # hatch for unsupervised followup work.
+        legacy_url='https://chatgpt.com/c/44444444-4444-4444-8444-444444444444'
+        self.core.register_task(self.db, 'project-one', 'legacy-task', legacy_url)
+        self.db.execute("UPDATE tasks SET state='completed' WHERE project_id='project-one'")
+        self.db.execute("INSERT INTO chatbridge_task_sessions VALUES('project-one','legacy-task','legacy-session')")
+        with self.assertRaises(PermissionError):
+            module.enqueue(self.db, 'project-one', 'legacy-task', prompt, 'legacy-followup')
 
     def test_idle_http_cycle_never_opens_network(self):
         with patch.object(self.adapter, 'api', side_effect=AssertionError('Unexpected network')):

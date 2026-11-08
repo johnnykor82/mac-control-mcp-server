@@ -156,12 +156,17 @@ def register(mcp):
         assistant response. Watcher resolves that marker through ChatBridge,
         then provisions a distinct persistent executor session. The verified
         GitHub OAuth owner, not the marker, authorizes the request.
+        Independent Supervisor is mandatory. When no rubric is supplied,
+        derive bounded criteria from the task, or fail closed for long prompts.
         Returns marker_pending; never treats queueing as a delivered result.
         """
         from ..account_profile import authenticated_profile
         from ..watcher_runtime import multi_project_watcher as core
         from ..watcher_runtime import watcher_autonomous as auto
+        from ..watcher_runtime import watcher_goal_supervisor as goals
         owner=authenticated_profile()["id"]
+        # An omitted rubric must never silently disable independent review.
+        goal_criteria=goal_criteria or goals.default_criteria(prompt)
         with closing(core.connect()) as db:
             return auto.enqueue(db,_name(project_id),_name(task_id),
                                 orchestrator_marker,prompt,request_key,owner,
@@ -333,12 +338,22 @@ def register(mcp):
         Requires ACK of previous result, preserves old immutable reports,
         queues a new uniquely identified revision. ChatBridge idempotency
         prevents duplicate sends; uncertain submission is quarantined.
-        Returns prepared; monitor using watcher_status/read_result.
+        Supervisor is mandatory for original executor session continuations.
+        Verify owner binding and automatically register missing review before
+        a followup becomes dispatchable; old immutable reports are preserved.
         """
-        return _cli_payload("followup-browser",{
-            "project_id":_name(project_id),"task_id":_name(task_id),
-            "prompt":prompt,"request_key":request_key,
-        })
+        from ..account_profile import authenticated_profile
+        from ..watcher_runtime import multi_project_watcher as core
+        from ..watcher_runtime import watcher_browser_followups as followups
+        owner=authenticated_profile()["id"]
+        with closing(core.connect()) as db:
+            existing=db.execute("""SELECT owner_subject FROM
+                chatbridge_browser_project_owners WHERE project_id=?""",
+                (_name(project_id),)).fetchone()
+            if not existing or existing["owner_subject"]!=owner:
+                raise PermissionError("Followup requires authenticated project owner")
+            return followups.enqueue(
+                db,_name(project_id),_name(task_id),prompt,request_key)
 
     @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
     def watcher_pause_project(project_id:str)->dict:

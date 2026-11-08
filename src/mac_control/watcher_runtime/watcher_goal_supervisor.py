@@ -67,6 +67,21 @@ def setup(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_goals_state ON goals(state)")
 
 
+def default_criteria(prompt: str) -> str:
+    """Bounded task-specific review contract; fail closed if context cannot fit."""
+    if not isinstance(prompt,str) or not prompt.strip() or "\\0" in prompt:
+        raise ValueError("Supervisor requires a concrete task prompt")
+    prefix=("Review the executor's latest answer independently for completion, "
+            "correctness, substantive evidence, and compliance with the task below. "
+            "Do not accept a superficial confirmation or invented citations. "
+            "If incomplete, request concrete bounded rework in the SAME session. "
+            "Original executor task:\n")
+    criteria=prefix+prompt
+    if len(criteria)>8000:
+        raise ValueError("Supervisor requires explicit goal_criteria for a prompt exceeding 8000 characters")
+    return criteria
+
+
 def register_goal(db,project,task,owner,criteria,*,max_turns=12,
                   max_elapsed_seconds=7200,max_no_progress=3):
     legacy.require_name(project);legacy.require_name(task)

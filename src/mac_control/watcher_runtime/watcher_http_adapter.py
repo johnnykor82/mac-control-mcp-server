@@ -500,7 +500,7 @@ def quarantine_crashed_followups(db):
     return alerts
 
 
-def dispatch_prepared_followups(db, dry_run: bool = False):
+def dispatch_prepared_followups(db, dry_run: bool = False, max_new_sends: int = 2):
     """Dispatch queued revisions with idempotent IDs; quarantine lost ACK."""
     from .watcher_browser_followups import prepare_for_dispatch
     rows=prepare_for_dispatch(db)
@@ -511,12 +511,24 @@ def dispatch_prepared_followups(db, dry_run: bool = False):
     gateway=api("GET","/v1/system/status")
     if gateway.get("rate_limit",{}).get("provider_rate_limited"):
         return [{"state":"deferred","reason":"provider_cooldown"}]
-    # Even two overlapping expensive ChatGPT tool sessions can trigger
-    # provider-wide 429; launch the next turn only after the last finishes.
-    if int(gateway.get("active") or 0) >= 1:
-        return [{"state":"deferred","reason":"other_request_active"}]
+    # Two independent persistent executor sessions may run concurrently.
+    # Cap provider-wide active work and per-cycle sends, fail closed on 429.
+    try:
+        active=int(gateway.get("active") or 0)
+        capacity=int(gateway.get("capacity") or 2)
+    except (ValueError,TypeError):
+        return [{"state":"deferred","reason":"capacity_unknown"}]
+    slots=max(0,min(2,capacity)-active)
+    if slots==0:
+        return [{"state":"deferred","reason":"other_requests_at_capacity"}]
     output=[]
-    for r in rows[:1]:
+    new_sends=0
+    for r in rows[:min(slots,max_new_sends)]:
+        # Provider throttle may change after our first POST.
+        current=api("GET","/v1/system/status")
+        if current.get("rate_limit",{}).get("provider_rate_limited"):
+            output.append({"state":"deferred","reason":"provider_cooldown"})
+            break
         name=r["project_id"]+"/"+r["task_id"]
         task=db.execute("SELECT chat_url FROM tasks WHERE project_id=? AND id=?",
                         (r["project_id"],r["task_id"])).fetchone()
@@ -572,8 +584,9 @@ def dispatch_prepared_followups(db, dry_run: bool = False):
         except BaseException:
             db.execute("ROLLBACK")
             raise
+        new_sends+=1
         output.append({"task":name,"state":"watching","revision":r["revision"],
-                       "request_id":rid})
+                       "request_id":rid,"new_post":True})
     return output
 
 
@@ -708,6 +721,73 @@ def reconcile_uncertain_followups(db, dry_run: bool = False):
     return updates
 
 
+def _poll_supervised_followup(db, task):
+    """Settle ONLY the saved revisioned request into its independent reviewer.
+
+    Never infer a completed turn from chat history, never POST here, and never
+    produce a direct delivery before Supervisor has reviewed source evidence.
+    """
+    from . import watcher_goal_supervisor as goals
+    p,t=task["project_id"],task["id"]
+    row=db.execute("""SELECT * FROM chatbridge_browser_followups
+        WHERE project_id=? AND task_id=? ORDER BY revision DESC LIMIT 1""",
+        (p,t)).fetchone()
+    if not row or row["state"]!="submitted":
+        return []
+    goal=db.execute("SELECT state FROM goals WHERE project_id=? AND task_id=?",
+                    (p,t)).fetchone()
+    if not goal or goal["state"] not in ("running","executor_submitted"):
+        return []
+    try:
+        saved=db.execute("""SELECT session_id FROM chatbridge_task_sessions
+            WHERE project_id=? AND task_id=?""",(p,t)).fetchone()
+        if not saved or row["session_id"]!=saved["session_id"]:
+            raise ValueError("Followup session identity changed")
+        sid=row["session_id"]
+        verify_route(api("GET",f"/v1/sessions/{sid}"),sid,task["chat_url"])
+        req=api("GET",f"/v1/requests/{row['request_id']}")
+        if (req.get("request_id")!=row["request_id"]
+                or req.get("session_id")!=sid
+                or req.get("client_request_id")!=row["client_request_id"]):
+            raise ValueError("Followup request identity mismatch")
+        state=req.get("status")
+        if state not in ("completed","in_progress","running","queued","pending"):
+            raise ValueError("Followup request has unknown or failed status")
+        if state!="completed":
+            return []
+        verify_route(req,sid,task["chat_url"])
+        # Both the Supervisor turn and followup state must survive/crash
+        # together. Never leave a recorded goal turn paired with a
+        # permanently submitted continuation after a process failure.
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            goals.record_settled(db,p,t,req)
+            moved=db.execute("""UPDATE chatbridge_browser_followups
+                SET state='completed' WHERE project_id=? AND task_id=?
+                AND revision=? AND state='submitted'""",
+                (p,t,row["revision"])).rowcount
+            if moved!=1:
+                raise ValueError("Followup changed concurrently")
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        return [{"task":p+"/"+t,"state":"goal_review_pending",
+                 "revision":row["revision"]}]
+    except sqlite3.OperationalError:
+        return [{"task":p+"/"+t,"state":"deferred","reason":"database_busy"}]
+    except TransportError:
+        return [{"task":p+"/"+t,"state":"deferred","reason":"transport"}]
+    except (ValueError,KeyError,TypeError):
+        # Fail closed on route/request mismatch, never send a duplicate.
+        db.execute("""UPDATE chatbridge_browser_followups
+            SET state='uncertain',last_error='supervised_followup_identity_failed'
+            WHERE project_id=? AND task_id=? AND revision=? AND state='submitted'""",
+            (p,t,row["revision"]))
+        return [{"task":p+"/"+t,"state":"uncertain",
+                 "reason":"supervised_followup_identity_failed"}]
+
+
 def poll_executor_tasks(db, dry_run: bool = False):
     """Complete registered executor chats using ChatBridge backend end_turn data."""
     rows = db.execute("""
@@ -741,8 +821,11 @@ def poll_executor_tasks(db, dry_run: bool = False):
                 continue
         from . import watcher_goal_supervisor as goals
         if goals.is_goal(db,task['project_id'],task['id']):
-            # Supervisor owns goal turn routing, including automatic rework;
-            # the legacy browser watcher must never notify an intermediate.
+            # The existing initial request goes through poll_initial above.
+            # A newly supervised legacy followup must first settle its exact
+            # saved provider turn; THEN a separate Supervisor can evaluate it.
+            # Rework initiated by Supervisor is polled in its own goal pump.
+            events.extend(_poll_supervised_followup(db,task))
             continue
         try:
             mapping = db.execute(
@@ -957,7 +1040,7 @@ def iteration(db, dry_run=False):
     if new_posts==0:
         followups=dispatch_prepared_followups(db,dry_run=dry_run)
         results.extend(followups)
-        new_posts+=sum(e.get("state")=="submitted" for e in followups)
+        new_posts+=sum(bool(e.get("new_post")) for e in followups)
     results.extend(poll_executor_tasks(db,dry_run=dry_run))
     if not dry_run:
         sync_completed(db)

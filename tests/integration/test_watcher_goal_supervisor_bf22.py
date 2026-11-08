@@ -448,3 +448,146 @@ def test_bf33_paused_reviews_do_not_consume_active_project_capacity(db,monkeypat
     monkeypatch.setattr(goals,"_create_reviewer",create)
     goals.pump(db,Bridge())
     assert db.execute("SELECT state FROM goals WHERE project_id='active33'").fetchone()[0]=="supervisor_session_ready"
+
+
+def test_bf33_p07_followup_auto_installs_supervisor_for_original_executor(db):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    assert not goals.is_goal(db, "pilot23", "agent-a")
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f" * 64, "/tmp/immutable-original.md", "2026-11-08"))
+    message = ("Research how bounded parallel queues differ from serial execution. "
+               "Compare fairness, overlap, cancellation and backpressure, with evidence.")
+    result=followups.enqueue(db,"pilot23","agent-a",message,"bf33-p07-same-a-01")
+    assert result["state"]=="prepared" and result["revision"]==1
+    assert goals.is_goal(db,"pilot23","agent-a")
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="running"
+    assert db.execute("SELECT session_id FROM chatbridge_task_sessions").fetchone()[0]=="sid-executor"
+
+
+def test_bf33_p07_completed_followup_goes_to_supervisor_not_direct_delivery(db):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f" * 64, "/tmp/immutable-original.md", "2026-11-08"))
+    prompt="Research parallel dispatch for multiple independent tasks, with a concise comparison of approaches."
+    followups.enqueue(db,"pilot23","agent-a",prompt,"bf33-p07-followup-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='followup-request-1'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,stable_since=NULL,result_sha256=NULL,result_path=NULL")
+    bridge=Bridge()
+    bridge.requests["followup-request-1"]={
+        "request_id":"followup-request-1","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-followup-a-01",
+        "status":"completed","assistant_message_id":"followup-message-1",
+        "answer":"Research shows two concurrent requests may finish out-of-order."}
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    old=adapter.api
+    adapter.api=bridge
+    try:
+        adapter.poll_executor_tasks(db)
+    finally:
+        adapter.api=old
+        monkeypatch.undo()
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==1
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_pending"
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==0
+    assert db.execute("SELECT state FROM chatbridge_browser_followups").fetchone()[0]=="completed"
+
+
+def test_bf33_p07_retrofit_followup_requires_independent_supervisor_before_delivery(db,monkeypatch):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f"*64,"/tmp/original-immutable-result.md","2026-11-08"))
+    followups.enqueue(db,"pilot23","agent-a",
+                      "Research advantages and failure modes of multi-executor parallel scheduling.",
+                      "bf33-p07-reviewed-research-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='followup-request-review'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,stable_since=NULL,result_path=NULL,result_sha256=NULL")
+    bridge=Bridge()
+    bridge.requests["followup-request-review"]={
+        "request_id":"followup-request-review","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-reviewed-research-a-01","status":"completed",
+        "assistant_message_id":"message-1",
+        "answer":"Bounded concurrency permits overlapping requests. Fairness and 429 backpressure are separate."}
+    monkeypatch.setattr(adapter,"api",bridge)
+    events=adapter.poll_executor_tasks(db)
+    assert events and events[0]["state"]=="goal_review_pending"
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==0
+    for _ in range(8):
+        goals.pump(db,bridge)
+        if db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready":
+            break
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    assert db.execute("SELECT COUNT(*) FROM goal_decisions").fetchone()[0]==1
+    report=db.execute("SELECT * FROM deliveries").fetchone()
+    assert report is not None and "Результат требует проверки оркестратором" in report["payload"]
+    from pathlib import Path
+    completed=db.execute("SELECT result_path,result_sha256 FROM tasks WHERE id='agent-a'").fetchone()
+    body=Path(completed["result_path"]).read_text()
+    import hashlib
+    assert "Supervisor model opinion:" in body
+    assert hashlib.sha256(body.encode()).hexdigest()==completed["result_sha256"]
+    assert db.execute("SELECT session_id FROM chatbridge_task_sessions").fetchone()[0]=="sid-executor"
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==1
+
+
+def test_bf33_p07_public_spawn_always_installs_supervisor(db,monkeypatch):
+    import contextlib
+    from mac_control.legacy_handlers import watcher_ops
+    from mac_control import account_profile
+    from mac_control.watcher_runtime import watcher_autonomous as auto
+    class Tools:
+        def __init__(self):self.ops={}
+        def tool(self,**kwargs):
+            def register(fn):
+                self.ops[fn.__name__]=fn
+                return fn
+            return register
+    tools=Tools()
+    watcher_ops.register(tools)
+    monkeypatch.setattr(account_profile,"authenticated_profile",lambda:{"id":"123"})
+    monkeypatch.setattr(legacy,"connect",lambda:db)
+    monkeypatch.setattr(watcher_ops,"closing",lambda db:contextlib.nullcontext(db))
+    # Initial spawn must never opt out implicitly just because no goal_criteria.
+    out=tools.ops["watcher_spawn_subagent"](
+        "pilot23","new-agent", "WC0123456789abcdef",
+        "Research bounded concurrency, fairness and independent review mechanisms in agents.",
+        "bf33-p07-mandatory-initial-a-01")
+    assert out["state"]=="marker_pending"
+    assert goals.is_goal(db,"pilot23","new-agent")
+    criteria=db.execute("SELECT criteria FROM goals WHERE task_id='new-agent'").fetchone()[0]
+    assert "Research bounded concurrency" in criteria
+
+
+def test_bf33_p07_supervised_followup_transaction_rolls_back_on_crash(db,monkeypatch):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f"*64,"/tmp/immutable-prior.md","2026-11-08"))
+    followups.enqueue(db,"pilot23","agent-a",
+                      "Research fairness and crash-safe state transitions for parallel orchestration.",
+                      "bf33-p07-crash-rollback-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='rev-1-request'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,result_sha256=NULL,result_path=NULL")
+    b=Bridge()
+    b.requests["rev-1-request"]={"request_id":"rev-1-request","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-crash-rollback-a-01","status":"completed",
+        "assistant_message_id":"crash-message-1","answer":"Study of concurrency with evidence."}
+    monkeypatch.setattr(adapter,"api",b)
+    real=goals.record_settled
+    def crash_after_recording(*args,**kwargs):
+        real(*args,**kwargs)
+        raise sqlite3.OperationalError("simulated disk contention after goal insert")
+    monkeypatch.setattr(goals,"record_settled",crash_after_recording)
+    out=adapter.poll_executor_tasks(db)
+    assert out and out[0]["state"]=="deferred"
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==0
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="running"
+    assert db.execute("SELECT state FROM chatbridge_browser_followups").fetchone()[0]=="submitted"
