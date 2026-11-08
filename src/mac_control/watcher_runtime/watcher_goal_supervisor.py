@@ -24,6 +24,8 @@ ACTIONS = frozenset({
 TRANSIENT = ("review_pending", "supervisor_session_ready",
              "supervisor_submitted", "supervisor_recovering", "continuation_pending", "executor_submitted")
 INFLIGHT = ("supervisor_session_creating","supervisor_sending","executor_sending")
+MAX_PARALLEL_REVIEWS = 2
+MAX_GOAL_EDGES_PER_TICK = 6
 
 
 def setup(db: sqlite3.Connection) -> None:
@@ -207,8 +209,14 @@ def record_settled(db,project,task,req):
 
 def _ready_gateway(api):
     status=api("GET","/v1/system/status")
-    return (not status.get("rate_limit",{}).get("provider_rate_limited")
-            and int(status.get("active") or 0)<1)
+    if status.get("rate_limit",{}).get("provider_rate_limited"):
+        return False
+    try:
+        active=int(status.get("active") or 0)
+        capacity=int(status.get("capacity") or MAX_PARALLEL_REVIEWS)
+    except (TypeError,ValueError):
+        return False
+    return 0<=active<min(MAX_PARALLEL_REVIEWS,capacity)
 
 
 def _create_reviewer(db,row,api):
@@ -455,31 +463,63 @@ def _poll_continuation(db,row,api):
     return {"state":"review_pending"}
 
 
-def pump(db,api,*,dry_run=False,now=None):
-    """One bounded Supervisor or executor edge per Watcher cycle."""
+def pump(db,api,*,dry_run=False,now=None,max_new_sends=2):
+    """Advance distinct goals fairly, including GETs for completed reviews.
+
+    One state transition per goal per tick; no goal or paused project can
+    monopolize the whole cycle. External sends share a bounded cycle budget.
+    """
     setup(db)
-    row=db.execute("SELECT * FROM goals WHERE state IN ("+
-        ",".join("?" for _ in TRANSIENT)+") ORDER BY created_ts,project_id,task_id LIMIT 1",
-        TRANSIENT).fetchone()
-    if not row:return []
-    if dry_run:return [{"state":row["state"],"would_process":True}]
+    rows=db.execute("SELECT g.* FROM goals g JOIN projects p "
+        "ON p.id=g.project_id AND p.status='enabled' WHERE g.state IN ("+
+        ",".join("?" for _ in TRANSIENT)+") ORDER BY "
+        "CASE g.state WHEN 'supervisor_submitted' THEN 0 "
+        "WHEN 'executor_submitted' THEN 1 "
+        "WHEN 'supervisor_recovering' THEN 2 "
+        "WHEN 'supervisor_session_ready' THEN 3 "
+        "WHEN 'continuation_pending' THEN 4 ELSE 5 END, "
+        "g.created_ts,g.project_id,g.task_id LIMIT 64",TRANSIENT).fetchall()
+    if not rows:return []
+    results=[]
+    sent=0
     at=time.time() if now is None else float(now)
-    if (at-row["created_ts"]>row["max_elapsed_seconds"]
-            and row["state"]!="supervisor_recovering"):
-        return [_mark(db,row,"budget_exhausted","max_elapsed_seconds_reached")]
-    # An owner-reconciled review is ALREADY completed: the next edge only
-    # re-reads immutable source proof. Elapsed budget still forbids new sends.
-    if row["state"]=="review_pending":
-        result=_create_reviewer(db,row,api)
-    elif row["state"]=="supervisor_session_ready":
-        result=_submit_reviewer(db,row,api)
-    elif row["state"] in ("supervisor_submitted","supervisor_recovering"):
-        result=_poll_reviewer(db,row,api)
-    elif row["state"]=="continuation_pending":
-        result=_send_continuation(db,row,api)
-    else:
-        result=_poll_continuation(db,row,api)
-    return [result]
+    for row in rows:
+        if len(results)>=MAX_GOAL_EDGES_PER_TICK:
+            break
+        state=row["state"]
+        if state in ("supervisor_session_ready","continuation_pending") and sent>=max_new_sends:
+            continue
+        if dry_run:
+            results.append({"task":row["project_id"]+"/"+row["task_id"],
+                            "state":state,"would_process":True})
+            continue
+        if (at-row["created_ts"]>row["max_elapsed_seconds"] and
+                state!="supervisor_recovering"):
+            result=_mark(db,row,"budget_exhausted","max_elapsed_seconds_reached")
+        elif state=="review_pending":
+            # Cap provisioned reviewer sessions as well as outbound requests.
+            occupied=db.execute("SELECT COUNT(*) FROM goals g "
+                "JOIN projects p ON p.id=g.project_id AND p.status='enabled' "
+                "WHERE g.state IN ('supervisor_session_creating',"
+                "'supervisor_session_ready','supervisor_sending',"
+                "'supervisor_submitted')").fetchone()[0]
+            if occupied>=MAX_PARALLEL_REVIEWS:
+                continue
+            result=_create_reviewer(db,row,api)
+        elif state=="supervisor_session_ready":
+            result=_submit_reviewer(db,row,api)
+        elif state in ("supervisor_submitted","supervisor_recovering"):
+            result=_poll_reviewer(db,row,api)
+        elif state=="continuation_pending":
+            result=_send_continuation(db,row,api)
+        else:
+            result=_poll_continuation(db,row,api)
+        if ((state=="supervisor_session_ready" and result.get("state")=="supervisor_submitted")
+                or (state=="continuation_pending" and result.get("state")=="executor_submitted")):
+            sent+=1
+            result["new_post"]=True
+        results.append(result)
+    return results
 
 
 def quarantine_inflight(db):

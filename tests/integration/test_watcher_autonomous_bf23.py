@@ -328,3 +328,126 @@ def test_summary_redacts_prompt_marker_and_owner(db):
     assert "owner_subject" not in result[0]
     assert "marker" not in result[0]
     assert result[0]["state"] == "marker_pending"
+
+
+# BF33 — read-only/synthetic regression tests of real parallel contract.
+class DelayedBridge(Bridge):
+    """Acknowledge dispatch but keep ChatGPT responses pending independently."""
+
+    def __call__(self, method, path, payload=None):
+        if (method, path) == ("GET", "/v1/system/status"):
+            return {"rate_limit": {"provider_rate_limited": False},
+                    "active": sum(r["status"] != "completed"
+                                  for r in self.requests.values()), "capacity": 10}
+        if method == "POST" and path.endswith("/messages"):
+            out = super().__call__(method, path, payload)
+            self.requests[out["request_id"]]["status"] = "running"
+            return out
+        return super().__call__(method, path, payload)
+
+
+def test_bf33_two_workers_dispatch_concurrently_and_finish_out_of_order(db):
+    b = DelayedBridge()
+    for n in (1, 2):
+        autonomous.enqueue(db, "pilot33", f"worker-{n}", MARKER, PROMPT,
+                           f"bf33-worker-{n}-unique", "123")
+    for _ in range(3):
+        autonomous.pump(db, b, now=1_000_000)
+    assert len(b.sent) == 2, "Second worker must dispatch while first is running"
+    assert {x["state"] for x in db.execute(
+        "SELECT state FROM autonomous_subagents")} == {"submitted"}
+    b.requests["request-2"]["status"] = "completed"
+    autonomous.pump(db, b, now=1_000_000)
+    states = dict(db.execute(
+        "SELECT task_id,state FROM autonomous_subagents"))
+    assert states == {"worker-1": "submitted", "worker-2": "bound"}
+    assert len(b.sent) == 2, "Read-only polling must never duplicate POST"
+
+
+def test_bf33_paused_project_cannot_process_queued_work(db):
+    b = Bridge()
+    autonomous.enqueue(db, "paused33", "worker-a", MARKER, PROMPT,
+                       "bf33-paused-worker-01", "123")
+    autonomous.pump(db, b, now=1_000_000)
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "session_pending"
+    db.execute("UPDATE projects SET status='paused' WHERE id='paused33'")
+    before = len(b.calls)
+    autonomous.pump(db, b, now=1_000_000)
+    assert len(b.calls) == before
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "session_pending"
+
+
+def test_bf33_completed_turn_waits_for_session_binding_without_resend(db):
+    b = Bridge()
+    autonomous.enqueue(db, "pilot33", "worker-a", MARKER, PROMPT,
+                       "bf33-binding-worker-01", "123")
+    for _ in range(3):
+        autonomous.pump(db, b, now=1_000_000)
+    sid = next(iter(b.sessions))
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "submitted"
+    conv = b.sessions[sid]["conversation_id"]
+    b.sessions[sid]["conversation_id"] = None  # transient eventual consistency
+    autonomous.pump(db, b, now=1_000_000)
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "submitted"
+    b.sessions[sid]["conversation_id"] = conv
+    autonomous.pump(db, b, now=1_000_000)
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0] == "bound"
+    assert len(b.sent) == 1
+
+
+def test_bf33_second_worker_reports_while_first_still_running(db):
+    from mac_control.watcher_runtime import watcher_browser_dispatch as initial
+    b=DelayedBridge()
+    for n in (1,2):
+        autonomous.enqueue(db,"pilot33",f"worker-{n}",MARKER,PROMPT,
+                           f"bf33-ready-{n}-unique","123")
+    for _ in range(3):
+        autonomous.pump(db,b,now=1_000_000)
+    assert len(b.sent)==2
+    b.requests["request-2"]["status"]="completed"
+    autonomous.pump(db,b,now=1_000_000)
+    row=db.execute("SELECT * FROM tasks WHERE id='worker-2'").fetchone()
+    assert row is not None
+    assert initial.poll_initial(db,row,b)==[]
+    db.execute("UPDATE tasks SET stable_since=0 WHERE id='worker-2'")
+    result=initial.poll_initial(db,row,b)
+    assert result and result[0]["state"]=="completed"
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==1
+    assert db.execute("SELECT state FROM autonomous_subagents WHERE task_id='worker-1'").fetchone()[0]=="submitted"
+    assert b.requests["request-1"]["status"]=="running"
+
+
+def test_bf33_third_worker_waits_for_bounded_capacity(db):
+    b=DelayedBridge()
+    for n in (1,2,3):
+        autonomous.enqueue(db,"pilot33",f"worker-{n}",MARKER,PROMPT,
+                           f"bf33-cap-{n}-unique","123")
+    for _ in range(4):
+        autonomous.pump(db,b,now=1_000_000)
+    assert len(b.sent)==2
+    assert db.execute("SELECT state FROM autonomous_subagents WHERE task_id='worker-3'").fetchone()[0]=="marker_pending"
+
+
+def test_bf33_provider_cooldown_prevents_even_marker_search(db):
+    class Cooldown(Bridge):
+        def __call__(self,method,path,payload=None):
+            if (method,path)==("GET","/v1/system/status"):
+                return {"active":0,"rate_limit":{"provider_rate_limited":True}}
+            return super().__call__(method,path,payload)
+    b=Cooldown()
+    autonomous.enqueue(db,"pilot33","agent-a",MARKER,PROMPT,
+                       "bf33-cooldown-01","123")
+    autonomous.pump(db,b,now=1_000_000)
+    assert b.calls==[]
+    assert db.execute("SELECT state FROM autonomous_subagents").fetchone()[0]=="marker_pending"
+
+
+def test_bf33_paused_pending_workers_do_not_keep_watcher_active(db):
+    autonomous.enqueue(db,"pilot33","worker-a",MARKER,PROMPT,
+                       "bf33-pause-count-01","123")
+    autonomous.pump(db,Bridge(),now=1_000_000)
+    assert legacy.active_work_counts(db)["pending_autonomous_subagents"]==1
+    db.execute("UPDATE projects SET status='paused' WHERE id='pilot33'")
+    counts=legacy.active_work_counts(db)
+    assert counts["pending_autonomous_subagents"]==0
+    assert counts["active"] is False

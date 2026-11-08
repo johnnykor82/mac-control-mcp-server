@@ -945,22 +945,25 @@ def iteration(db, dry_run=False):
     from .watcher_browser_dispatch import dispatch_prepared as dispatch_initial
     initial=dispatch_initial(db,api,dry_run=dry_run)
     results.extend(initial)
-    # BF23 owns only newly requested zero-URL children. Existing BF20 and
-    # file-mode messages take precedence; never exceed the provider gate.
+    # BF33: multiple independently running workers, with one shared limit of
+    # two NEW model POSTs per cycle. Do not block completed-turn GET polling
+    # or Supervisor progress because an unrelated worker just dispatched.
     from .watcher_autonomous import pump as pump_subagents, sync_completed
-    autonomous = ([] if any(e.get("state") == "submitted" for e in initial)
-                  else pump_subagents(db, api, dry_run=dry_run))
+    new_posts=sum(e.get("state")=="submitted" for e in initial)
+    autonomous=pump_subagents(
+        db,api,dry_run=dry_run,max_new_sends=max(0,2-new_posts))
     results.extend(autonomous)
-    if not any(e.get("state")=="submitted" for e in initial+autonomous):
-        results.extend(dispatch_prepared_followups(db, dry_run=dry_run))
-    results.extend(poll_executor_tasks(db, dry_run=dry_run))
+    new_posts+=sum(bool(e.get("new_post")) for e in autonomous)
+    if new_posts==0:
+        followups=dispatch_prepared_followups(db,dry_run=dry_run)
+        results.extend(followups)
+        new_posts+=sum(e.get("state")=="submitted" for e in followups)
+    results.extend(poll_executor_tasks(db,dry_run=dry_run))
     if not dry_run:
         sync_completed(db)
-    # Opt-in BF22 Supervisor owns separate model turns and followups.
-    # The provider capacity gate within pump prevents concurrent sends.
     from .watcher_goal_supervisor import pump as pump_supervisor
-    if not any(e.get("state")=="submitted" for e in initial+autonomous):
-        results.extend(pump_supervisor(db,api,dry_run=dry_run))
+    results.extend(pump_supervisor(
+        db,api,dry_run=dry_run,max_new_sends=max(0,2-new_posts)))
     results.extend(recover_missing_revision_deliveries(db, dry_run=dry_run))
     if not dry_run:
         results.extend(due_to_deliveries(db))

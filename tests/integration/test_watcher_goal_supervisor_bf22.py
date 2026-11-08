@@ -394,3 +394,57 @@ def test_completed_supervisor_recovery_survives_elapsed_budget(db):
     assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
     assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==1
     assert bridge.sent==sent_before
+
+
+def test_bf33_two_independent_reviews_progress_in_same_cycle(db,monkeypatch):
+    registered_goal(db)
+    other = "https://chatgpt.com/c/44444444-4444-4444-8444-444444444444"
+    legacy.register_task(db,"pilot23","agent-b",other)
+    db.execute("INSERT INTO chatbridge_task_sessions VALUES(?,?,?)",
+               ("pilot23","agent-b","sid-executor-b"))
+    goals.register_goal(db,"pilot23","agent-b","123",CRITERIA)
+    request=first_request()
+    request.update(request_id="worker-request-b",session_id="sid-executor-b",
+                   conversation_id=other.rsplit("/c/",1)[1],
+                   assistant_message_id="message-b",
+                   client_request_id="bf33-worker-b-unique")
+    assert goals.record_settled(db,"pilot23","agent-b",request)
+    # Isolate fairness from artificial Supervisor sessions in the fixture.
+    def fake_create(d,row,api):
+        return goals._mark(d,row,"supervisor_session_ready",
+                           supervisor_session_id="sup-"+row["task_id"])
+    monkeypatch.setattr(goals,"_create_reviewer",fake_create)
+    goals.pump(db,Bridge())
+    assert dict(db.execute("SELECT task_id,state FROM goals")) == {
+        "agent-a":"supervisor_session_ready",
+        "agent-b":"supervisor_session_ready",
+    }
+
+
+def test_bf33_paused_project_does_not_advance_supervisor(db):
+    registered_goal(db)
+    db.execute("UPDATE projects SET status='paused' WHERE id='pilot23'")
+    bridge=Bridge()
+    assert goals.pump(db,bridge)==[]
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_pending"
+    assert not bridge.sent
+
+
+def test_bf33_paused_reviews_do_not_consume_active_project_capacity(db,monkeypatch):
+    registered_goal(db)
+    goals.register_goal(db,"pilot23","paused-second","123",CRITERIA)
+    for task in ("agent-a","paused-second"):
+        db.execute("UPDATE goals SET state='supervisor_session_ready',supervisor_session_id=? WHERE project_id='pilot23' AND task_id=?",
+                   ("paused-"+task,task))
+    db.execute("UPDATE projects SET status='paused' WHERE id='pilot23'")
+    from mac_control.watcher_runtime import watcher_browser_dispatch as dispatch
+    dispatch.register_owned_project(
+        db,"active33","https://chatgpt.com/c/55555555-5555-4555-8555-555555555555","123")
+    goals.register_goal(db,"active33","new-worker","123",CRITERIA)
+    db.execute("UPDATE goals SET state='review_pending' WHERE project_id='active33'")
+    def create(d,row,api):
+        return goals._mark(d,row,"supervisor_session_ready",
+                           supervisor_session_id="active-new-supervisor")
+    monkeypatch.setattr(goals,"_create_reviewer",create)
+    goals.pump(db,Bridge())
+    assert db.execute("SELECT state FROM goals WHERE project_id='active33'").fetchone()[0]=="supervisor_session_ready"
