@@ -483,3 +483,54 @@ def test_bf33_pipeline_dispatches_two_before_either_completes(db):
     # No automatic redelivery or extra worker despite another tick.
     autonomous.pump(db,b,now=1_000_001,pipeline=True)
     assert len(b.sent)==2
+
+
+# CB33 P06R: previously delivered+ACKed autonomous work must never be
+# repolled when its original project is resumed.
+def _cb33_insert_legacy_complete(db, *, acked=True):
+    from mac_control.watcher_runtime import watcher_browser_dispatch as dispatch
+    dispatch.register_owned_project(db, "cb33-guard", ORCH, "123")
+    autonomous.enqueue(db, "cb33-guard", "old-worker", MARKER, PROMPT,
+                       "cb33-guard-old-unique", "123")
+    legacy.register_task(db, "cb33-guard", "old-worker",
+                         "https://chatgpt.com/c/" + CONVO[0])
+    db.execute("""UPDATE autonomous_subagents SET state='completed'
+        WHERE project_id='cb33-guard' AND task_id='old-worker'""")
+    db.execute("""INSERT INTO deliveries(
+        id,project_id,task_id,orchestrator_url,payload,state,created_at,
+        delivered_at,acknowledged_at)
+        VALUES(?,?,'old-worker',?,?,'delivered',?,?,?)""",
+        ("cb33-old-delivery","cb33-guard",ORCH,"old delivery",
+         "2026-11-08","2026-11-08",
+         "2026-11-08" if acked else None))
+
+
+def test_cb33_completed_acked_autonomous_watching_row_never_polled_or_modified(db, monkeypatch):
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    _cb33_insert_legacy_complete(db)
+    before=[tuple(r) for r in db.execute(
+        "SELECT * FROM tasks WHERE project_id='cb33-guard'")]
+    def no_api(*args, **kwargs):
+        raise AssertionError("MUST NOT read ChatBridge for completed ACKed worker")
+    monkeypatch.setattr(adapter,"api",no_api)
+    assert adapter.poll_executor_tasks(db,dry_run=True)==[]
+    assert adapter.poll_executor_tasks(db,dry_run=False)==[]
+    after=[tuple(r) for r in db.execute(
+        "SELECT * FROM tasks WHERE project_id='cb33-guard'")]
+    assert before==after
+
+
+def test_cb33_new_worker_still_polled_while_old_acked_worker_excluded(db):
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    _cb33_insert_legacy_complete(db)
+    legacy.register_task(db,"cb33-guard","new-worker",
+                         "https://chatgpt.com/c/"+CONVO[1])
+    observed=adapter.poll_executor_tasks(db,dry_run=True)
+    assert [x["task"] for x in observed]==["cb33-guard/new-worker"]
+
+
+def test_cb33_unacknowledged_autonomous_worker_not_silently_skipped(db):
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    _cb33_insert_legacy_complete(db,acked=False)
+    observed=adapter.poll_executor_tasks(db,dry_run=True)
+    assert [x["task"] for x in observed]==["cb33-guard/old-worker"]

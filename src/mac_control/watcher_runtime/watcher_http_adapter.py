@@ -790,9 +790,24 @@ def _poll_supervised_followup(db, task):
 
 def poll_executor_tasks(db, dry_run: bool = False):
     """Complete registered executor chats using ChatBridge backend end_turn data."""
+    # Some legacy-only databases have no autonomous table. Such databases
+    # cannot contain a completed autonomous worker; retain legacy behavior.
+    has_autonomous = db.execute("""SELECT 1 FROM sqlite_master
+        WHERE type='table' AND name='autonomous_subagents'""").fetchone()
+    already_acknowledged = ("""
+          AND NOT EXISTS (
+              SELECT 1 FROM autonomous_subagents a
+              JOIN deliveries d ON d.project_id=a.project_id
+                  AND d.task_id=a.task_id
+              WHERE a.project_id=t.project_id AND a.task_id=t.id
+                  AND a.state='completed' AND d.state='delivered'
+                  AND d.acknowledged_at IS NOT NULL
+          )
+    """ if has_autonomous else "")
     rows = db.execute("""
         SELECT t.* FROM tasks t JOIN projects p ON p.id=t.project_id
         WHERE t.state='watching' AND t.mode='browser' AND p.status='enabled'
+    """ + already_acknowledged + """
         ORDER BY t.project_id,t.id
     """).fetchall()
     events = []
