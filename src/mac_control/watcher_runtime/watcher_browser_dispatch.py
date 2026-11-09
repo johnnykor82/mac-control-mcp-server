@@ -11,7 +11,6 @@ import re
 import sqlite3
 
 from . import multi_project_watcher as legacy
-from .watcher_browser_followups import MAX_PROMPT
 
 KEY_RX = re.compile(r"^[A-Za-z0-9_-]{8,72}$")
 STATES = ('prepared', 'sending', 'submitted', 'uncertain', 'blocked', 'completed')
@@ -83,7 +82,7 @@ def _check_input(project, task, executor_url, prompt, request_key, owner_subject
         raise PermissionError('Verified owner identity required')
     if not isinstance(request_key,str) or KEY_RX.fullmatch(request_key) is None:
         raise ValueError('Invalid request key')
-    if not isinstance(prompt,str) or not 25 <= len(prompt) <= MAX_PROMPT or '\0' in prompt:
+    if not isinstance(prompt,str) or not prompt.strip() or '\0' in prompt:
         raise ValueError('Invalid prompt length or content')
     if re.search(r'(?i)(authorization\\s*:\\s*bearer|submission_token|orchestrator_token|capability_token|session_cookie)',prompt):
         raise ValueError('Credential-bearing executor prompt is not allowed')

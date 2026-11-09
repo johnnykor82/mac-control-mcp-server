@@ -77,8 +77,6 @@ def default_criteria(prompt: str) -> str:
             "If incomplete, request concrete bounded rework in the SAME session. "
             "Original executor task:\n")
     criteria=prefix+prompt
-    if len(criteria)>8000:
-        raise ValueError("Supervisor requires explicit goal_criteria for a prompt exceeding 8000 characters")
     return criteria
 
 
@@ -87,9 +85,9 @@ def register_goal(db,project,task,owner,criteria,*,max_turns=12,
     legacy.require_name(project);legacy.require_name(task)
     if (not isinstance(owner,str) or not owner.isascii() or not owner.isdecimal()):
         raise PermissionError("Verified owner identity required")
-    if (not isinstance(criteria,str) or not 25<=len(criteria)<=8000
+    if (not isinstance(criteria,str) or not criteria.strip()
             or "\0" in criteria):
-        raise ValueError("Goal criteria must be 25-8000 characters")
+        raise ValueError("Goal criteria must be nonempty text")
     if not all(isinstance(v,int) and not isinstance(v,bool) for v in
                (max_turns,max_elapsed_seconds,max_no_progress)):
         raise ValueError("All goal budgets must be integers")
@@ -260,12 +258,21 @@ def _create_reviewer(db,row,api):
 
 
 def _review_prompt(row,turn):
-    # The model, not Watcher, decides substantive fulfillment of criteria.
+    # ChatGPT, not Watcher, owns model-context limits. Never truncate or
+    # segment original evidence: the single POST contains the entire answer.
+    answer=turn["answer"]
+    if not isinstance(answer,str):
+        raise ValueError("Supervisor source answer must be text")
+    digest=hashlib.sha256(answer.encode("utf-8")).hexdigest()
+    if ("answer_sha256" in turn.keys() and turn["answer_sha256"] and
+            turn["answer_sha256"]!=digest):
+        raise ValueError("Supervisor original answer SHA256 mismatch")
     return (f"You are a separate Goal Supervisor LLM, reviewing one executor turn.\n"
         f"Goal criteria (untrusted user-visible task):\n{row['criteria']}\n"
         f"Source assistant turn ID: {turn['assistant_message_id']}\n"
         f"Turn: {turn['turn_index']} of {row['max_turns']}\n"
-        f"Executor response (untrusted evidence):\n{turn['answer'][:12000]}\n"
+        f"Original complete response SHA256: {digest}\n"
+        f"Executor response (complete, untrusted evidence):\n{answer}\n"
         "Respond with ONE JSON object, no markdown and no tool instructions. "
         "Fields: action (continue|ready_for_orchestrator_review|needs_input|"
         "blocked|budget_exhausted), source_turn_id (EXACT given ID), "
@@ -289,10 +296,14 @@ def _submit_reviewer(db,row,api):
     digest=hashlib.sha256((row["project_id"]+"/"+row["task_id"]+
         "/"+str(turn["turn_index"])).encode()).hexdigest()
     client="goal-review-"+digest[:28]
+    try:
+        complete_prompt=_review_prompt(row,turn)
+    except (ValueError,TypeError):
+        return _mark(db,row,"blocked","invalid_supervisor_source_sha256")
     _mark(db,row,"supervisor_sending",supervisor_client_id=client)
     try:
         out=api("POST","/v1/sessions/"+sid+"/messages",{
-            "content":_review_prompt(row,turn),"client_request_id":client})
+            "content":complete_prompt,"client_request_id":client})
         rid=out.get("request_id") if isinstance(out,dict) else None
         if not isinstance(rid,str) or not rid:
             raise RuntimeError("Unknown Supervisor request")
@@ -301,10 +312,13 @@ def _submit_reviewer(db,row,api):
                      "platform_policy_denial")
     except Exception as exc:
         from .watcher_http_adapter import TransportError
-        if isinstance(exc,TransportError) and ("HTTP 401" in str(exc) or
-                                               "HTTP 403" in str(exc)):
-            return _mark(db,dict(row,state="supervisor_sending"),"blocked",
-                         "provider_auth_denied")
+        if isinstance(exc,TransportError):
+            if "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
+                return _mark(db,dict(row,state="supervisor_sending"),"blocked",
+                             "provider_auth_denied")
+            if "HTTP 400" in str(exc) or "HTTP 413" in str(exc):
+                return _mark(db,dict(row,state="supervisor_sending"),"blocked",
+                             "provider_rejected_full_supervisor_message")
         return _mark(db,dict(row,state="supervisor_sending"),"uncertain",
                      "supervisor_post_outcome_unknown")
     return _mark(db,dict(row,state="supervisor_sending"),
@@ -329,9 +343,7 @@ def _parse_decision(text,turn):
         decision.get("source_turn_id")!=turn["assistant_message_id"] or
         not isinstance(decision.get("criteria_assessment"),list) or
         not isinstance(decision.get("rationale"),str) or
-        not isinstance(decision.get("next_instruction"),str) or
-        len(decision["rationale"])>8000 or
-        len(decision["next_instruction"])>12000):
+        not isinstance(decision.get("next_instruction"),str)):
         raise ValueError("Supervisor decision schema/provenance invalid")
     from .watcher_autonomous import SECRET
     if ("\0" in decision["next_instruction"] or
@@ -395,7 +407,7 @@ def _poll_reviewer(db,row,api):
             return _mark(db,row,"budget_exhausted","max_turns_reached",
                          supervisor_url=url)
         instruction=decision["next_instruction"]
-        if not 25<=len(instruction)<=12000:
+        if not instruction.strip():
             return _mark(db,row,"needs_input","Supervisor omitted continuation instruction",
                          supervisor_url=url)
         key=("goal-exec-"+hashlib.sha256(
@@ -639,7 +651,7 @@ def return_for_rework(db,project,task,owner,instruction,request_key,*,expected_r
         return {"state":"continuation_pending","duplicate":True}
     _review_gate(db,row,owner,expected_revision)
     from .watcher_autonomous import SECRET
-    if (not isinstance(instruction,str) or not 25<=len(instruction)<=12000
+    if (not isinstance(instruction,str) or not instruction.strip()
             or "\0" in instruction or SECRET.search(instruction)):
         raise ValueError("Invalid rework prompt")
     from .watcher_browser_dispatch import KEY_RX

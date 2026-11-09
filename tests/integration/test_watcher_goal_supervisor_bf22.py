@@ -591,3 +591,36 @@ def test_bf33_p07_supervised_followup_transaction_rolls_back_on_crash(db,monkeyp
     assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==0
     assert db.execute("SELECT state FROM goals").fetchone()[0]=="running"
     assert db.execute("SELECT state FROM chatbridge_browser_followups").fetchone()[0]=="submitted"
+
+
+@pytest.mark.parametrize("size", [130000, 1000000])
+def test_cb33_p07r_single_supervisor_post_has_complete_response(db,size):
+    import hashlib
+    registered_goal(db)
+    ending="CB33_P07R_COMPLETE_LAST_MARKER"
+    answer="Ж"*(size-len(ending))+ending
+    digest=hashlib.sha256(answer.encode("utf-8")).hexdigest()
+    db.execute("UPDATE goal_turns SET answer=?,answer_sha256=?",
+               (answer,digest))
+
+    class CapturingBridge(Bridge):
+        def __init__(self):
+            super().__init__()
+            self.supervisor_contents=[]
+        def __call__(self,method,path,payload=None):
+            if (method=="POST" and path.startswith("/v1/sessions/sid-supervisor/")
+                    and path.endswith("/messages")):
+                self.supervisor_contents.append(payload["content"])
+            return super().__call__(method,path,payload)
+
+    gateway=CapturingBridge()
+    drain(db,gateway,16)
+    assert len(gateway.supervisor_contents)==1
+    sent=gateway.supervisor_contents[0]
+    assert sent.count(answer)==1
+    assert ending in sent
+    assert digest in sent
+    assert db.execute("SELECT COUNT(*) FROM goal_decisions").fetchone()[0]==1
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    drain(db,gateway,3)
+    assert len(gateway.supervisor_contents)==1

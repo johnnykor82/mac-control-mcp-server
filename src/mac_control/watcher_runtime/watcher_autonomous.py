@@ -14,7 +14,6 @@ import uuid
 from . import multi_project_watcher as legacy
 from . import watcher_browser_dispatch as initial
 from . import watcher_chat_resolver as marker_resolver
-from .watcher_browser_followups import MAX_PROMPT
 
 STATES = (
     "marker_pending", "session_pending", "session_creating", "session_ready",
@@ -80,7 +79,7 @@ def _validate(project, task, marker, prompt, key, owner):
         raise PermissionError("Verified GitHub owner required")
     if not isinstance(key, str) or initial.KEY_RX.fullmatch(key) is None:
         raise ValueError("Stable nonsecret 8-72 character request key required")
-    if not isinstance(prompt, str) or not 25 <= len(prompt) <= MAX_PROMPT:
+    if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Invalid prompt size")
     if "\0" in prompt or SECRET.search(prompt):
         raise ValueError("Credential-bearing prompt prohibited")

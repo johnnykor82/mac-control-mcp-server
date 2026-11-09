@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 
 MAX_EVENTS = 12
-MAX_CHARS = 48000
 
 
 def setup(db):
@@ -27,8 +26,16 @@ def busy(adapter, project, target):
     health = adapter.api("GET", "/v1/system/status")
     if health.get("rate_limit", {}).get("provider_rate_limited"):
         return "provider_cooldown"
-    # Conservative global guard following observed provider 429 under overlap.
-    if int(health.get("active") or 0):
+    # Preserve 429 backpressure, but do not serialize unrelated sessions.
+    # Reserve one free slot and limit total concurrent work to two until
+    # separate provider stress tests justify increasing this bound.
+    try:
+        active=int(health["active"])
+        capacity=int(health["capacity"])
+    except (TypeError,ValueError,KeyError):
+        return "gateway_busy"
+    if (active<0 or capacity<2 or
+            active>=min(2,capacity-1)):
         return "gateway_busy"
     cid = target.rsplit("/c/", 1)[1]
     pid = target.split("/g/", 1)[1].split("/c/", 1)[0] if "/g/" in target else None
@@ -38,9 +45,13 @@ def busy(adapter, project, target):
         sessions = result.get("data")
         if not isinstance(sessions, list):
             raise adapter.TransportError("Invalid local session listing; defer notification")
-        for s in sessions:
-            if s.get("conversation_id") == cid and s.get("project_id") == pid:
-                return "orchestrator_busy" if s.get("active_request_id") else None
+        for session in sessions:
+            if (session.get("conversation_id")==cid and
+                    session.get("project_id")==pid and
+                    session.get("active_request_id")):
+                return "orchestrator_busy"
+        # Check every matching row in the returned page; a second session
+        # with the same recipient must never be hidden by the first idle one.
         if len(sessions) < 250:
             return None
     # The target might be beyond the bounded local pagination range; fail closed.
@@ -54,14 +65,13 @@ def batch_for(db, delivery_id):
 
 
 def choose(rows):
+    # Limit only the number of events per scheduling batch, never the
+    # length or content of any event's message. ChatGPT owns context limits.
     selected = []
-    total = 200
-    for r in rows:
-        size = len(r["payload"]) + 50
-        if size > MAX_CHARS or total + size > MAX_CHARS or len(selected) >= MAX_EVENTS:
+    for row in rows:
+        if len(selected) >= MAX_EVENTS:
             break
-        selected.append(r)
-        total += size
+        selected.append(row)
     return selected
 
 
