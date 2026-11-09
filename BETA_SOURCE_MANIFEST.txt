@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 274
+Included files: 280
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -87,6 +87,12 @@ scripts/setup_watcher_service.py
 scripts/shared_funnel_routes.py
 scripts/test_github_oauth_login.py
 scripts/workspace_migration.py
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/ANALYZE.md
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/ARCHITECTURE.md
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/CONVERGE.md
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/PLAN.md
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/SPEC.md
+specs/CB33_P08_OUTAGE_RECOVERY_20261109/TASKS.md
 specs/CB33_SUPERVISOR_DELIVERY_20261109/ANALYZE.md
 specs/CB33_SUPERVISOR_DELIVERY_20261109/ARCHITECTURE.md
 specs/CB33_SUPERVISOR_DELIVERY_20261109/BACKLOG.md

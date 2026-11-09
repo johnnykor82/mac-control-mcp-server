@@ -1,0 +1,2 @@
+# CB33 P08 Watcher architecture
+Extend only reconcile_uncertain_receipts(db, *, target_delivery_id=None,allow_paused=False): original default filters enabled unchanged; allow_paused without exact event ID raises ValueError; matching event still requires strict verified session, persisted client request, provider user ID, exact local payload+request link. No new send path, no edits to other deliveries/tasks.

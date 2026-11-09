@@ -1,0 +1,2 @@
+# CB33 P08 Watcher Converge — OPEN until full suite, exact production recovery and no old row modifications.
+P03 source Converge PASS 2026-11-10: strict exact-event-only paused unknown receipt recovery, user message/request/body/route integrity and no POST; 22 receipt tests and 914 total integration passed,1 skipped,1175 subtests. All code from approved P01–P03 docs, no custom text-size cap. P04 deploy and real provider B/A delivery/ACK blocked by HTTP429 and therefore NOT converged. Verified offline source only.

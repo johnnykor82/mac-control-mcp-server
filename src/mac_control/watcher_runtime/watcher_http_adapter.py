@@ -281,24 +281,39 @@ def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> b
     raise TransportError("Local receipt verification exceeded history limit")
 
 
-def reconcile_uncertain_receipts(db, dry_run: bool = False):
+def reconcile_uncertain_receipts(
+    db, dry_run: bool = False, *,
+    target_delivery_id: str | None = None,
+    allow_paused: bool = False,
+):
     """Recover only an old ChatBridge-unknown delivery with proven user receipt.
 
     A separate historical delivery may already have reached the orchestrator
     before the gateway request timed out. Only GET against the recorded
     session/request and exact user message is permitted. Never resend.
     """
-    rows = db.execute("""
+    # Recovery while paused is an explicit one-event receipt confirmation,
+    # never permission to resume polling or re-send any old notification.
+    if allow_paused and not target_delivery_id:
+        raise ValueError("Paused receipt recovery requires exact event ID")
+    if target_delivery_id is not None and (
+            not isinstance(target_delivery_id,str) or
+            not re.fullmatch(r"[0-9a-f]{32}",target_delivery_id)):
+        raise ValueError("Invalid recovery delivery ID")
+    enabled_clause = "" if allow_paused else "AND p.status='enabled'"
+    exact_clause = "AND d.id=?" if target_delivery_id else ""
+    rows = db.execute(f"""
         SELECT d.*,l.session_id AS linked_session_id,
                l.request_id AS linked_request_id
         FROM deliveries d
         JOIN projects p ON p.id=d.project_id
         JOIN chatbridge_delivery_links l ON l.delivery_id=d.id
-        WHERE p.status='enabled' AND d.state='delivery_uncertain'
+        WHERE d.state='delivery_uncertain'
+          {enabled_clause} {exact_clause}
           AND l.request_id IS NOT NULL
           AND d.last_error='ChatBridge unknown: request_id='||l.request_id
         ORDER BY d.created_at,d.rowid LIMIT 20
-    """).fetchall()
+    """, (target_delivery_id,) if target_delivery_id else ()).fetchall()
     results = []
     for row in rows:
         did=row["id"]
