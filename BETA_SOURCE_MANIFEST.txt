@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 256
+Included files: 274
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -87,6 +87,22 @@ scripts/setup_watcher_service.py
 scripts/shared_funnel_routes.py
 scripts/test_github_oauth_login.py
 scripts/workspace_migration.py
+specs/CB33_SUPERVISOR_DELIVERY_20261109/ANALYZE.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/ARCHITECTURE.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/BACKLOG.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/BUG_ASSESS.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/BUG_FIX.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/CONVERGE.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/PLAN.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/SPEC.md
+specs/CB33_SUPERVISOR_DELIVERY_20261109/TASKS.md
+specs/CB33_WATCHER_GUARD_20261109/ANALYZE.md
+specs/CB33_WATCHER_GUARD_20261109/ARCHITECTURE.md
+specs/CB33_WATCHER_GUARD_20261109/BACKLOG.md
+specs/CB33_WATCHER_GUARD_20261109/CONVERGE.md
+specs/CB33_WATCHER_GUARD_20261109/PLAN.md
+specs/CB33_WATCHER_GUARD_20261109/SPEC.md
+specs/CB33_WATCHER_GUARD_20261109/TASKS.md
 src/mac_control/__init__.py
 src/mac_control/__main__.py
 src/mac_control/account_profile.py
@@ -158,6 +174,8 @@ tests/integration/test_bf26_mandatory_audit_context.py
 tests/integration/test_bf27_short_marker.py
 tests/integration/test_bf28_chat_marker.py
 tests/integration/test_bf28_chatbridge_latest.py
+tests/integration/test_cb33_p07_supervisor_delivery.py
+tests/integration/test_cb33_p07r_prompt_limits.py
 tests/integration/test_chatbridge_bootstrap.py
 tests/integration/test_chatbridge_browser_adapter.py
 tests/integration/test_chatbridge_dependency.py
