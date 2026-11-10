@@ -170,3 +170,33 @@ def test_cb33_p08_paused_unrelated_event_is_not_touched(db,monkeypatch):
         db,target_delivery_id="b"*32,allow_paused=True)==[]
     assert calls==[]
     assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivery_uncertain"
+
+
+def test_cb33_p08_rendered_exact_chat_link_recovers_paused_event(db,monkeypatch):
+    chat_url="https://chatgpt.com/c/6af1d0f3-4e50-83eb-bd54-9d0adb4934eb"
+    payload=f"[MC-WATCH:{DID}]\nExecutor chat: {chat_url}\nEntire immutable report sha256"
+    rendered=payload.replace(chat_url,f"[{chat_url}]({chat_url})")
+    db.execute("UPDATE projects SET status='paused'")
+    db.execute("UPDATE deliveries SET payload=?,state='delivery_uncertain',last_error=?",
+               (payload,"ChatBridge unknown: request_id="+RID))
+    calls=fixture_gateway(db,monkeypatch,status="completed",
+                          msg_changes={"content":rendered})
+    result=adapter.reconcile_uncertain_receipts(
+        db,target_delivery_id=DID,allow_paused=True)
+    assert len(result)==1 and result[0]["state"]=="delivered"
+    assert calls and all(method=="GET" for method,_ in calls)
+
+
+def test_cb33_p08_spoofed_chat_link_refuses_paused_receipt(db,monkeypatch):
+    chat_url="https://chatgpt.com/c/6af1d0f3-4e50-83eb-bd54-9d0adb4934eb"
+    payload=f"[MC-WATCH:{DID}]\nExecutor chat: {chat_url}\nImmutable report"
+    malicious=payload.replace(chat_url,f"[{chat_url}](https://example.org/c/6af1d0f3-4e50-83eb-bd54-9d0adb4934eb)")
+    db.execute("UPDATE projects SET status='paused'")
+    db.execute("UPDATE deliveries SET payload=?,state='delivery_uncertain',last_error=?",
+               (payload,"ChatBridge unknown: request_id="+RID))
+    calls=fixture_gateway(db,monkeypatch,status="completed",
+                          msg_changes={"content":malicious})
+    assert adapter.reconcile_uncertain_receipts(
+        db,target_delivery_id=DID,allow_paused=True)==[]
+    assert db.execute("SELECT state FROM deliveries").fetchone()[0]=="delivery_uncertain"
+    assert all(method=="GET" for method,_ in calls)

@@ -240,6 +240,47 @@ def ensure_session(db: sqlite3.Connection, delivery):
     return row["session_id"], row["request_id"]
 
 
+_CANONICAL_CHAT_SELF_URL = re.compile(
+    r"https://chatgpt[.]com/c/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    r"(?![A-Za-z0-9_-])"
+)
+
+
+def _same_provider_self_link_rendering(original: str, provider: str) -> bool:
+    """Only allow bare original ChatGPT chat URL -> [sameURL](sameURL).
+
+    Every other original character and all source/target link bytes must
+    remain unchanged. No arbitrary Markdown normalization or text clipping.
+    """
+    if not isinstance(original, str) or not isinstance(provider, str):
+        return False
+    if original == provider:
+        return True
+    src_pos = dest_pos = 0
+    changed = False
+    for match in _CANONICAL_CHAT_SELF_URL.finditer(original):
+        prefix = original[src_pos:match.start()]
+        if not provider.startswith(prefix, dest_pos):
+            return False
+        dest_pos += len(prefix)
+        url = match.group()
+        if provider.startswith(url, dest_pos):
+            dest_pos += len(url)
+        else:
+            before = original[match.start()-1] if match.start() else ""
+            after = original[match.end():match.end()+1]
+            if before in ("[", "(") or after in ("]", ")"):
+                return False
+            link = f"[{url}]({url})"
+            if not provider.startswith(link, dest_pos):
+                return False
+            dest_pos += len(link)
+            changed = True
+        src_pos = match.end()
+    return changed and provider[dest_pos:] == original[src_pos:]
+
+
 def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> bool:
     """Prove the exact original notification exists as a provider user message.
 
@@ -272,7 +313,8 @@ def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> b
             if (msg.get("role") == "user"
                     and msg.get("request_id") == rid
                     and msg.get("message_id") == request["user_message_id"]
-                    and msg.get("content") == delivery["payload"]):
+                    and _same_provider_self_link_rendering(
+                        delivery["payload"], msg.get("content"))):
                 return True
         next_cursor = result.get("next_cursor", cursor)
         if not rows or next_cursor == cursor:

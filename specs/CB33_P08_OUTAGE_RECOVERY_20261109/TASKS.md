@@ -3,3 +3,8 @@
 - [x] P02 exact paused receipt proof, 20 GREEN tests
 - [x] P03 full offline Watcher 914 passed/1 skipped/1175 subtests, strict audit exit0, 280-file source inventory, Converge and Git commit next
 - [ ] P04 safe owner-only deployment, original event B reconciliation/ACK, A delivery, final paused and historical rows unchanged
+
+- [x] P08-R8 RED reproduced link rendering rejection, GREEN 8 Bridge/24 Watcher receipt tests including malicious destination and ambiguous candidates
+- [x] P08-R8 Bridge unique user/Store raw provider content CAS and Watcher strict local exact event receipt comparator, all unrelated bytes unchanged
+- [ ] P08-R8 GREEN full Bridge 300+4 and Watcher 916/1 skipped/1175 subtests, strict audit and source Converge PASS; Git commits and backup/release pending
+- [ ] P08-R8 prove original B user receipt/ACK and finish A delivery/ACK without any duplicate Send; nine original history hashes and final paused project
