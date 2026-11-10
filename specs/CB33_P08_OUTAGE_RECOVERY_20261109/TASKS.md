@@ -8,3 +8,8 @@
 - [x] P08-R8 Bridge unique user/Store raw provider content CAS and Watcher strict local exact event receipt comparator, all unrelated bytes unchanged
 - [ ] P08-R8 GREEN full Bridge 300+4 and Watcher 916/1 skipped/1175 subtests, strict audit and source Converge PASS; Git commits and backup/release pending
 - [ ] P08-R8 prove original B user receipt/ACK and finish A delivery/ACK without any duplicate Send; nine original history hashes and final paused project
+
+- [x] Original B provider receipt verified, ACK and goal closed with no duplicate Send
+- [x] Original A attempted once and BF33 immediately re-paused; 9/9 old history hashes unchanged
+- [ ] A exact user receipt/paused delivery recovery/ACK/goal approval blocked by HTTP429 and missing provider user ID; NEVER RESEND
+- [ ] Final real E2E Converge, remaining acceptance and final Git stage checkpoint
