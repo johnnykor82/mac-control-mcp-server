@@ -2,6 +2,8 @@
 
 # Mac Control MCP Server — macOS automation over MCP
 
+[![M8ven Verified](https://m8ven.ai/badge/mcp/johnnykor82-mac-control-mcp-server-1jf9ml?variant=verified&v=741da776b04e4da29294727b8a541883)](https://m8ven.ai/mcp/johnnykor82-mac-control-mcp-server-1jf9ml?s=readme)
+
 **A macOS MCP server for ChatGPT and compatible AI clients.** Mac Control combines native desktop automation, files, terminal sessions, Git, SSH, ChatBridge browser automation and Watcher coordination across ChatGPT conversations.
 
 Mac Control MCP Server is an experimental Model Context Protocol (MCP) server designed for autonomous tasks. It offers powerful control of the owner's Mac, not a restrictive sandbox.
