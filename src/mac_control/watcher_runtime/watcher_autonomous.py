@@ -14,7 +14,6 @@ import uuid
 from . import multi_project_watcher as legacy
 from . import watcher_browser_dispatch as initial
 from . import watcher_chat_resolver as marker_resolver
-from .watcher_browser_followups import MAX_PROMPT
 
 STATES = (
     "marker_pending", "session_pending", "session_creating", "session_ready",
@@ -28,6 +27,11 @@ SECRET = re.compile(
 )
 MAX_MARKER_ATTEMPTS = 12
 MAX_DELAY_SECONDS = 900
+# BF33: two parallel ChatBridge requests initially; enlarge only after evidence.
+MAX_PARALLEL_WORKERS = 2
+MAX_EDGES_PER_TICK = 8
+MAX_NEW_SENDS_PER_TICK = 2
+MAX_BIND_ATTEMPTS = 4
 
 
 def setup(db: sqlite3.Connection) -> None:
@@ -59,6 +63,11 @@ def setup(db: sqlite3.Connection) -> None:
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_autonomous_state "
                "ON autonomous_subagents(state,next_lookup_at)")
+    # Idempotent additive migration; old live data and unknown send receipts stay intact.
+    if "bind_attempts" not in {c[1] for c in db.execute(
+            "PRAGMA table_info(autonomous_subagents)")}:
+        db.execute("ALTER TABLE autonomous_subagents ADD COLUMN "
+                   "bind_attempts INTEGER NOT NULL DEFAULT 0")
 
 
 def _validate(project, task, marker, prompt, key, owner):
@@ -70,7 +79,7 @@ def _validate(project, task, marker, prompt, key, owner):
         raise PermissionError("Verified GitHub owner required")
     if not isinstance(key, str) or initial.KEY_RX.fullmatch(key) is None:
         raise ValueError("Stable nonsecret 8-72 character request key required")
-    if not isinstance(prompt, str) or not 25 <= len(prompt) <= MAX_PROMPT:
+    if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Invalid prompt size")
     if "\0" in prompt or SECRET.search(prompt):
         raise ValueError("Credential-bearing prompt prohibited")
@@ -157,7 +166,7 @@ def _mark(db, row, state, error=None, **changes):
     for key,value in changes.items():
         if key not in ("orchestrator_url", "session_id", "request_id",
                        "executor_url", "assistant_message_id",
-                       "marker_attempts", "next_lookup_at"):
+                       "marker_attempts", "next_lookup_at", "bind_attempts"):
             raise ValueError("Invalid state field")
         fields.append(key+"=?")
         values.append(value)
@@ -173,7 +182,12 @@ def _status(api):
     data=api("GET", "/v1/system/status")
     if data.get("rate_limit", {}).get("provider_rate_limited"):
         return False
-    return int(data.get("active") or 0) < 1
+    try:
+        active=int(data.get("active") or 0)
+        capacity=int(data.get("capacity") or MAX_PARALLEL_WORKERS)
+    except (ValueError, TypeError):
+        return False
+    return active >= 0 and active < min(MAX_PARALLEL_WORKERS, capacity)
 
 
 def _lookup(db, row, api, now):
@@ -292,7 +306,20 @@ def _canonical_request_url(request):
     return legacy.canonical_url("https://chatgpt.com/g/"+project+"/c/"+canonical)
 
 
+def _defer_completed_binding(db, row, reason):
+    """Only GET/read retry for a completed turn whose route is not ready.
+
+    Never retransmit a model prompt. After a bounded number of checks fail closed.
+    """
+    count=int(row["bind_attempts"])+1
+    if count>=MAX_BIND_ATTEMPTS:
+        return _mark(db,row,"uncertain","completed_turn_binding_failed",
+                     bind_attempts=count)
+    return _mark(db,row,"submitted",reason,bind_attempts=count)
+
+
 def _bind_result(db,row,api):
+    # A known completed request is immutable. Poll exactly its saved ID; never POST.
     req=api("GET","/v1/requests/"+row["request_id"])
     if (req.get("request_id")!=row["request_id"] or
         req.get("session_id")!=row["session_id"] or
@@ -305,16 +332,32 @@ def _bind_result(db,row,api):
         return {"task":row["project_id"]+"/"+row["task_id"],"state":"submitted"}
     try:
         url=_canonical_request_url(req)
-        sid=row["session_id"]
+    except (TypeError, ValueError):
+        return _defer_completed_binding(db,row,"completed_conversation_id_pending")
+    sid=row["session_id"]
+    try:
         session=api("GET","/v1/sessions/"+sid)
+    except Exception:
+        return _defer_completed_binding(db,row,"completed_session_get_pending")
+    if (not isinstance(session,dict) or session.get("session_id")!=sid
+            or session.get("mode")!="persistent"):
+        return _mark(db,row,"uncertain","completed_session_identity_mismatch")
+    try:
         initial.validate_session(session,sid,url)
-        message_id=req.get("assistant_message_id")
-        if (not isinstance(message_id,str) or not message_id
-                or not isinstance(req.get("answer"),str) or not req["answer"]):
-            raise ValueError("No final assistant turn")
-        if url==row["orchestrator_url"]:
-            raise ValueError("Executor cannot be orchestrator")
-        initial.setup(db)
+    except ValueError:
+        # ChatBridge may persist the completed request before its persistent
+        # session receives the final conversation_id; never trust a mismatch.
+        if session.get("conversation_id") is None and session.get("project_id") is None:
+            return _defer_completed_binding(db,row,"completed_session_route_pending")
+        return _mark(db,row,"uncertain","completed_session_route_mismatch")
+    message_id=req.get("assistant_message_id")
+    if not isinstance(message_id,str) or not message_id or not isinstance(
+            req.get("answer"),str) or not req["answer"]:
+        return _defer_completed_binding(db,row,"completed_answer_pending")
+    if url==row["orchestrator_url"]:
+        return _mark(db,row,"uncertain","executor_is_orchestrator")
+    initial.setup(db)
+    try:
         db.execute("BEGIN IMMEDIATE")
         try:
             current=db.execute("""SELECT state FROM autonomous_subagents
@@ -343,35 +386,85 @@ def _bind_result(db,row,api):
         except BaseException:
             db.execute("ROLLBACK")
             raise
-    except Exception:
-        return _mark(db,row,"uncertain","completed_turn_binding_failed")
+    except sqlite3.OperationalError:
+        # Failed SQLite BEGIN/lock is safe to retry with same immutable ids.
+        return _defer_completed_binding(db,row,"completed_database_busy")
+    except (sqlite3.IntegrityError, ValueError):
+        return _mark(db,row,"uncertain","completed_binding_identity_conflict")
     return {"task":row["project_id"]+"/"+row["task_id"],
             "state":"bound","executor_url":url}
 
 
-def pump(db,api,*,now=None,dry_run=False):
-    """One durable provider edge per tick; existing Watcher owns report delivery."""
+def _reserved_count(db):
+    """Pending session creation and outstanding requests count against cap."""
+    return db.execute("""SELECT COUNT(*) FROM autonomous_subagents a
+        JOIN projects p ON p.id=a.project_id AND p.status='enabled'
+        WHERE a.state IN ('session_pending','session_creating','session_ready',
+                          'sending','submitted')""").fetchone()[0]
+
+
+def pump(db,api,*,now=None,dry_run=False,max_new_sends=2,pipeline=True):
+    """Start bounded workers within one tick; do not wait a tick per phase.
+
+    Each worker state may be attempted at most once per cycle, so failed
+    lookups and uncertain requests cannot be retried inside that cycle.
+    Three phases permit marker -> session -> submit for two independent
+    workers, while completed-turn GET polling is read-only and fair.
+    """
     setup(db)
     at=time.time() if now is None else float(now)
-    row=db.execute("""SELECT * FROM autonomous_subagents
-        WHERE (state='marker_pending' AND next_lookup_at<=?)
-          OR state IN ('session_pending','session_ready','submitted')
-        ORDER BY created_at,task_id LIMIT 1""",(at,)).fetchone()
-    if not row:
-        return []
-    if dry_run:
-        return [{"task":row["project_id"]+"/"+row["task_id"],
-                 "state":row["state"],"would_process":True}]
-    state=row["state"]
-    if state=="marker_pending":
-        result=_lookup(db,row,api,at)
-    elif state=="session_pending":
-        result=_create_session(db,row,api)
-    elif state=="session_ready":
-        result=_send_first(db,row,api)
-    else:
-        result=_bind_result(db,row,api)
-    return [result]
+    results=[]
+    sends=0
+    visited=set()
+    for phase in range(1 if dry_run or not pipeline else 3):
+        progressed=False
+        rows=db.execute("""SELECT a.* FROM autonomous_subagents a
+            LEFT JOIN projects p ON p.id=a.project_id
+            WHERE (p.id IS NULL OR p.status='enabled')
+              AND ((a.state='marker_pending' AND a.next_lookup_at<=?)
+                   OR a.state IN ('session_pending','session_ready','submitted'))
+            ORDER BY CASE a.state WHEN 'submitted' THEN 0
+                     WHEN 'session_ready' THEN 1
+                     WHEN 'session_pending' THEN 2 ELSE 3 END,
+                     a.created_at,a.task_id LIMIT 64""",(at,)).fetchall()
+        for row in rows:
+            if len(results)>=MAX_EDGES_PER_TICK:
+                break
+            state=row["state"]
+            visited_key=(row["project_id"],row["task_id"],state)
+            if visited_key in visited:
+                continue
+            if state=="marker_pending" and _reserved_count(db)>=MAX_PARALLEL_WORKERS:
+                continue
+            if state=="session_ready" and sends>=min(
+                    MAX_NEW_SENDS_PER_TICK,max_new_sends):
+                continue
+            visited.add(visited_key)
+            if dry_run:
+                results.append({"task":row["project_id"]+"/"+row["task_id"],
+                                "state":state,"would_process":True})
+                continue
+            if state=="marker_pending":
+                if not _status(api):
+                    results.append({"task":row["project_id"]+"/"+row["task_id"],
+                                    "state":"deferred"})
+                    continue
+                result=_lookup(db,row,api,at)
+            elif state=="session_pending":
+                result=_create_session(db,row,api)
+            elif state=="session_ready":
+                result=_send_first(db,row,api)
+                if result.get("state")=="submitted":
+                    sends+=1
+                    result["new_post"]=True
+            else:
+                result=_bind_result(db,row,api)
+            results.append(result)
+            if result.get("state") not in ("deferred",state):
+                progressed=True
+        if len(results)>=MAX_EDGES_PER_TICK or not progressed:
+            break
+    return results
 
 
 def quarantine_inflight(db):

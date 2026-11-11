@@ -187,6 +187,55 @@ def guard_orchestrator(db: sqlite3.Connection, delivery, sid: str) -> None:
     verify_route(api("GET", f"/v1/sessions/{sid}"), sid, delivery["orchestrator_url"])
 
 
+def find_existing_orchestrator_session(url: str) -> str | None:
+    """Find the unique existing local ChatBridge target before importing.
+
+    All reads are local gateway GETs. A conflicting alias, mode, project or
+    ambiguous physical chat fails closed; never infer identity from title.
+    """
+    target = legacy.canonical_url(url)
+    expected_cid = target.rsplit("/c/", 1)[1]
+    project_match = re.search(r"/g/(g-p-[0-9a-f]{32})/c/", target)
+    expected_project = project_match.group(1) if project_match else None
+    matches = []
+    for offset in range(0, 5000, 250):
+        page = api("GET", f"/v1/sessions?limit=250&offset={offset}")
+        rows = page.get("data") if isinstance(page, dict) else None
+        if not isinstance(rows, list) or len(rows) > 250:
+            raise TransportError("ChatBridge local session index invalid")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise TransportError("ChatBridge local session row invalid")
+            if row.get("conversation_id") != expected_cid and row.get("url") != target:
+                continue
+            sid = row.get("session_id")
+            recorded_url = row.get("url")
+            if (not isinstance(sid, str) or not sid
+                    or row.get("conversation_id") != expected_cid
+                    or row.get("project_id") != expected_project
+                    or row.get("mode") not in ("standard", "persistent", "continued")
+                    or (recorded_url is not None
+                        and legacy.canonical_url(recorded_url) != target)):
+                raise TransportError("ChatBridge existing orchestrator identity conflict")
+            matches.append(sid)
+            if len(matches) > 1:
+                raise TransportError("Ambiguous existing orchestrator sessions")
+        if len(rows) < 250:
+            break
+    else:
+        raise TransportError("ChatBridge local session listing exceeded safe bound")
+    if not matches:
+        return None
+    sid = matches[0]
+    exact = api("GET", f"/v1/sessions/{sid}")
+    verify_route(exact, sid, target)
+    if (exact.get("mode") not in ("standard", "persistent", "continued")
+            or (exact.get("url") is not None
+                and legacy.canonical_url(exact["url"]) != target)):
+        raise TransportError("ChatBridge existing orchestrator changed identity")
+    return sid
+
+
 def ensure_session(db: sqlite3.Connection, delivery):
     link = db.execute(
         "SELECT * FROM chatbridge_delivery_links WHERE delivery_id=?",
@@ -214,7 +263,7 @@ def ensure_session(db: sqlite3.Connection, delivery):
         expected_conversation = target.rsplit("/c/", 1)[1]
         if (
             session.get("session_id") != sid
-            or session.get("mode") != "persistent"
+            or session.get("mode") not in ("standard", "persistent", "continued")
             or session.get("conversation_id") != expected_conversation
             or session.get("project_id") != expected_project
         ):
@@ -224,10 +273,13 @@ def ensure_session(db: sqlite3.Connection, delivery):
             )
             raise TransportError("Cached orchestrator session identity mismatch")
     else:
-        session = api("POST", "/v1/sessions", session_import(
-            delivery["orchestrator_url"], "watcher:" + delivery["project_id"],
-        ))
-        sid = session["session_id"]
+        # Reuse the verified standard bootstrap without re-importing as persistent.
+        sid = find_existing_orchestrator_session(delivery["orchestrator_url"])
+        if sid is None:
+            session = api("POST", "/v1/sessions", session_import(
+                delivery["orchestrator_url"], "watcher:" + delivery["project_id"],
+            ))
+            sid = session["session_id"]
     guard_orchestrator(db, delivery, sid)
     db.execute(
         "INSERT OR IGNORE INTO chatbridge_delivery_links(delivery_id,session_id,last_status) VALUES(?,?,'prepared')",
@@ -238,6 +290,47 @@ def ensure_session(db: sqlite3.Connection, delivery):
         (delivery["id"],),
     ).fetchone()
     return row["session_id"], row["request_id"]
+
+
+_CANONICAL_CHAT_SELF_URL = re.compile(
+    r"https://chatgpt[.]com/c/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    r"(?![A-Za-z0-9_-])"
+)
+
+
+def _same_provider_self_link_rendering(original: str, provider: str) -> bool:
+    """Only allow bare original ChatGPT chat URL -> [sameURL](sameURL).
+
+    Every other original character and all source/target link bytes must
+    remain unchanged. No arbitrary Markdown normalization or text clipping.
+    """
+    if not isinstance(original, str) or not isinstance(provider, str):
+        return False
+    if original == provider:
+        return True
+    src_pos = dest_pos = 0
+    changed = False
+    for match in _CANONICAL_CHAT_SELF_URL.finditer(original):
+        prefix = original[src_pos:match.start()]
+        if not provider.startswith(prefix, dest_pos):
+            return False
+        dest_pos += len(prefix)
+        url = match.group()
+        if provider.startswith(url, dest_pos):
+            dest_pos += len(url)
+        else:
+            before = original[match.start()-1] if match.start() else ""
+            after = original[match.end():match.end()+1]
+            if before in ("[", "(") or after in ("]", ")"):
+                return False
+            link = f"[{url}]({url})"
+            if not provider.startswith(link, dest_pos):
+                return False
+            dest_pos += len(link)
+            changed = True
+        src_pos = match.end()
+    return changed and provider[dest_pos:] == original[src_pos:]
 
 
 def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> bool:
@@ -272,7 +365,8 @@ def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> b
             if (msg.get("role") == "user"
                     and msg.get("request_id") == rid
                     and msg.get("message_id") == request["user_message_id"]
-                    and msg.get("content") == delivery["payload"]):
+                    and _same_provider_self_link_rendering(
+                        delivery["payload"], msg.get("content"))):
                 return True
         next_cursor = result.get("next_cursor", cursor)
         if not rows or next_cursor == cursor:
@@ -281,24 +375,39 @@ def _verified_delivery_receipt(delivery, sid: str, rid: str, request: dict) -> b
     raise TransportError("Local receipt verification exceeded history limit")
 
 
-def reconcile_uncertain_receipts(db, dry_run: bool = False):
+def reconcile_uncertain_receipts(
+    db, dry_run: bool = False, *,
+    target_delivery_id: str | None = None,
+    allow_paused: bool = False,
+):
     """Recover only an old ChatBridge-unknown delivery with proven user receipt.
 
     A separate historical delivery may already have reached the orchestrator
     before the gateway request timed out. Only GET against the recorded
     session/request and exact user message is permitted. Never resend.
     """
-    rows = db.execute("""
+    # Recovery while paused is an explicit one-event receipt confirmation,
+    # never permission to resume polling or re-send any old notification.
+    if allow_paused and not target_delivery_id:
+        raise ValueError("Paused receipt recovery requires exact event ID")
+    if target_delivery_id is not None and (
+            not isinstance(target_delivery_id,str) or
+            not re.fullmatch(r"[0-9a-f]{32}",target_delivery_id)):
+        raise ValueError("Invalid recovery delivery ID")
+    enabled_clause = "" if allow_paused else "AND p.status='enabled'"
+    exact_clause = "AND d.id=?" if target_delivery_id else ""
+    rows = db.execute(f"""
         SELECT d.*,l.session_id AS linked_session_id,
                l.request_id AS linked_request_id
         FROM deliveries d
         JOIN projects p ON p.id=d.project_id
         JOIN chatbridge_delivery_links l ON l.delivery_id=d.id
-        WHERE p.status='enabled' AND d.state='delivery_uncertain'
+        WHERE d.state='delivery_uncertain'
+          {enabled_clause} {exact_clause}
           AND l.request_id IS NOT NULL
           AND d.last_error='ChatBridge unknown: request_id='||l.request_id
         ORDER BY d.created_at,d.rowid LIMIT 20
-    """).fetchall()
+    """, (target_delivery_id,) if target_delivery_id else ()).fetchall()
     results = []
     for row in rows:
         did=row["id"]
@@ -500,7 +609,7 @@ def quarantine_crashed_followups(db):
     return alerts
 
 
-def dispatch_prepared_followups(db, dry_run: bool = False):
+def dispatch_prepared_followups(db, dry_run: bool = False, max_new_sends: int = 2):
     """Dispatch queued revisions with idempotent IDs; quarantine lost ACK."""
     from .watcher_browser_followups import prepare_for_dispatch
     rows=prepare_for_dispatch(db)
@@ -511,12 +620,24 @@ def dispatch_prepared_followups(db, dry_run: bool = False):
     gateway=api("GET","/v1/system/status")
     if gateway.get("rate_limit",{}).get("provider_rate_limited"):
         return [{"state":"deferred","reason":"provider_cooldown"}]
-    # Even two overlapping expensive ChatGPT tool sessions can trigger
-    # provider-wide 429; launch the next turn only after the last finishes.
-    if int(gateway.get("active") or 0) >= 1:
-        return [{"state":"deferred","reason":"other_request_active"}]
+    # Two independent persistent executor sessions may run concurrently.
+    # Cap provider-wide active work and per-cycle sends, fail closed on 429.
+    try:
+        active=int(gateway.get("active") or 0)
+        capacity=int(gateway.get("capacity") or 2)
+    except (ValueError,TypeError):
+        return [{"state":"deferred","reason":"capacity_unknown"}]
+    slots=max(0,min(2,capacity)-active)
+    if slots==0:
+        return [{"state":"deferred","reason":"other_requests_at_capacity"}]
     output=[]
-    for r in rows[:1]:
+    new_sends=0
+    for r in rows[:min(slots,max_new_sends)]:
+        # Provider throttle may change after our first POST.
+        current=api("GET","/v1/system/status")
+        if current.get("rate_limit",{}).get("provider_rate_limited"):
+            output.append({"state":"deferred","reason":"provider_cooldown"})
+            break
         name=r["project_id"]+"/"+r["task_id"]
         task=db.execute("SELECT chat_url FROM tasks WHERE project_id=? AND id=?",
                         (r["project_id"],r["task_id"])).fetchone()
@@ -572,8 +693,9 @@ def dispatch_prepared_followups(db, dry_run: bool = False):
         except BaseException:
             db.execute("ROLLBACK")
             raise
+        new_sends+=1
         output.append({"task":name,"state":"watching","revision":r["revision"],
-                       "request_id":rid})
+                       "request_id":rid,"new_post":True})
     return output
 
 
@@ -708,11 +830,93 @@ def reconcile_uncertain_followups(db, dry_run: bool = False):
     return updates
 
 
+def _poll_supervised_followup(db, task):
+    """Settle ONLY the saved revisioned request into its independent reviewer.
+
+    Never infer a completed turn from chat history, never POST here, and never
+    produce a direct delivery before Supervisor has reviewed source evidence.
+    """
+    from . import watcher_goal_supervisor as goals
+    p,t=task["project_id"],task["id"]
+    row=db.execute("""SELECT * FROM chatbridge_browser_followups
+        WHERE project_id=? AND task_id=? ORDER BY revision DESC LIMIT 1""",
+        (p,t)).fetchone()
+    if not row or row["state"]!="submitted":
+        return []
+    goal=db.execute("SELECT state FROM goals WHERE project_id=? AND task_id=?",
+                    (p,t)).fetchone()
+    if not goal or goal["state"] not in ("running","executor_submitted"):
+        return []
+    try:
+        saved=db.execute("""SELECT session_id FROM chatbridge_task_sessions
+            WHERE project_id=? AND task_id=?""",(p,t)).fetchone()
+        if not saved or row["session_id"]!=saved["session_id"]:
+            raise ValueError("Followup session identity changed")
+        sid=row["session_id"]
+        verify_route(api("GET",f"/v1/sessions/{sid}"),sid,task["chat_url"])
+        req=api("GET",f"/v1/requests/{row['request_id']}")
+        if (req.get("request_id")!=row["request_id"]
+                or req.get("session_id")!=sid
+                or req.get("client_request_id")!=row["client_request_id"]):
+            raise ValueError("Followup request identity mismatch")
+        state=req.get("status")
+        if state not in ("completed","in_progress","running","queued","pending"):
+            raise ValueError("Followup request has unknown or failed status")
+        if state!="completed":
+            return []
+        verify_route(req,sid,task["chat_url"])
+        # Both the Supervisor turn and followup state must survive/crash
+        # together. Never leave a recorded goal turn paired with a
+        # permanently submitted continuation after a process failure.
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            goals.record_settled(db,p,t,req)
+            moved=db.execute("""UPDATE chatbridge_browser_followups
+                SET state='completed' WHERE project_id=? AND task_id=?
+                AND revision=? AND state='submitted'""",
+                (p,t,row["revision"])).rowcount
+            if moved!=1:
+                raise ValueError("Followup changed concurrently")
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        return [{"task":p+"/"+t,"state":"goal_review_pending",
+                 "revision":row["revision"]}]
+    except sqlite3.OperationalError:
+        return [{"task":p+"/"+t,"state":"deferred","reason":"database_busy"}]
+    except TransportError:
+        return [{"task":p+"/"+t,"state":"deferred","reason":"transport"}]
+    except (ValueError,KeyError,TypeError):
+        # Fail closed on route/request mismatch, never send a duplicate.
+        db.execute("""UPDATE chatbridge_browser_followups
+            SET state='uncertain',last_error='supervised_followup_identity_failed'
+            WHERE project_id=? AND task_id=? AND revision=? AND state='submitted'""",
+            (p,t,row["revision"]))
+        return [{"task":p+"/"+t,"state":"uncertain",
+                 "reason":"supervised_followup_identity_failed"}]
+
+
 def poll_executor_tasks(db, dry_run: bool = False):
     """Complete registered executor chats using ChatBridge backend end_turn data."""
+    # Some legacy-only databases have no autonomous table. Such databases
+    # cannot contain a completed autonomous worker; retain legacy behavior.
+    has_autonomous = db.execute("""SELECT 1 FROM sqlite_master
+        WHERE type='table' AND name='autonomous_subagents'""").fetchone()
+    already_acknowledged = ("""
+          AND NOT EXISTS (
+              SELECT 1 FROM autonomous_subagents a
+              JOIN deliveries d ON d.project_id=a.project_id
+                  AND d.task_id=a.task_id
+              WHERE a.project_id=t.project_id AND a.task_id=t.id
+                  AND a.state='completed' AND d.state='delivered'
+                  AND d.acknowledged_at IS NOT NULL
+          )
+    """ if has_autonomous else "")
     rows = db.execute("""
         SELECT t.* FROM tasks t JOIN projects p ON p.id=t.project_id
         WHERE t.state='watching' AND t.mode='browser' AND p.status='enabled'
+    """ + already_acknowledged + """
         ORDER BY t.project_id,t.id
     """).fetchall()
     events = []
@@ -741,8 +945,11 @@ def poll_executor_tasks(db, dry_run: bool = False):
                 continue
         from . import watcher_goal_supervisor as goals
         if goals.is_goal(db,task['project_id'],task['id']):
-            # Supervisor owns goal turn routing, including automatic rework;
-            # the legacy browser watcher must never notify an intermediate.
+            # The existing initial request goes through poll_initial above.
+            # A newly supervised legacy followup must first settle its exact
+            # saved provider turn; THEN a separate Supervisor can evaluate it.
+            # Rework initiated by Supervisor is polled in its own goal pump.
+            events.extend(_poll_supervised_followup(db,task))
             continue
         try:
             mapping = db.execute(
@@ -945,22 +1152,25 @@ def iteration(db, dry_run=False):
     from .watcher_browser_dispatch import dispatch_prepared as dispatch_initial
     initial=dispatch_initial(db,api,dry_run=dry_run)
     results.extend(initial)
-    # BF23 owns only newly requested zero-URL children. Existing BF20 and
-    # file-mode messages take precedence; never exceed the provider gate.
+    # BF33: multiple independently running workers, with one shared limit of
+    # two NEW model POSTs per cycle. Do not block completed-turn GET polling
+    # or Supervisor progress because an unrelated worker just dispatched.
     from .watcher_autonomous import pump as pump_subagents, sync_completed
-    autonomous = ([] if any(e.get("state") == "submitted" for e in initial)
-                  else pump_subagents(db, api, dry_run=dry_run))
+    new_posts=sum(e.get("state")=="submitted" for e in initial)
+    autonomous=pump_subagents(
+        db,api,dry_run=dry_run,max_new_sends=max(0,2-new_posts))
     results.extend(autonomous)
-    if not any(e.get("state")=="submitted" for e in initial+autonomous):
-        results.extend(dispatch_prepared_followups(db, dry_run=dry_run))
-    results.extend(poll_executor_tasks(db, dry_run=dry_run))
+    new_posts+=sum(bool(e.get("new_post")) for e in autonomous)
+    if new_posts==0:
+        followups=dispatch_prepared_followups(db,dry_run=dry_run)
+        results.extend(followups)
+        new_posts+=sum(bool(e.get("new_post")) for e in followups)
+    results.extend(poll_executor_tasks(db,dry_run=dry_run))
     if not dry_run:
         sync_completed(db)
-    # Opt-in BF22 Supervisor owns separate model turns and followups.
-    # The provider capacity gate within pump prevents concurrent sends.
     from .watcher_goal_supervisor import pump as pump_supervisor
-    if not any(e.get("state")=="submitted" for e in initial+autonomous):
-        results.extend(pump_supervisor(db,api,dry_run=dry_run))
+    results.extend(pump_supervisor(
+        db,api,dry_run=dry_run,max_new_sends=max(0,2-new_posts)))
     results.extend(recover_missing_revision_deliveries(db, dry_run=dry_run))
     if not dry_run:
         results.extend(due_to_deliveries(db))

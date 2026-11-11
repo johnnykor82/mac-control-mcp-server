@@ -11,7 +11,6 @@ import re
 import sqlite3
 
 ALLOWED_STATES = ("prepared", "sending", "submitted", "uncertain", "completed", "failed")
-MAX_PROMPT = 32000
 
 
 def setup(db: sqlite3.Connection):
@@ -37,8 +36,8 @@ def enqueue(db, project: str, task: str, prompt: str, request_key: str):
     require_name(task)
     if not isinstance(request_key,str) or not re.fullmatch(r"[a-zA-Z0-9_-]{8,72}",request_key):
         raise ValueError("Request key must have 8..72 safe characters")
-    if not isinstance(prompt,str) or not 25 <= len(prompt) <= MAX_PROMPT or "\0" in prompt:
-        raise ValueError("Prompt must contain 25..32000 characters")
+    if not isinstance(prompt,str) or not prompt.strip() or "\0" in prompt:
+        raise ValueError("Prompt must be nonempty text")
     setup(db)
     db.execute("BEGIN IMMEDIATE")
     try:
@@ -68,6 +67,22 @@ def enqueue(db, project: str, task: str, prompt: str, request_key: str):
            WHERE project_id=? AND task_id=?""",(project,task)).fetchone()
         if not mapping:
             raise ValueError("Executor ChatBridge session is not yet registered")
+        from . import watcher_goal_supervisor as goals
+        if not goals.is_goal(db,project,task):
+            # Existing A/B may predate mandatory review; use persisted verified
+            # owner binding instead of inventing or replacing the session ID.
+            owner=db.execute("""SELECT owner_subject FROM
+                 chatbridge_browser_project_owners WHERE project_id=?""",
+                 (project,)).fetchone()
+            if not owner:
+                raise PermissionError("Owner-bound Supervisor required for followup")
+            goals.register_goal(db,project,task,owner["owner_subject"],
+                                goals.default_criteria(prompt))
+        else:
+            goal=db.execute("SELECT state FROM goals WHERE project_id=? AND task_id=?",
+                            (project,task)).fetchone()
+            if goal["state"] not in ("running","executor_submitted"):
+                raise ValueError("Supervisor goal is not in an active reviewable state")
         existing=db.execute("""SELECT * FROM chatbridge_browser_followups
             WHERE project_id=? AND task_id=? ORDER BY revision DESC LIMIT 1""",
             (project,task)).fetchone()

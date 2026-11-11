@@ -95,11 +95,17 @@ Use `watcher_status.autonomous_subagents` to inspect redacted status.
 progress states, **not proof of completion**. `uncertain` requires reconciliation,
 never a blind second ChatGPT POST. Existing BF-20 immutable reports and
 delivery/ACK logic apply once the new chat has been verified and registered.
-BF-22 Goal Supervisor is opt-in: pass `goal_criteria` and finite
-`max_turns`, `max_elapsed_seconds`, `max_no_progress` to the same spawn
-operation. A distinct persistent ChatBridge Supervisor LLM session evaluates
-every settled executor turn. It may ask the SAME executor chat to continue;
-intermediate answers are not delivered to the orchestrator.
+BF-33 Goal Supervisor is MANDATORY for autonomous subagent work.
+The spawn operation derives task-specific review criteria when absent;
+explicit criteria and finite review budgets remain supported. If the task
+is too long for safe automatic criteria, spawn fails closed rather than
+skipping review. A distinct persistent Supervisor session evaluates every
+settled answer and can request bounded rework in the SAME executor chat.
+Intermediate answers are never delivered directly to the orchestrator.
+Older no-goal browser executors are automatically assigned an independent
+Supervisor on the first acknowledged continuation in their ORIGINAL
+session; previous immutable reports and conversation identity are retained.
+The reviewed final report is delivered only after Supervisor evaluation.
 
 When Supervisor returns `ready_for_orchestrator_review`, Watcher sends an
 immutable report with `Результат требует проверки оркестратором. При

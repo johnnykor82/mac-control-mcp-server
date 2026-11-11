@@ -289,9 +289,55 @@ def test_first_completed_task_can_process_real_followup_revision(db,monkeypatch)
     second=gateway.requests['rid-2']
     second.update({'status':'completed','assistant_message_id':'msg-second',
                    'answer':'SECOND_DONE'})
-    assert adapter.poll_executor_tasks(db)==[]
-    db.execute("UPDATE tasks SET stable_since=0 WHERE id='worker-a'")
+    from mac_control.watcher_runtime import watcher_goal_supervisor as goals
+    assert goals.is_goal(db, "bf20pilot", "worker-a")
     completed=adapter.poll_executor_tasks(db)
-    assert len(completed)==1 and completed[0]['state']=='completed'
+    assert len(completed)==1 and completed[0]['state']=='goal_review_pending'
+    # Only the old result may be delivered until a separate model reviewer
+    # has verified the NEW revision; no raw executor answer can escape.
+    assert db.execute('SELECT count(*) FROM goal_turns').fetchone()[0]==1
+    assert db.execute('SELECT state FROM goals').fetchone()[0]=='review_pending'
     assert db.execute('SELECT state FROM chatbridge_browser_followups').fetchone()[0]=='completed'
-    assert db.execute('SELECT count(*) FROM deliveries').fetchone()[0]==2
+    assert db.execute('SELECT count(*) FROM deliveries').fetchone()[0]==1
+    assert adapter.poll_executor_tasks(db)==[]
+
+
+def test_bf33_p07_two_supervised_existing_sessions_dispatch_same_tick(db,monkeypatch):
+    """Two acknowledged executor revisions MUST overlap without new sessions."""
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    from mac_control.watcher_runtime import watcher_goal_supervisor as goals
+    gateway=Gateway()
+    for task,url,sid,key in (
+        ('worker-a',CHAT2,'session-a','bf33-p07-old-a-01'),
+        ('worker-b',CHAT3,'session-b','bf33-p07-old-b-01')):
+        enqueue(db,gateway,task,url,sid,key)
+        assert dispatch.dispatch_prepared(db,gateway)[0]['state']=='submitted'
+        req=gateway.requests['rid-'+str(len(gateway.sent))]
+        req.update(status='completed',assistant_message_id='initial-'+task,answer='INITIAL_DONE')
+        row=db.execute("SELECT * FROM tasks WHERE id=?",(task,)).fetchone()
+        assert dispatch.poll_initial(db,row,gateway)==[]
+        db.execute("UPDATE tasks SET stable_since=0 WHERE id=?",(task,))
+        result=dispatch.poll_initial(db,row,gateway)
+        assert len(result)==1
+        eid=result[0]["delivery_id"]
+        db.execute("UPDATE deliveries SET state='delivered',delivered_at='2026-11-08' WHERE id=?",(eid,))
+        legacy.acknowledge_delivery(db,'bf20pilot',eid)
+    from mac_control.watcher_runtime.watcher_browser_followups import enqueue as followup
+    for task,key in (('worker-a','bf33-p07-research-a-01'),
+                     ('worker-b','bf33-p07-research-b-01')):
+        followup(db,'bf20pilot',task,
+                 'Research and compare practical strategies for concurrency and fairness in a task scheduler.',
+                 key)
+        assert goals.is_goal(db,'bf20pilot',task)
+    assert len(gateway.sessions)==2  # EXACT original executor sessions
+    monkeypatch.setattr(adapter,'api',gateway)
+    out=adapter.dispatch_prepared_followups(db)
+    assert len(out)==2, out
+    assert {x["task_id"] for x in []}==set()  # no extra agent registrations
+    assert {r["state"] for r in db.execute(
+        "SELECT state FROM chatbridge_browser_followups")}=={"submitted"}
+    assert len(gateway.sent)==4  # 2 original + 2 simultaneous followups
+    assert {r[0] for r in gateway.sent[2:]}=={'session-a','session-b'}
+    assert len(gateway.sessions)==2
+    assert db.execute("SELECT COUNT(*) FROM goals").fetchone()[0]==2
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==2

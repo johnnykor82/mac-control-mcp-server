@@ -394,3 +394,233 @@ def test_completed_supervisor_recovery_survives_elapsed_budget(db):
     assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
     assert db.execute("SELECT count(*) FROM deliveries").fetchone()[0]==1
     assert bridge.sent==sent_before
+
+
+def test_bf33_two_independent_reviews_progress_in_same_cycle(db,monkeypatch):
+    registered_goal(db)
+    other = "https://chatgpt.com/c/44444444-4444-4444-8444-444444444444"
+    legacy.register_task(db,"pilot23","agent-b",other)
+    db.execute("INSERT INTO chatbridge_task_sessions VALUES(?,?,?)",
+               ("pilot23","agent-b","sid-executor-b"))
+    goals.register_goal(db,"pilot23","agent-b","123",CRITERIA)
+    request=first_request()
+    request.update(request_id="worker-request-b",session_id="sid-executor-b",
+                   conversation_id=other.rsplit("/c/",1)[1],
+                   assistant_message_id="message-b",
+                   client_request_id="bf33-worker-b-unique")
+    assert goals.record_settled(db,"pilot23","agent-b",request)
+    # Isolate fairness from artificial Supervisor sessions in the fixture.
+    def fake_create(d,row,api):
+        return goals._mark(d,row,"supervisor_session_ready",
+                           supervisor_session_id="sup-"+row["task_id"])
+    monkeypatch.setattr(goals,"_create_reviewer",fake_create)
+    goals.pump(db,Bridge())
+    assert dict(db.execute("SELECT task_id,state FROM goals")) == {
+        "agent-a":"supervisor_session_ready",
+        "agent-b":"supervisor_session_ready",
+    }
+
+
+def test_bf33_paused_project_does_not_advance_supervisor(db):
+    registered_goal(db)
+    db.execute("UPDATE projects SET status='paused' WHERE id='pilot23'")
+    bridge=Bridge()
+    assert goals.pump(db,bridge)==[]
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_pending"
+    assert not bridge.sent
+
+
+def test_bf33_paused_reviews_do_not_consume_active_project_capacity(db,monkeypatch):
+    registered_goal(db)
+    goals.register_goal(db,"pilot23","paused-second","123",CRITERIA)
+    for task in ("agent-a","paused-second"):
+        db.execute("UPDATE goals SET state='supervisor_session_ready',supervisor_session_id=? WHERE project_id='pilot23' AND task_id=?",
+                   ("paused-"+task,task))
+    db.execute("UPDATE projects SET status='paused' WHERE id='pilot23'")
+    from mac_control.watcher_runtime import watcher_browser_dispatch as dispatch
+    dispatch.register_owned_project(
+        db,"active33","https://chatgpt.com/c/55555555-5555-4555-8555-555555555555","123")
+    goals.register_goal(db,"active33","new-worker","123",CRITERIA)
+    db.execute("UPDATE goals SET state='review_pending' WHERE project_id='active33'")
+    def create(d,row,api):
+        return goals._mark(d,row,"supervisor_session_ready",
+                           supervisor_session_id="active-new-supervisor")
+    monkeypatch.setattr(goals,"_create_reviewer",create)
+    goals.pump(db,Bridge())
+    assert db.execute("SELECT state FROM goals WHERE project_id='active33'").fetchone()[0]=="supervisor_session_ready"
+
+
+def test_bf33_p07_followup_auto_installs_supervisor_for_original_executor(db):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    assert not goals.is_goal(db, "pilot23", "agent-a")
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f" * 64, "/tmp/immutable-original.md", "2026-11-08"))
+    message = ("Research how bounded parallel queues differ from serial execution. "
+               "Compare fairness, overlap, cancellation and backpressure, with evidence.")
+    result=followups.enqueue(db,"pilot23","agent-a",message,"bf33-p07-same-a-01")
+    assert result["state"]=="prepared" and result["revision"]==1
+    assert goals.is_goal(db,"pilot23","agent-a")
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="running"
+    assert db.execute("SELECT session_id FROM chatbridge_task_sessions").fetchone()[0]=="sid-executor"
+
+
+def test_bf33_p07_completed_followup_goes_to_supervisor_not_direct_delivery(db):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f" * 64, "/tmp/immutable-original.md", "2026-11-08"))
+    prompt="Research parallel dispatch for multiple independent tasks, with a concise comparison of approaches."
+    followups.enqueue(db,"pilot23","agent-a",prompt,"bf33-p07-followup-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='followup-request-1'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,stable_since=NULL,result_sha256=NULL,result_path=NULL")
+    bridge=Bridge()
+    bridge.requests["followup-request-1"]={
+        "request_id":"followup-request-1","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-followup-a-01",
+        "status":"completed","assistant_message_id":"followup-message-1",
+        "answer":"Research shows two concurrent requests may finish out-of-order."}
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    old=adapter.api
+    adapter.api=bridge
+    try:
+        adapter.poll_executor_tasks(db)
+    finally:
+        adapter.api=old
+        monkeypatch.undo()
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==1
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_pending"
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==0
+    assert db.execute("SELECT state FROM chatbridge_browser_followups").fetchone()[0]=="completed"
+
+
+def test_bf33_p07_retrofit_followup_requires_independent_supervisor_before_delivery(db,monkeypatch):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f"*64,"/tmp/original-immutable-result.md","2026-11-08"))
+    followups.enqueue(db,"pilot23","agent-a",
+                      "Research advantages and failure modes of multi-executor parallel scheduling.",
+                      "bf33-p07-reviewed-research-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='followup-request-review'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,stable_since=NULL,result_path=NULL,result_sha256=NULL")
+    bridge=Bridge()
+    bridge.requests["followup-request-review"]={
+        "request_id":"followup-request-review","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-reviewed-research-a-01","status":"completed",
+        "assistant_message_id":"message-1",
+        "answer":"Bounded concurrency permits overlapping requests. Fairness and 429 backpressure are separate."}
+    monkeypatch.setattr(adapter,"api",bridge)
+    events=adapter.poll_executor_tasks(db)
+    assert events and events[0]["state"]=="goal_review_pending"
+    assert db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]==0
+    for _ in range(8):
+        goals.pump(db,bridge)
+        if db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready":
+            break
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    assert db.execute("SELECT COUNT(*) FROM goal_decisions").fetchone()[0]==1
+    report=db.execute("SELECT * FROM deliveries").fetchone()
+    assert report is not None and "Результат требует проверки оркестратором" in report["payload"]
+    from pathlib import Path
+    completed=db.execute("SELECT result_path,result_sha256 FROM tasks WHERE id='agent-a'").fetchone()
+    body=Path(completed["result_path"]).read_text()
+    import hashlib
+    assert "Supervisor model opinion:" in body
+    assert hashlib.sha256(body.encode()).hexdigest()==completed["result_sha256"]
+    assert db.execute("SELECT session_id FROM chatbridge_task_sessions").fetchone()[0]=="sid-executor"
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==1
+
+
+def test_bf33_p07_public_spawn_always_installs_supervisor(db,monkeypatch):
+    import contextlib
+    from mac_control.legacy_handlers import watcher_ops
+    from mac_control import account_profile
+    from mac_control.watcher_runtime import watcher_autonomous as auto
+    class Tools:
+        def __init__(self):self.ops={}
+        def tool(self,**kwargs):
+            def register(fn):
+                self.ops[fn.__name__]=fn
+                return fn
+            return register
+    tools=Tools()
+    watcher_ops.register(tools)
+    monkeypatch.setattr(account_profile,"authenticated_profile",lambda:{"id":"123"})
+    monkeypatch.setattr(legacy,"connect",lambda:db)
+    monkeypatch.setattr(watcher_ops,"closing",lambda db:contextlib.nullcontext(db))
+    # Initial spawn must never opt out implicitly just because no goal_criteria.
+    out=tools.ops["watcher_spawn_subagent"](
+        "pilot23","new-agent", "WC0123456789abcdef",
+        "Research bounded concurrency, fairness and independent review mechanisms in agents.",
+        "bf33-p07-mandatory-initial-a-01")
+    assert out["state"]=="marker_pending"
+    assert goals.is_goal(db,"pilot23","new-agent")
+    criteria=db.execute("SELECT criteria FROM goals WHERE task_id='new-agent'").fetchone()[0]
+    assert "Research bounded concurrency" in criteria
+
+
+def test_bf33_p07_supervised_followup_transaction_rolls_back_on_crash(db,monkeypatch):
+    from mac_control.watcher_runtime import watcher_browser_followups as followups
+    from mac_control.watcher_runtime import watcher_http_adapter as adapter
+    db.execute("UPDATE tasks SET state='completed',result_sha256=?,result_path=?,complete_at=? "
+               "WHERE project_id='pilot23' AND id='agent-a'",
+               ("f"*64,"/tmp/immutable-prior.md","2026-11-08"))
+    followups.enqueue(db,"pilot23","agent-a",
+                      "Research fairness and crash-safe state transitions for parallel orchestration.",
+                      "bf33-p07-crash-rollback-a-01")
+    db.execute("UPDATE chatbridge_browser_followups SET state='submitted',request_id='rev-1-request'")
+    db.execute("UPDATE tasks SET state='watching',last_revision=1,result_sha256=NULL,result_path=NULL")
+    b=Bridge()
+    b.requests["rev-1-request"]={"request_id":"rev-1-request","session_id":"sid-executor",
+        "conversation_id":WORK.rsplit("/c/",1)[1],"project_id":None,
+        "client_request_id":"bf33-p07-crash-rollback-a-01","status":"completed",
+        "assistant_message_id":"crash-message-1","answer":"Study of concurrency with evidence."}
+    monkeypatch.setattr(adapter,"api",b)
+    real=goals.record_settled
+    def crash_after_recording(*args,**kwargs):
+        real(*args,**kwargs)
+        raise sqlite3.OperationalError("simulated disk contention after goal insert")
+    monkeypatch.setattr(goals,"record_settled",crash_after_recording)
+    out=adapter.poll_executor_tasks(db)
+    assert out and out[0]["state"]=="deferred"
+    assert db.execute("SELECT COUNT(*) FROM goal_turns").fetchone()[0]==0
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="running"
+    assert db.execute("SELECT state FROM chatbridge_browser_followups").fetchone()[0]=="submitted"
+
+
+@pytest.mark.parametrize("size", [130000, 1000000])
+def test_cb33_p07r_single_supervisor_post_has_complete_response(db,size):
+    import hashlib
+    registered_goal(db)
+    ending="CB33_P07R_COMPLETE_LAST_MARKER"
+    answer="Ж"*(size-len(ending))+ending
+    digest=hashlib.sha256(answer.encode("utf-8")).hexdigest()
+    db.execute("UPDATE goal_turns SET answer=?,answer_sha256=?",
+               (answer,digest))
+
+    class CapturingBridge(Bridge):
+        def __init__(self):
+            super().__init__()
+            self.supervisor_contents=[]
+        def __call__(self,method,path,payload=None):
+            if (method=="POST" and path.startswith("/v1/sessions/sid-supervisor/")
+                    and path.endswith("/messages")):
+                self.supervisor_contents.append(payload["content"])
+            return super().__call__(method,path,payload)
+
+    gateway=CapturingBridge()
+    drain(db,gateway,16)
+    assert len(gateway.supervisor_contents)==1
+    sent=gateway.supervisor_contents[0]
+    assert sent.count(answer)==1
+    assert ending in sent
+    assert digest in sent
+    assert db.execute("SELECT COUNT(*) FROM goal_decisions").fetchone()[0]==1
+    assert db.execute("SELECT state FROM goals").fetchone()[0]=="review_ready"
+    drain(db,gateway,3)
+    assert len(gateway.supervisor_contents)==1

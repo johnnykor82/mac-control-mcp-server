@@ -208,9 +208,11 @@ def active_work_counts(db):
     autonomous=0
     if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
                   "AND name='autonomous_subagents'").fetchone():
-        autonomous=db.execute("""SELECT COUNT(*) FROM autonomous_subagents
-            WHERE state IN ('marker_pending','session_pending',
-                'session_ready','submitted')""").fetchone()[0]
+        autonomous=db.execute("""SELECT COUNT(*) FROM autonomous_subagents a
+            LEFT JOIN projects p ON p.id=a.project_id
+            WHERE (p.id IS NULL OR p.status='enabled')
+              AND a.state IN ('marker_pending','session_pending',
+                  'session_ready','submitted')""").fetchone()[0]
     return {"watching_tasks":tasks,"watching_file_tasks":file_tasks,
             "pending_deliveries":deliveries,
             "pending_autonomous_subagents":autonomous,

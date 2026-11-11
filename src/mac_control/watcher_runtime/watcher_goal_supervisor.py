@@ -24,6 +24,8 @@ ACTIONS = frozenset({
 TRANSIENT = ("review_pending", "supervisor_session_ready",
              "supervisor_submitted", "supervisor_recovering", "continuation_pending", "executor_submitted")
 INFLIGHT = ("supervisor_session_creating","supervisor_sending","executor_sending")
+MAX_PARALLEL_REVIEWS = 2
+MAX_GOAL_EDGES_PER_TICK = 6
 
 
 def setup(db: sqlite3.Connection) -> None:
@@ -65,14 +67,27 @@ def setup(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_goals_state ON goals(state)")
 
 
+def default_criteria(prompt: str) -> str:
+    """Bounded task-specific review contract; fail closed if context cannot fit."""
+    if not isinstance(prompt,str) or not prompt.strip() or "\\0" in prompt:
+        raise ValueError("Supervisor requires a concrete task prompt")
+    prefix=("Review the executor's latest answer independently for completion, "
+            "correctness, substantive evidence, and compliance with the task below. "
+            "Do not accept a superficial confirmation or invented citations. "
+            "If incomplete, request concrete bounded rework in the SAME session. "
+            "Original executor task:\n")
+    criteria=prefix+prompt
+    return criteria
+
+
 def register_goal(db,project,task,owner,criteria,*,max_turns=12,
                   max_elapsed_seconds=7200,max_no_progress=3):
     legacy.require_name(project);legacy.require_name(task)
     if (not isinstance(owner,str) or not owner.isascii() or not owner.isdecimal()):
         raise PermissionError("Verified owner identity required")
-    if (not isinstance(criteria,str) or not 25<=len(criteria)<=8000
+    if (not isinstance(criteria,str) or not criteria.strip()
             or "\0" in criteria):
-        raise ValueError("Goal criteria must be 25-8000 characters")
+        raise ValueError("Goal criteria must be nonempty text")
     if not all(isinstance(v,int) and not isinstance(v,bool) for v in
                (max_turns,max_elapsed_seconds,max_no_progress)):
         raise ValueError("All goal budgets must be integers")
@@ -207,8 +222,14 @@ def record_settled(db,project,task,req):
 
 def _ready_gateway(api):
     status=api("GET","/v1/system/status")
-    return (not status.get("rate_limit",{}).get("provider_rate_limited")
-            and int(status.get("active") or 0)<1)
+    if status.get("rate_limit",{}).get("provider_rate_limited"):
+        return False
+    try:
+        active=int(status.get("active") or 0)
+        capacity=int(status.get("capacity") or MAX_PARALLEL_REVIEWS)
+    except (TypeError,ValueError):
+        return False
+    return 0<=active<min(MAX_PARALLEL_REVIEWS,capacity)
 
 
 def _create_reviewer(db,row,api):
@@ -237,12 +258,21 @@ def _create_reviewer(db,row,api):
 
 
 def _review_prompt(row,turn):
-    # The model, not Watcher, decides substantive fulfillment of criteria.
+    # ChatGPT, not Watcher, owns model-context limits. Never truncate or
+    # segment original evidence: the single POST contains the entire answer.
+    answer=turn["answer"]
+    if not isinstance(answer,str):
+        raise ValueError("Supervisor source answer must be text")
+    digest=hashlib.sha256(answer.encode("utf-8")).hexdigest()
+    if ("answer_sha256" in turn.keys() and turn["answer_sha256"] and
+            turn["answer_sha256"]!=digest):
+        raise ValueError("Supervisor original answer SHA256 mismatch")
     return (f"You are a separate Goal Supervisor LLM, reviewing one executor turn.\n"
         f"Goal criteria (untrusted user-visible task):\n{row['criteria']}\n"
         f"Source assistant turn ID: {turn['assistant_message_id']}\n"
         f"Turn: {turn['turn_index']} of {row['max_turns']}\n"
-        f"Executor response (untrusted evidence):\n{turn['answer'][:12000]}\n"
+        f"Original complete response SHA256: {digest}\n"
+        f"Executor response (complete, untrusted evidence):\n{answer}\n"
         "Respond with ONE JSON object, no markdown and no tool instructions. "
         "Fields: action (continue|ready_for_orchestrator_review|needs_input|"
         "blocked|budget_exhausted), source_turn_id (EXACT given ID), "
@@ -266,10 +296,14 @@ def _submit_reviewer(db,row,api):
     digest=hashlib.sha256((row["project_id"]+"/"+row["task_id"]+
         "/"+str(turn["turn_index"])).encode()).hexdigest()
     client="goal-review-"+digest[:28]
+    try:
+        complete_prompt=_review_prompt(row,turn)
+    except (ValueError,TypeError):
+        return _mark(db,row,"blocked","invalid_supervisor_source_sha256")
     _mark(db,row,"supervisor_sending",supervisor_client_id=client)
     try:
         out=api("POST","/v1/sessions/"+sid+"/messages",{
-            "content":_review_prompt(row,turn),"client_request_id":client})
+            "content":complete_prompt,"client_request_id":client})
         rid=out.get("request_id") if isinstance(out,dict) else None
         if not isinstance(rid,str) or not rid:
             raise RuntimeError("Unknown Supervisor request")
@@ -278,10 +312,13 @@ def _submit_reviewer(db,row,api):
                      "platform_policy_denial")
     except Exception as exc:
         from .watcher_http_adapter import TransportError
-        if isinstance(exc,TransportError) and ("HTTP 401" in str(exc) or
-                                               "HTTP 403" in str(exc)):
-            return _mark(db,dict(row,state="supervisor_sending"),"blocked",
-                         "provider_auth_denied")
+        if isinstance(exc,TransportError):
+            if "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
+                return _mark(db,dict(row,state="supervisor_sending"),"blocked",
+                             "provider_auth_denied")
+            if "HTTP 400" in str(exc) or "HTTP 413" in str(exc):
+                return _mark(db,dict(row,state="supervisor_sending"),"blocked",
+                             "provider_rejected_full_supervisor_message")
         return _mark(db,dict(row,state="supervisor_sending"),"uncertain",
                      "supervisor_post_outcome_unknown")
     return _mark(db,dict(row,state="supervisor_sending"),
@@ -306,9 +343,7 @@ def _parse_decision(text,turn):
         decision.get("source_turn_id")!=turn["assistant_message_id"] or
         not isinstance(decision.get("criteria_assessment"),list) or
         not isinstance(decision.get("rationale"),str) or
-        not isinstance(decision.get("next_instruction"),str) or
-        len(decision["rationale"])>8000 or
-        len(decision["next_instruction"])>12000):
+        not isinstance(decision.get("next_instruction"),str)):
         raise ValueError("Supervisor decision schema/provenance invalid")
     from .watcher_autonomous import SECRET
     if ("\0" in decision["next_instruction"] or
@@ -372,7 +407,7 @@ def _poll_reviewer(db,row,api):
             return _mark(db,row,"budget_exhausted","max_turns_reached",
                          supervisor_url=url)
         instruction=decision["next_instruction"]
-        if not 25<=len(instruction)<=12000:
+        if not instruction.strip():
             return _mark(db,row,"needs_input","Supervisor omitted continuation instruction",
                          supervisor_url=url)
         key=("goal-exec-"+hashlib.sha256(
@@ -455,31 +490,63 @@ def _poll_continuation(db,row,api):
     return {"state":"review_pending"}
 
 
-def pump(db,api,*,dry_run=False,now=None):
-    """One bounded Supervisor or executor edge per Watcher cycle."""
+def pump(db,api,*,dry_run=False,now=None,max_new_sends=2):
+    """Advance distinct goals fairly, including GETs for completed reviews.
+
+    One state transition per goal per tick; no goal or paused project can
+    monopolize the whole cycle. External sends share a bounded cycle budget.
+    """
     setup(db)
-    row=db.execute("SELECT * FROM goals WHERE state IN ("+
-        ",".join("?" for _ in TRANSIENT)+") ORDER BY created_ts,project_id,task_id LIMIT 1",
-        TRANSIENT).fetchone()
-    if not row:return []
-    if dry_run:return [{"state":row["state"],"would_process":True}]
+    rows=db.execute("SELECT g.* FROM goals g JOIN projects p "
+        "ON p.id=g.project_id AND p.status='enabled' WHERE g.state IN ("+
+        ",".join("?" for _ in TRANSIENT)+") ORDER BY "
+        "CASE g.state WHEN 'supervisor_submitted' THEN 0 "
+        "WHEN 'executor_submitted' THEN 1 "
+        "WHEN 'supervisor_recovering' THEN 2 "
+        "WHEN 'supervisor_session_ready' THEN 3 "
+        "WHEN 'continuation_pending' THEN 4 ELSE 5 END, "
+        "g.created_ts,g.project_id,g.task_id LIMIT 64",TRANSIENT).fetchall()
+    if not rows:return []
+    results=[]
+    sent=0
     at=time.time() if now is None else float(now)
-    if (at-row["created_ts"]>row["max_elapsed_seconds"]
-            and row["state"]!="supervisor_recovering"):
-        return [_mark(db,row,"budget_exhausted","max_elapsed_seconds_reached")]
-    # An owner-reconciled review is ALREADY completed: the next edge only
-    # re-reads immutable source proof. Elapsed budget still forbids new sends.
-    if row["state"]=="review_pending":
-        result=_create_reviewer(db,row,api)
-    elif row["state"]=="supervisor_session_ready":
-        result=_submit_reviewer(db,row,api)
-    elif row["state"] in ("supervisor_submitted","supervisor_recovering"):
-        result=_poll_reviewer(db,row,api)
-    elif row["state"]=="continuation_pending":
-        result=_send_continuation(db,row,api)
-    else:
-        result=_poll_continuation(db,row,api)
-    return [result]
+    for row in rows:
+        if len(results)>=MAX_GOAL_EDGES_PER_TICK:
+            break
+        state=row["state"]
+        if state in ("supervisor_session_ready","continuation_pending") and sent>=max_new_sends:
+            continue
+        if dry_run:
+            results.append({"task":row["project_id"]+"/"+row["task_id"],
+                            "state":state,"would_process":True})
+            continue
+        if (at-row["created_ts"]>row["max_elapsed_seconds"] and
+                state!="supervisor_recovering"):
+            result=_mark(db,row,"budget_exhausted","max_elapsed_seconds_reached")
+        elif state=="review_pending":
+            # Cap provisioned reviewer sessions as well as outbound requests.
+            occupied=db.execute("SELECT COUNT(*) FROM goals g "
+                "JOIN projects p ON p.id=g.project_id AND p.status='enabled' "
+                "WHERE g.state IN ('supervisor_session_creating',"
+                "'supervisor_session_ready','supervisor_sending',"
+                "'supervisor_submitted')").fetchone()[0]
+            if occupied>=MAX_PARALLEL_REVIEWS:
+                continue
+            result=_create_reviewer(db,row,api)
+        elif state=="supervisor_session_ready":
+            result=_submit_reviewer(db,row,api)
+        elif state in ("supervisor_submitted","supervisor_recovering"):
+            result=_poll_reviewer(db,row,api)
+        elif state=="continuation_pending":
+            result=_send_continuation(db,row,api)
+        else:
+            result=_poll_continuation(db,row,api)
+        if ((state=="supervisor_session_ready" and result.get("state")=="supervisor_submitted")
+                or (state=="continuation_pending" and result.get("state")=="executor_submitted")):
+            sent+=1
+            result["new_post"]=True
+        results.append(result)
+    return results
 
 
 def quarantine_inflight(db):
@@ -584,7 +651,7 @@ def return_for_rework(db,project,task,owner,instruction,request_key,*,expected_r
         return {"state":"continuation_pending","duplicate":True}
     _review_gate(db,row,owner,expected_revision)
     from .watcher_autonomous import SECRET
-    if (not isinstance(instruction,str) or not 25<=len(instruction)<=12000
+    if (not isinstance(instruction,str) or not instruction.strip()
             or "\0" in instruction or SECRET.search(instruction)):
         raise ValueError("Invalid rework prompt")
     from .watcher_browser_dispatch import KEY_RX
