@@ -1,4 +1,5 @@
 """Explicit installation payload tests."""
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -27,6 +28,35 @@ class InstallPayloadTests(unittest.TestCase):
                 second = root / "second"
                 installer.copy_source(second)
                 self.assertTrue((second / "scripts/install_manifest.txt").is_file())
+
+    def test_release_id_depends_on_execute_bits_but_not_private_file_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            (source / "scripts").mkdir(parents=True)
+            (source / "bin").mkdir()
+            (source / "scripts/install_manifest.txt").write_text(
+                "bin/mac-control-remote-mcp.sh\nscripts/install_manifest.txt\n"
+            )
+            launcher = source / "bin/mac-control-remote-mcp.sh"
+            launcher.write_text("#!/bin/sh\nexit 0\n")
+            launcher.chmod(0o600)
+            with patch.object(installer, "SOURCE", source), patch.object(
+                installer, "run", side_effect=OSError("test source is not a git repo")
+            ):
+                nonexec = installer.source_id()
+                launcher.chmod(0o644)
+                self.assertEqual(installer.source_id(), nonexec)
+                launcher.chmod(0o700)
+                executable = installer.source_id()
+                self.assertNotEqual(executable, nonexec)
+                self.assertNotEqual(installer.paths(root)["release"],
+                                    root / "releases" / nonexec)
+                copied = root / "copied-release"
+                installer.copy_source(copied)
+                self.assertTrue(os.access(
+                    copied / "bin/mac-control-remote-mcp.sh", os.X_OK
+                ))
 
     def test_rejects_traversal_and_symlinks(self):
         with tempfile.TemporaryDirectory() as temporary:

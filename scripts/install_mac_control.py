@@ -61,6 +61,10 @@ def source_id() -> str:
     for path in install_sources():
         digest.update(path.relative_to(SOURCE).as_posix().encode())
         digest.update(path.read_bytes())
+        # Updater may preserve the same bytes while fixing broken executable
+        # metadata in a source archive. Never reuse a previously staged,
+        # non-executable release snapshot for that corrected payload.
+        digest.update(b"\x01" if path.stat().st_mode & 0o111 else b"\x00")
     identity = "source"
     try:
         sha = run(["git", "-C", str(SOURCE), "rev-parse", "HEAD"],
