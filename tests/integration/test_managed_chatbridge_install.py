@@ -528,7 +528,11 @@ class ManagedChatBridgeUpgradeTests(unittest.TestCase):
             with patch.object(cb, 'verify_managed_install'), \
                  patch.object(cb, 'managed_service_label', return_value=cb.MANAGED_LABEL), \
                  patch.object(cb, 'assert_managed_idle'), \
-                 patch.object(cb, 'download_pinned_source', return_value=pinned), \
+                 patch.object(cb, 'latest_published_release',
+                              return_value={'version': '0.2.0b12', 'version_number': 12}), \
+                 patch.object(cb, 'download_latest_source', return_value=pinned), \
+                 patch.object(cb.urllib.request, 'urlopen',
+                              side_effect=AssertionError('No network in upgrade fixture')), \
                  patch.object(cb.subprocess, 'run',
                               return_value=SimpleNamespace(returncode=1)):
                 with self.assertRaises(RuntimeError):
