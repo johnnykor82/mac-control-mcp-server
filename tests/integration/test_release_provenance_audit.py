@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import hashlib
-from email.message import Message
-from pathlib import Path
+import io
+import os
+import tarfile
 import tempfile
 import unittest
+from email.message import Message
+from pathlib import Path
 from unittest.mock import patch
 
-from scripts import release_dependency_audit, release_payload_audit
+from scripts import maccontrol_manager, release_dependency_audit, release_payload_audit
 
 
 class FakeDistribution:
@@ -101,6 +104,35 @@ class PayloadAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'symlink'):
                 release_payload_audit.build_archive(source)
 
+
+    def test_executable_launchers_preserved_in_source_archive(self):
+        root = Path(__file__).resolve().parents[2]
+        payload = release_payload_audit.build_archive(root)
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+            launchers = [
+                "bin/dev-stdio-mcp.sh",
+                "bin/mac-control-remote-mcp.sh",
+                "bin/mac-control-stdio-mcp.sh",
+                "bin/maccontrol",
+                "bin/mclog",
+            ]
+            for name in launchers:
+                with self.subTest(name=name):
+                    self.assertEqual(archive.getmember(name).mode & 0o111, 0o111)
+
+    def test_tagged_source_archive_remains_executable_after_updater_extract(self):
+        root = Path(__file__).resolve().parents[2]
+        tag = "v0.1.0-beta.55"
+        payload = release_payload_audit.build_archive(
+            root, prefix="mac-control-mcp-server-" + tag,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            extracted = maccontrol_manager.unpack_release(
+                payload, tag, Path(temporary),
+            )
+            for name in ("bin/mac-control-remote-mcp.sh", "bin/maccontrol"):
+                with self.subTest(name=name):
+                    self.assertTrue(os.access(extracted / name, os.X_OK))
 
 if __name__ == '__main__':
     unittest.main()

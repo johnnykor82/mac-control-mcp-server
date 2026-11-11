@@ -11,6 +11,7 @@ Owner-approved operational policy, 2026-11-11. This applies to Mac Control MCP, 
 ## Stage gates
 1. Specify → Architecture/Plan → Tasks → Analyze. For fixes, Assess → Fix → Test. Read the current GitHub Spec Kit methodology before development.
 2. RED/GREEN focused tests for changed behavior; full integration/security suites for all affected services, static checks, source inventory validation, and source Converge.
+   The published source tar must preserve every executable bit from the tested source checkout. Validate all release-archive member modes and run the actual `maccontrol_manager.unpack_release` against the exact tagged archive; SHA256 alone cannot prove launchers remain executable after extraction.
 3. Git commit on an isolated branch; verify remote `main` has not moved unexpectedly. Publish a release only once all checks pass. Do not accidentally commit unrelated changes.
 4. Snapshot SQLite online and store owned LaunchAgent plists; verify SHA256 and integrity. Preserve an immutable previous release and a tested rollback that **never overwrites newer live SQLite**.
 5. Deploy to the primary host using the versioned installer, check actual Python module origins against released SHA, service health, Watcher ACK/receipt invariants and independent gateway. Stage the secondary host with its own independently verified backup before switching to exactly the same version pair.
