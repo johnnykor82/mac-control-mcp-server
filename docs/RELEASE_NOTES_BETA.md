@@ -1,5 +1,11 @@
 # Mac Control MCP Server — draft GitHub Beta release description
 
+## Next beta (terminal long-command fallback, 2026-11-12)
+
+- Make terminal_exec tool metadata explicit: >8000-character shell input is pre-execution length validation, not a policy/permission denial. For the SAME previously owner-authorized task and scope, use existing fs_write in the approved workspace to save the large script and a short terminal_exec to run/check; no additional user confirmation is needed merely to use that alternative. Preserve actual policy/security-denial handling and existing 8000-character bound.
+- Update matching direct error text and English/Russian tool catalogs. Add live FastMCP metadata and preflight regression tests; no command allowlist, security policy, or tool signature change.
+
+
 **Language:** [English](#english) · [Русский](#русский)
 
 ## English

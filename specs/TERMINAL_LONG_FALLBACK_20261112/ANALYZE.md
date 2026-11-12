@@ -1,0 +1,4 @@
+# Analyze gate / 2026-11-12
+R1/R2: explicit user-facing tool description + direct preflight exception, in-memory MCP metadata and wrapper tests. R3: policy/scope distinction in text, unchanged code branch. R4: regression tests and docs. R5: retained git worktree and immutable source; backup verified before deployment. No contradictory requirements or new authorization policy. Architecture analyzed before code implementation. Next RED.
+
+2026-11-12 GREEN: 21 targeted unittest pass; 143 MCP metadata/annotation contract pass, 8001 preflight no shell. Full local unittest timed out at 120sec, log retained privately in AgentWorkspace artifacts and no orphan process. GitHub macOS CI remains mandatory. Source release audit strict passed with pre-existing warnings; deterministic release payload 126 files verified.

@@ -1,0 +1,6 @@
+# PLAN v1.0, owner-approved 2026-11-12
+S01 [DONE/VERIFIED backup+worktree] Isolated worktree and verified backup: /Users/openclaw/AgentWorkspace/artifacts/backups/mac-control-term-long-20261112 with installed command_plugins.py, docs, remote.plist, release symlink and SHA256SUMS.txt. Rollback: restore previous immutable source release through supported updater; retained original file/plist byte-copy verified. Never restore historical Watcher/ChatBridge SQLite over newer records.
+S02 [RED proven: 3 tests, 7 failures expected] RED tests for MCP description and explicit input-validation-specific fs_write fallback; documented SDD Analyze.
+S03 [GREEN 7/7 targeted tests and English/Russian docs updated] GREEN: minimal source/docstring/error guidance change, English/Russian docs, run targeted tests.
+S04 [TARGETED 21/21 PASS, source audit/CI PENDING] Converge, entire source regression suite, Git commit and verified immutable release artifacts; no authorization/security changes.
+S05 [PENDING] Safe staged deployment on Mac Server (jkmac only via jkmac tool when in scope), verify source parity and new MCP-visible description. Stop on any unexpected condition; no historic BF33/UNKNOWN modifications.
