@@ -6,8 +6,9 @@ import asyncio
 import csv
 from pathlib import Path
 from unittest import TestCase
+from unittest.mock import patch
 
-from mac_control import account_profile
+from mac_control import account_profile, background_browser_ops, background_native_ops
 from mac_control.mandatory_audit_context import install_registration
 from scripts.dev_mcp_server import make_server
 
@@ -18,9 +19,16 @@ SNAKE = ("read_only_hint", "destructive_hint", "idempotent_hint", "open_world_hi
 
 
 def registered_tools():
-    server = make_server(include_mutations=True)
-    account_profile.register(server)
-    return asyncio.run(server.list_tools(run_middleware=False))
+    # CI's clean runner has both optional modules disabled by default.
+    # Enumerate the FULL 143-name contract without enabling runtime permissions
+    # or executing any tool handlers.
+    with (
+        patch.object(background_browser_ops, "enabled", return_value=True),
+        patch.object(background_native_ops, "enabled", return_value=True),
+    ):
+        server = make_server(include_mutations=True)
+        account_profile.register(server)
+        return asyncio.run(server.list_tools(run_middleware=False))
 
 
 class ToolAnnotationTrustTests(TestCase):

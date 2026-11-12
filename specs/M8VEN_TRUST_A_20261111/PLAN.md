@@ -49,3 +49,19 @@ Strict source manifest includes 297 tracked files, no untracked fixture
 included, installer deterministic payload verified. Native protocol upgrade
 tested, original BF33/UNKNOWN unchanged. GitHub publish/CI and two-host
 installation are still OPEN; no M8ven outreach permitted.
+
+A10c CI OPTIONAL MODULES BUG FIXED 2026-11-12: First GitHub macOS CI
+run 43155449250 failed two NEW tests ONLY: they assumed 143 remote / 142 stdio
+tools in clean runner despite background_browser and background_native both
+disabled by default (each module has seven optional tools). No server
+functionality/regression defect. Updated annotation integration test to
+explicitly patch both enabled() functions ONLY during in-memory registration
+and assert the full 143-name policy. Real stdio smoke now verifies exact
+core+optional module sets for 128,135,142 without changing runtime feature
+flags or calling optional handlers. Clean HOME/macOS unittest: 5 tests PASS,
+real stdio test 128 tools PASS; owner runtime enabled mode metadata 6 tests
++419 subtests PASS. Full source regression prior to this test-only patch:
+938 integration PASS, 1618 subtests PASS, 1 SKIP, 4 security PASS. Next GitHub
+CI for amended commit is the publication gate; beta57 remains draft.
+
+A10c local full single-process unittest discover additionally timed out after 240s (no remaining process on inspection); this is not a PASS. The complete prior segmented integration run passed 938 tests/1618 subtests and all security tests; the two actual GitHub failures were reproduced and fixed under clean HOME with 5 unittest PASS + real stdio128 PASS. New GitHub CI success is a mandatory publication gate.

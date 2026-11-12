@@ -24,4 +24,6 @@ class SafeNativeMCPTests(TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
-        self.assertIn("M8VEN_MACOS_MCP_READONLY_SMOKE_PASS 142 tools", proc.stdout)
+        self.assertRegex(
+            proc.stdout, r"M8VEN_MACOS_MCP_READONLY_SMOKE_PASS (128|135|142) tools"
+        )

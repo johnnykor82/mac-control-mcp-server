@@ -15,9 +15,11 @@ executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 
 ## MCP tool trust metadata and screenshots
 
-The complete 143-tool authenticated remote catalog (142 tools for local stdio)
-publishes the four MCP behavior hints: read-only, destructive, idempotent and
-open-world. A versioned, strict 143-name policy verifies these hints at
+When all optional modules are enabled, the catalog has 143 authenticated
+remote tools (142 local stdio). Clean installs expose 129 remote / 128 local
+tools because seven background-browser and seven background-native operations
+are opt-in. Every exposed tool publishes the four MCP behavior hints:
+read-only, destructive, idempotent and open-world. A versioned, strict 143-name policy verifies these hints at
 registration; authorization and the required per-call audit_context remain
 unchanged. Hints describe effects but never grant permission.
 

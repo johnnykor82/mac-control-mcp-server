@@ -14,6 +14,8 @@ from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
+from mac_control.tool_annotation_policy import TOOL_ANNOTATIONS
+
 ROOT = Path(__file__).resolve().parents[1]
 FIELDS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
 CTX = {
@@ -39,8 +41,33 @@ async def smoke() -> None:
     async with Client(transport) as client:
         tools = await client.list_tools()
         names = {tool.name for tool in tools}
-        if len(tools) != 142 or len(names) != 142:
-            raise AssertionError("Expected 142 stdio tools; remote-only get_profile excluded")
+        # Two optional 7-tool modules are intentionally absent in clean CI.
+        # Verify the exact advertised set for EACH valid feature-flag state,
+        # without changing flags, credentials or any production browser.
+        browser_names = {
+            "background_browser_action", "background_browser_capture",
+            "background_browser_close", "background_browser_create",
+            "background_browser_list", "background_browser_reopen",
+            "background_browser_snapshot",
+        }
+        native_names = {
+            "background_app_action", "background_app_capture",
+            "background_app_close", "background_app_create",
+            "background_app_elements", "background_app_list",
+            "background_app_windows",
+        }
+        full_names = set(TOOL_ANNOTATIONS) - {"get_profile"}
+        core_names = full_names - browser_names - native_names
+        expected = set(core_names)
+        if names & browser_names:
+            expected.update(browser_names)
+        if names & native_names:
+            expected.update(native_names)
+        if len(names) != len(tools) or names != expected:
+            raise AssertionError(
+                "Tool inventory drift: expected " + str(len(expected)) +
+                " vs observed " + str(len(tools))
+            )
         for tool in tools:
             annotation = tool.annotations
             data = annotation.model_dump(by_alias=True, exclude_none=True)

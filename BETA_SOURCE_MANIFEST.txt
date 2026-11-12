@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 297
+Included files: 298
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -114,6 +114,7 @@ specs/CB33_WATCHER_GUARD_20261109/TASKS.md
 specs/M8VEN_TRUST_A_20261111/ANALYZE.md
 specs/M8VEN_TRUST_A_20261111/ARCHITECTURE.md
 specs/M8VEN_TRUST_A_20261111/BACKLOG.md
+specs/M8VEN_TRUST_A_20261111/BUG_ASSESS_CI_OPTIONAL_FLAGS.md
 specs/M8VEN_TRUST_A_20261111/BUG_ASSESS_NATIVE_PROTOCOL.md
 specs/M8VEN_TRUST_A_20261111/CONVERGE.md
 specs/M8VEN_TRUST_A_20261111/FINDINGS.md

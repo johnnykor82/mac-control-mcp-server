@@ -29,3 +29,17 @@ declaring MacControlCaptureProtocol=jpeg-base64-v1. Preserve previous owned GUI
 backup and all TCC checks; refuse untrusted apps. A repeat update must reuse
 a compatible helper. Explicit --without-gui with incompatible installed
 helper must fail closed rather than silently break screenshot.
+
+A10c CI OPTIONAL MODULES BUG FIXED 2026-11-12: First GitHub macOS CI
+run 43155449250 failed two NEW tests ONLY: they assumed 143 remote / 142 stdio
+tools in clean runner despite background_browser and background_native both
+disabled by default (each module has seven optional tools). No server
+functionality/regression defect. Updated annotation integration test to
+explicitly patch both enabled() functions ONLY during in-memory registration
+and assert the full 143-name policy. Real stdio smoke now verifies exact
+core+optional module sets for 128,135,142 without changing runtime feature
+flags or calling optional handlers. Clean HOME/macOS unittest: 5 tests PASS,
+real stdio test 128 tools PASS; owner runtime enabled mode metadata 6 tests
++419 subtests PASS. Full source regression prior to this test-only patch:
+938 integration PASS, 1618 subtests PASS, 1 SKIP, 4 security PASS. Next GitHub
+CI for amended commit is the publication gate; beta57 remains draft.
