@@ -66,7 +66,12 @@ def _cli_payload(command, payload, timeout=45):
     return data["data"]
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_guide() -> dict:
         """DISCOVERABLE MULTI-PROJECT AGENT WATCHER: automates ChatGPT subagent handoffs. Call watcher_guide to read the full live usage protocol.
 
@@ -119,7 +124,12 @@ def register(mcp):
             "state_path":str(DB),
         }
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_register_project(project_id:str,orchestrator_url:str)->dict:
         """Register a distinct project and exact ChatGPT orchestrator URL.
 
@@ -129,7 +139,12 @@ def register(mcp):
         return _cli("register-project",_name(project_id),orchestrator_url)
 
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_register_browser_project(project_id:str,orchestrator_url:str)->dict:
         """Register a browser-mode project bound to the authenticated GitHub owner.
 
@@ -144,7 +159,12 @@ def register(mcp):
             return dispatch.register_owned_project(db,_name(project_id),
                                                    orchestrator_url,owner)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_spawn_subagent(project_id:str,task_id:str,
                                orchestrator_marker:str,prompt:str,
                                request_key:str,goal_criteria:str="",
@@ -174,7 +194,12 @@ def register(mcp):
                                 max_elapsed_seconds=max_elapsed_seconds,
                                 max_no_progress=max_no_progress)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_reconcile_goal_review(project_id:str,task_id:str)->dict:
         """Reconcile one previously completed blocked Supervisor reply.
 
@@ -191,7 +216,12 @@ def register(mcp):
             return goals.reconcile_blocked_review(
                 db,_name(project_id),_name(task_id),owner,adapter.api)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_approve_goal(project_id:str,task_id:str,expected_revision:int)->dict:
         """After delivered+ACKed Supervisor review, explicitly approve goal closure.
 
@@ -206,7 +236,12 @@ def register(mcp):
             return goals.approve_goal(db,_name(project_id),_name(task_id),
                                       owner,expected_revision=expected_revision)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_return_for_rework(project_id:str,task_id:str,
                                   instruction:str,request_key:str,
                                   expected_revision:int)->dict:
@@ -219,7 +254,12 @@ def register(mcp):
             return goals.return_for_rework(db,_name(project_id),_name(task_id),
                 owner,instruction,request_key,expected_revision=expected_revision)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_dispatch_browser_task(project_id:str,task_id:str,executor_url:str,
                                       prompt:str,request_key:str)->dict:
         """Prepare an owner-authenticated browser task without bearer handoff.
@@ -239,12 +279,22 @@ def register(mcp):
                 db,_name(project_id),_name(task_id),
                 executor_url,prompt,request_key,owner,adapter.api)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_register_task(project_id:str,task_id:str,executor_url:str)->dict:
         """Register an executor chat under exactly one project/orchestrator."""
         return _cli("register-task",_name(project_id),_name(task_id),executor_url)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_schedule_wakeup(delay_minutes:int,objective:str,evidence_text:str="",chat_url:str="",request_key:str="")->dict:
         """Schedule a later verification in THIS SAME verified ChatGPT chat.
 
@@ -257,7 +307,12 @@ def register(mcp):
             "objective":objective,"evidence_text":evidence_text,
             "chat_url":chat_url,"request_key":request_key})
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_resolve_current_chat(evidence_text:str)->dict:
         """Resolve a WC+16-hex marker (or legacy WATCHER-CHAT+32 hex) from SQLite first.
         On a cache miss ChatBridge searches the normal UI and verifies the exact
@@ -265,32 +320,62 @@ def register(mcp):
         """
         return _cli_payload("resolve-chat",{"evidence_text":evidence_text}, timeout=210)
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_get_wakeup(wakeup_id:str)->dict:
         """Verify the identity, target and delivery state of a scheduled alert."""
         return _cli("get-check",wakeup_id)
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_list_wakeups(chat_url:str="")->dict:
         """List saved delayed checks, optionally for one exact chat URL."""
         return _cli("list-checks","--chat-url",chat_url)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_cancel_wakeup(wakeup_id:str)->dict:
         """Cancel a delayed check only while not sent/attempting."""
         return _cli("cancel-check",wakeup_id)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_ack_wakeup(wakeup_id:str)->dict:
         """Acknowledge a verified, delivered delayed check."""
         return _cli("ack-check",wakeup_id)
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_status(project_id:str="")->dict:
         """Read all projects and task/delivery states from persistent SQLite."""
         return _cli("status",*(["--project",_name(project_id)] if project_id else []))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_register_file_task(project_id:str,task_id:str,executor_url:str)->dict:
         """Register a NEW file-report executor task; return separate task-scoped
         submission and continuation bearer tokens. Store tokens securely.
@@ -299,7 +384,12 @@ def register(mcp):
         """
         return _cli("register-file",_name(project_id),_name(task_id),executor_url)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_submit_report(project_id:str,task_id:str,revision:int,
                               status:str,content:str,capability_token:str)->dict:
         """Save immutable UTF-8 report and atomic readiness marker.
@@ -312,13 +402,23 @@ def register(mcp):
             "capability_token":capability_token,
         })
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_read_report(project_id:str,task_id:str,revision:int=0)->dict:
         """Read immutable indexed file report and verify SHA256."""
         return _cli("read-file",_name(project_id),_name(task_id),
                     "--revision",str(revision))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_resume_task(project_id:str,task_id:str,expected_revision:int,
                             capability_token:str)->dict:
         """After reading needs_input/blocked report, resume same executor chat.
@@ -330,7 +430,12 @@ def register(mcp):
             "capability_token":capability_token,
         })
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_followup_browser_task(project_id:str,task_id:str,
                                       prompt:str,request_key:str)->dict:
         """Continue a COMPLETED browser executor in its original ChatGPT chat.
@@ -355,17 +460,32 @@ def register(mcp):
             return followups.enqueue(
                 db,_name(project_id),_name(task_id),prompt,request_key)
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_pause_project(project_id:str)->dict:
         """Stop monitoring and notifying for a project (keep its history)."""
         return _cli("pause-project",_name(project_id))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_resume_project(project_id:str)->dict:
         """Resume task-completion monitoring for a registered project."""
         return _cli("resume-project",_name(project_id))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":False,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def watcher_ack_delivery(project_id: str, event_id: str) -> dict:
         """Acknowledge a reviewed and DELIVERED Watcher event in exactly one project.
 
@@ -378,7 +498,12 @@ def register(mcp):
             return {"ok":False,"error_code":"INVALID_EVENT_ID"}
         return _cli("ack-delivery",_name(project_id),event_id)
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_error_status(limit: int = 20) -> dict:
         """MCP ERROR MONITOR: inspect automatically detected tool exceptions.
 
@@ -408,7 +533,12 @@ def register(mcp):
                 "auto_recovery":["launchd_restart","chrome_reconnect"],
                 "requires_review":["SHA256_conflict","code_fix","permissions","SSH","system_actions"]}
 
-    @mcp.tool(annotations={"readOnlyHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def watcher_read_result(project_id:str,task_id:str,max_chars:int=65000)->dict:
         """Read completed immutable executor report and verify its SHA256."""
         p=_name(project_id);t=_name(task_id)

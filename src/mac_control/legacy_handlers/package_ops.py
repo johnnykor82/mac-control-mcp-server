@@ -106,7 +106,12 @@ def _worker(job_id, name):
     return code
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def package_capabilities() -> dict:
         """Check Homebrew and tmux installation without executing shell scripts."""
         binary = brew()
@@ -118,7 +123,12 @@ def register(mcp):
             result["brew_version"] = test.stdout.strip()[:250]
         return result
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def package_installed(formula: str) -> dict:
         """Test whether a Homebrew formula is installed."""
         if not isinstance(formula, str) or not FORMULA.fullmatch(formula):
@@ -130,7 +140,12 @@ def register(mcp):
         return {"formula": formula, "installed": response.returncode == 0,
                 "version": response.stdout.strip()[:250]}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def package_install(formula: str) -> dict:
         """Install one validated Homebrew formula asynchronously; poll package_job_status.
 
@@ -166,7 +181,12 @@ def register(mcp):
                 "worker_pid": p.pid, "status": "queued",
                 "poll_operation": "package_job_status"}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def package_job_status(job_id: str) -> dict:
         """Get current or completed Homebrew install log and exit code."""
         return _status(job_id)

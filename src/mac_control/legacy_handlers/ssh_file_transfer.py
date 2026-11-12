@@ -694,21 +694,36 @@ def _wrap(tool, host, remote, local, fn):
 
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_upload(host:str, local_path:str, remote_path:str, overwrite:bool=False,
                    mode:str|None=None, expected_remote_sha256:str|None=None)->dict:
         """SFTP upload Mac file; atomically publish after SHA-256. No heredoc."""
         return _wrap("ssh_upload",host,remote_path,local_path,lambda:
                      upload(host,local_path,remote_path,overwrite,mode,expected_remote_sha256))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_download(host:str, remote_path:str, local_path:str, overwrite:bool=False,
                      expected_sha256:str|None=None)->dict:
         """SFTP download to approved Mac project; verify SHA-256 before publish."""
         return _wrap("ssh_download",host,remote_path,local_path,lambda:
                      download(host,remote_path,local_path,overwrite,expected_sha256))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_write_text(host:str, remote_path:str, content:str, encoding:str="utf-8",
                        overwrite:bool=False, mode:str|None=None,
                        expected_remote_sha256:str|None=None)->dict:
@@ -716,7 +731,12 @@ def register(mcp):
         return _wrap("ssh_write_text",host,remote_path,None,lambda:
                      write_text(host,remote_path,content,encoding,overwrite,mode,expected_remote_sha256))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_transfer_begin(direction:str,host:str,remote_path:str,
                            local_path:str|None=None,total_size:int|None=None,
                            expected_sha256:str|None=None, overwrite:bool=False,
@@ -728,20 +748,35 @@ def register(mcp):
                            expected_sha256,overwrite,mode,expected_remote_sha256,
                            resume_transfer_id))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_transfer_chunk(transfer_id:str,offset:int,chunk_index:int,
                            data_base64:str="",chunk_sha256:str="")->dict:
         """Send/receive up to 64 KiB per chunk; data_base64 encodes MCP JSON only."""
         return _wrap("ssh_transfer_chunk","",transfer_id,None,lambda:
                      chunk(transfer_id,offset,chunk_index,data_base64,chunk_sha256))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_transfer_finish(transfer_id:str,expected_sha256:str|None=None)->dict:
         """Verify and publish staged transfer atomically."""
         return _wrap("ssh_transfer_finish","",transfer_id,None,lambda:
                      finish(transfer_id,expected_sha256))
 
-    @mcp.tool(annotations={"readOnlyHint":False,"destructiveHint":True,"openWorldHint":False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_transfer_cancel(transfer_id:str)->dict:
         """Cancel one owned transfer and remove staging files."""
         return _wrap("ssh_transfer_cancel","",transfer_id,None,lambda:

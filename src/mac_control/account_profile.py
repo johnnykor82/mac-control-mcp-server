@@ -51,10 +51,11 @@ def register(mcp) -> None:
             "and token refresh."
         ),
         annotations={
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "openWorldHint": False,
-        },
+                        'readOnlyHint': True,
+                        'destructiveHint': False,
+                        'idempotentHint': True,
+                        'openWorldHint': False,
+                    },
         output_schema=OUTPUT_SCHEMA,
         meta={"openai/profile": True},
     )

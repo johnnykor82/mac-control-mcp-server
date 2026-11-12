@@ -146,20 +146,35 @@ def _result(task_id: str, limit: int = 16_000) -> dict:
 
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def chrome_orchestrator_status() -> dict:
         """Compatibility status: query ChatBridge HTTP. Chrome is owned by ChatBridge."""
         d = _api("GET", "/v1/system/status")
         return {"running": d.get("browser", {}).get("state") == "running",
                 "browser": d.get("browser"), "transport": "ChatBridge HTTP"}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_ui_status() -> dict:
         """Read ChatBridge browser health without CDP or direct tab access."""
         d = _api("GET", "/v1/system/status")
         return {"browser": d.get("browser"), "transport": "ChatBridge HTTP"}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_orchestrator_launch() -> dict:
         """Check or wake Chrome through its owning ChatBridge gateway."""
         status = _api("GET", "/v1/system/status")
@@ -172,36 +187,66 @@ def register(mcp):
             raise RuntimeError("ChatBridge unavailable; check net.chatbridge.gateway LaunchAgent")
         return {**d, "reused": True, "launched_by_mac_control": False}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_new(reuse: bool = True, task_id: str = "") -> dict:
         """Create/reuse an HTTP ChatBridge session for a named task; no browser tab."""
         return _session(task_id, reuse)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_adopt(task_id: str) -> dict:
         """Look up a previously created HTTP session; no tab ownership transfer."""
         row = _mapped(task_id)
         return {"task_id": task_id, "session_id": row["session_id"],
                 "browser_owner": "ChatBridge"}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_switch(task_id: str) -> dict:
         """Choose existing HTTP session; does not manipulate physical Chrome tabs."""
         row = _mapped(task_id)
         return {"task_id": task_id, "session_id": row["session_id"],
                 "browser_owner": "ChatBridge"}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_send(prompt: str = "", prompt_file: str = "", task_id: str = "") -> dict:
         """Queue prompt via ChatBridge HTTP; optional file is scoped to agent-prompts."""
         return _submit(_task(task_id), prompt, prompt_file)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_read(max_chars: int = 16_000, task_id: str = "") -> dict:
         """Read ChatBridge request answer and attachments by task ID."""
         return _result(_task(task_id), max(1, min(max_chars, 50_000)))
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_save(
         result_filename: str = "latest-chatgpt-answer.md", task_id: str = ""
     ) -> dict:
@@ -220,7 +265,12 @@ def register(mcp):
         return {"task_id": task_id, "result_filename": result_filename,
                 "bytes": path.stat().st_size, "status": result["status"]}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_archive(task_id: str) -> dict:
         """Archive logical task mapping only; ChatBridge exclusively owns Chrome tabs."""
         task_id = _task(task_id)
@@ -229,12 +279,22 @@ def register(mcp):
             db.execute("UPDATE tasks SET archived=1 WHERE task_id=?", (task_id,))
         return {"task_id": task_id, "archived": True, "closed_tabs": 0}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_cleanup() -> dict:
         """No browser cleanup from Mac Control. ChatBridge owns all tab lifecycle."""
         return {"managed_by": "ChatBridge", "closed_tabs": 0, "legacy_tabs": "not_managed"}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_restore(task_id: str) -> dict:
         """Unarchive the logical HTTP task mapping; do not navigate browser."""
         task_id = _task(task_id)
@@ -244,7 +304,12 @@ def register(mcp):
         return {"task_id": task_id, "session_id": row["session_id"],
                 "restored": True, "browser_owner": "ChatBridge"}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def chrome_chat_wait(wait_seconds: int = 15, task_id: str = "") -> dict:
         """Wait for a queued ChatBridge HTTP request, without browser/CDP access."""
         task_id = _task(task_id)

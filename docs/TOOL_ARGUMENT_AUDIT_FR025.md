@@ -5,8 +5,8 @@
 
 - Всего: **142** инструментов (112 frozen, 30 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
-- Статические исключения из 20 модулей: PermissionError=37, RuntimeError=36, TypeError=2, ValueError=137.
-- Не классифицированных статических сообщений: **28**.
+- Статические исключения из 20 модулей: PermissionError=37, RuntimeError=35, TypeError=2, ValueError=139.
+- Не классифицированных статических сообщений: **30**.
 - Статические raise-сайты не являются доказательством ошибки параметра;
   ошибки среды, зависимости и после побочного эффекта проверяются отдельно.
 
@@ -197,7 +197,7 @@
 | command_plugins.py | 9 | 1 | 7 | 0 |
 | fs_ops.py | 23 | 4 | 0 | 0 |
 | git_ops.py | 8 | 1 | 0 | 0 |
-| gui_ops.py | 9 | 0 | 5 | 0 |
+| gui_ops.py | 11 | 0 | 4 | 0 |
 | mcp_bridge_ops.py | 14 | 2 | 0 | 0 |
 | package_ops.py | 4 | 0 | 2 | 0 |
 | ssh_bridge_ops.py | 2 | 1 | 2 | 0 |
@@ -227,6 +227,8 @@
 | fs_ops.py | Invalid backup ID |
 | fs_ops.py | Invalid trusted projects config |
 | gui_ops.py | Invalid application name |
+| gui_ops.py | Invalid or oversized screenshot JPEG |
+| gui_ops.py | Invalid screenshot JPEG base64 |
 | maintenance_ops.py | Invalid path |
 | mcp_bridge_ops.py | Invalid saved MCP targets |
 | mcp_bridge_ops.py | Invalid stdio arguments |

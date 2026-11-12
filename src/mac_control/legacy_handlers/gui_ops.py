@@ -87,7 +87,12 @@ def register(mcp):
             return decorator(safe)
         return attach
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_status() -> dict:
         """Check Screen Recording / Accessibility permissions, active app and displays."""
         status = _status()
@@ -105,17 +110,32 @@ def register(mcp):
         return {"helper": str(HELPER), **status, "functional_state":"operational",
                 "ipc":info}
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_displays() -> dict:
         """Enumerate Mac display IDs, global mouse coordinates and pixel dimensions."""
         return _call("displays")
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_windows() -> dict:
         """List open onscreen windows, app names and window coordinates."""
         return _call("windows")
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_tree(pid: int = 0, max_depth: int = 4, max_nodes: int = 120) -> dict:
         """Read Accessibility roles, titles and frames of active app (or explicit PID).
 
@@ -138,37 +158,48 @@ def register(mcp):
             raise
         return {"available": True, **result}
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_screenshot(max_width: int = 1200, display_id: int = 0) -> dict:
         """Capture Mac screen to small JPEG and return base64. Image bytes are not audited.
 
         Use a client capable of rendering image_data; never share screenshots
         containing credentials or other private content without approval.
         """
-        CAPTURES.mkdir(mode=0o700, parents=True, exist_ok=True)
-        CAPTURES.chmod(0o700)
-        filename = "capture-" + secrets.token_hex(12) + ".jpg"
-        path = CAPTURES / filename
+        # Native helper returns JPEG bytes in-memory. No temporary file,
+        # cleanup path, or image bytes are written to audit logs.
+        data = _call("capture",
+                     max_width=max(300, min(int(max_width), 1800)),
+                     display_id=int(display_id), timeout=30)
+        encoded = data.get("image_data")
+        maximum_encoded = 4 * ((MAX_IMAGE_BYTES + 2) // 3)
+        if not isinstance(encoded, str) or not encoded or len(encoded) > maximum_encoded:
+            raise ValueError("Screenshot image data missing or too large")
         try:
-            data = _call("capture", destination=str(path),
-                         max_width=max(300, min(int(max_width), 1800)),
-                         display_id=int(display_id), timeout=30)
-            if path.is_symlink() or not path.is_file():
-                raise RuntimeError("Screenshot was not created")
-            size = path.stat().st_size
-            if size > MAX_IMAGE_BYTES:
-                raise ValueError("Screenshot too large")
-            return {
-                **{k:v for k,v in data.items() if k != "file"},
-                "mime_type": "image/jpeg",
-                "image_data": base64.b64encode(path.read_bytes()).decode("ascii"),
-                "image_bytes":size,
-                "note":"Image scaled for preview; click coordinates use display coordinate points.",
-            }
-        finally:
-            path.unlink(missing_ok=True)
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise ValueError("Invalid screenshot JPEG base64") from exc
+        if (not 4 <= len(raw) <= MAX_IMAGE_BYTES
+                or not raw.startswith(b"\xff\xd8") or not raw.endswith(b"\xff\xd9")):
+            raise ValueError("Invalid or oversized screenshot JPEG")
+        return {
+            **{k:v for k,v in data.items() if k not in ("file", "image_data", "image_bytes")},
+            "mime_type": "image/jpeg",
+            "image_data": encoded,
+            "image_bytes": len(raw),
+            "note": "Image scaled for preview; click coordinates use display coordinate points.",
+        }
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_request_permissions() -> dict:
         """Ask macOS to show Screen Recording and Accessibility permission prompts.
 
@@ -177,7 +208,12 @@ def register(mcp):
         result = _call("request_permissions", timeout=35)
         return {**result, "application":str(HELPER.parent.parent.parent)}
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_mouse(action: str, x: float, y: float,
                   end_x: float = 0, end_y: float = 0) -> dict:
         """Mouse move, left/right/double click, or drag in global display coordinates."""
@@ -189,17 +225,32 @@ def register(mcp):
         return _call("mouse",action=action,x=float(x),y=float(y),
                      end_x=float(end_x),end_y=float(end_y))
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_scroll(dx: int = 0, dy: int = 0) -> dict:
         """Scroll at current pointer position, in lines."""
         return _call("scroll",dx=max(-30,min(30,int(dx))),dy=max(-30,min(30,int(dy))))
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_press(key: str, modifiers: list[str] | None = None) -> dict:
         """Press a key or keyboard shortcut (cmd/shift/ctrl/option modifiers)."""
         return _call("key",key=key,modifiers=modifiers or [])
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_type(text: str) -> dict:
         """Paste Unicode into the focused control without changing user clipboard.
 
@@ -251,14 +302,24 @@ def register(mcp):
             raise RuntimeError("GUI paste clipboard restoration not confirmed")
         return {"characters": len(text), "sent": delivered, "clipboard_restored": True}
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_focus(bundle_id: str) -> dict:
         """Activate a running macOS app by exact bundle ID."""
         if not isinstance(bundle_id,str) or not BUNDLE_ID.fullmatch(bundle_id):
             raise ValueError("Invalid bundle identifier")
         return _call("activate",bundle_id=bundle_id)
 
-    @gui_tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def gui_open_app(name: str) -> dict:
         """Launch a locally installed app by exact name, without shell command evaluation."""
         if not isinstance(name,str) or not re.fullmatch(r"[\w .()+-]{1,100}",name):
@@ -271,7 +332,12 @@ def register(mcp):
         return {"application":name,"exit_code":result.returncode,
                 "stderr":result.stderr[:300]}
 
-    @gui_tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @gui_tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def gui_wait_title(title: str, pid: int = 0, timeout_seconds: int = 8) -> dict:
         """Wait until an Accessibility element with given title becomes visible."""
         if not title or len(title) > 150:

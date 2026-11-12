@@ -43,7 +43,12 @@ def _managed_service():
 
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def machine_health() -> dict:
         """Read disk capacity, uptime, and memory pressure summary."""
         output = {}
@@ -59,7 +64,12 @@ def register(mcp):
                     output[name] = {"error": type(exc).__name__}
         return output
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def network_listeners(limit: int = 100) -> dict:
         """List TCP listening processes and ports, without network requests."""
         limit = max(1, min(int(limit), 200))
@@ -69,7 +79,12 @@ def register(mcp):
         )
         return {**result, "stdout": "\n".join(result["stdout"].splitlines()[:limit + 1])}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def local_http_probe(port: int | None = None, path: str = "/", method: str = "GET") -> dict:
         """Probe approved localhost HTTP ports without credentials or redirects."""
         active_mcp_port = _managed_service().PORT
@@ -100,7 +115,12 @@ def register(mcp):
             data = exc.read(2000)
             return {"status": exc.code, "body_preview": data.decode("utf-8", "replace")}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def launchd_status(label: str = "") -> dict:
         """Inspect any LaunchAgent belonging to the current macOS GUI user."""
         if not label:
@@ -122,7 +142,12 @@ def register(mcp):
         return {**result, "label": label, "state": state.group(1) if state else None,
                 "pid": int(pid.group(1)) if pid else None}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def launchd_restart(label: str) -> dict:
         """Restart a current-user LaunchAgent explicitly; own MCP uses restart_server."""
         if label == _managed_service().LABEL:
@@ -132,7 +157,12 @@ def register(mcp):
         return execute(["/bin/launchctl", "kickstart", "-k",
                         f"gui/{os.getuid()}/{label}"], str(Path.home()), 20)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def project_task(project: str, task: str, path: str = "") -> dict:
         """Run one approved project test or build; test/build scripts can execute project code."""
         allowed = roots()

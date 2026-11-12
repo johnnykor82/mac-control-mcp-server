@@ -136,7 +136,12 @@ def _screen(session, lines):
             "truncated": len(r.stdout) > MAX_TEXT}
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def terminal_capabilities() -> dict:
         """Show terminal availability and local opt-in status."""
         return {
@@ -149,7 +154,12 @@ def register(mcp):
             "security": "Shell executes as service user, not sandboxed",
         }
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def terminal_exec(command: str, project: str = "workspace", timeout_seconds: int = 25) -> dict:
         """Run arbitrary noninteractive zsh command with bounded time and captured output."""
         _require()
@@ -200,7 +210,12 @@ def register(mcp):
             "project": project,
         }
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def terminal_open(project: str = "workspace", width: int = 120, height: int = 36) -> dict:
         """Create persistent tmux PTY session, usable across MCP reconnections/restarts."""
         _require()
@@ -220,7 +235,12 @@ def register(mcp):
                 "rows": int(size[1]),
                 "attach_command": f"tmux -S {SOCKET} attach -t {name}"}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def terminal_read(session: str, lines: int = 100) -> dict:
         """Read current tmux PTY screen and scrollback; no keys are sent."""
         _require()
@@ -228,7 +248,12 @@ def register(mcp):
             return _tmux_error()
         return _screen(_session(session), lines)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def terminal_send(session: str, text: str = "", key: str = "") -> dict:
         """Type literal text and/or a terminal key (Enter, C-c, arrows). Avoid secrets in chat."""
         _require()
@@ -270,7 +295,12 @@ def register(mcp):
         return {"session": session, "characters_typed": len(text),
                 "key": key, "status": "sent"}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def terminal_resize(session: str, width: int = 120, height: int = 36) -> dict:
         """Resize interactive terminal pane for menus and editors."""
         _require()
@@ -284,7 +314,12 @@ def register(mcp):
             raise RuntimeError(result.stderr[:1000])
         return {"session": session, "cols": cols, "rows": rows}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def terminal_list() -> dict:
         """List active persistent terminal sessions."""
         _require()
@@ -304,7 +339,12 @@ def register(mcp):
                 })
         return {"sessions": sessions}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def terminal_close(session: str) -> dict:
         """Terminate one explicitly identified interactive terminal session."""
         _require()

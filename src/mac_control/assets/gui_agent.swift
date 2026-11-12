@@ -208,23 +208,24 @@ func capture(_ req: [String:Any]) async throws -> [String:Any] {
         }
         image = resized
     } else { image = shot }
-    let destinationPath = argument(req, "destination")
-    guard destinationPath.hasPrefix(try GUI_RUNTIME_PATHS.get().capturePrefix),
-          destinationPath.hasSuffix(".jpg"),
-          !destinationPath.contains("..") else {
-        throw AgentError.invalid("Invalid capture path")
-    }
-    let dest = URL(fileURLWithPath: destinationPath)
-    guard let imageDest = CGImageDestinationCreateWithURL(dest as CFURL,
+    // Encode directly to bounded memory; never create a screenshot file.
+    // Base64 of <=2MiB JPEG fits the Python GUI IPC 4MiB response limit.
+    let buffer = NSMutableData()
+    guard let imageDest = CGImageDestinationCreateWithData(buffer as CFMutableData,
                      "public.jpeg" as CFString, 1, nil) else {
         throw AgentError.invalid("Failed to initialize image output")
     }
     CGImageDestinationAddImage(imageDest, image,
         [kCGImageDestinationLossyCompressionQuality: 0.66] as CFDictionary)
     guard CGImageDestinationFinalize(imageDest) else {
-        throw AgentError.invalid("Failed to save screenshot")
+        throw AgentError.invalid("Failed to encode screenshot")
     }
-    return ["file": destinationPath,
+    let jpeg = Data(referencing: buffer)
+    guard !jpeg.isEmpty && jpeg.count <= 2 * 1024 * 1024 else {
+        throw AgentError.invalid("Screenshot JPEG too large")
+    }
+    return ["image_data": jpeg.base64EncodedString(),
+            "image_bytes": jpeg.count,
             "pixel_width": width, "pixel_height": height,
             "preview_width": outputW, "preview_height": outputH,
             "display_id": Int(id)]

@@ -29,9 +29,9 @@ except ModuleNotFoundError:
     import build_mac_control_gui as gui
 
 RELEASE_URL = ('https://github.com/johnnykor82/mac-control-mcp-server/releases/download/'
-               'v0.1.0-beta.29/mac-control-native-v0.1.0-beta.29-universal.tar.gz')
+               'v0.1.0-beta.57/mac-control-native-v0.1.0-beta.57-universal.tar.gz')
 # Never download or accept an unpinned native executable.
-RELEASE_SHA256 = '7c1e99163d3c765492f3b035daf609b43092c28ea1380f4c4886b655fdf156ad'
+RELEASE_SHA256 = '35f8b056554f534f305ddb571ead2bdb916a6558086f12665a667eba1d599265'
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 96 * 1024 * 1024
 
@@ -173,8 +173,9 @@ def _verify_payload(directory: Path) -> tuple[Path, Path]:
     with (app / 'Contents/Info.plist').open('rb') as source:
         metadata = plistlib.load(source)
     if (not isinstance(metadata, dict) or metadata.get('CFBundleIdentifier') != gui.BUNDLE
-            or metadata.get('CFBundleExecutable') != gui.EXEC_NAME):
-        raise RuntimeError('Prebuilt GUI app identity is inconsistent')
+            or metadata.get('CFBundleExecutable') != gui.EXEC_NAME
+            or metadata.get('MacControlCaptureProtocol') != 'jpeg-base64-v1'):
+        raise RuntimeError('Prebuilt GUI app identity or capture protocol is inconsistent')
     clipboard = directory / 'gui_clipboard_paste'
     for binary in (app / 'Contents/MacOS' / gui.EXEC_NAME, clipboard):
         verify_universal(binary)
@@ -211,8 +212,9 @@ def _stop_owned_app(app: Path) -> None:
     raise RuntimeError('Owned GUI helper did not exit after SIGTERM; inspect it before retrying --with-gui')
 
 
-def ensure(root: Path, release: Path, *, replace: bool = False) -> dict:
-    """Preserve an owned helper by default; refresh release-local clipboard."""
+def ensure(root: Path, release: Path, *, replace: bool = False,
+           allow_legacy_refresh: bool = True) -> dict:
+    """Use only protocol-compatible owner-signed GUI; refresh bounded legacy."""
     existing = gui.verify_owned(root)
     if existing:
         app = root.expanduser().resolve() / 'apps' / gui.APP_NAME
@@ -220,6 +222,12 @@ def ensure(root: Path, release: Path, *, replace: bool = False) -> dict:
             info = path.lstat()
             if info.st_uid != os.getuid() or info.st_mode & 0o022:
                 raise RuntimeError('GUI app has unsafe ownership or permissions')
+        with (app / 'Contents/Info.plist').open('rb') as stream:
+            installed = plistlib.load(stream)
+        if installed.get('MacControlCaptureProtocol') != 'jpeg-base64-v1':
+            if not allow_legacy_refresh:
+                raise RuntimeError('GUI capture protocol incompatible with requested release')
+            replace = True
         if replace:
             _stop_owned_app(app)
     with tempfile.TemporaryDirectory(prefix='mac-control-native-') as temporary:

@@ -40,7 +40,12 @@ def _argv(name, command_id):
 
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def ssh_targets() -> dict:
         """List SSH servers and diagnostic command names configured locally by owner."""
         from .ssh_manage_ops import _inventory
@@ -52,7 +57,12 @@ def register(mcp):
         }
 
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_open(host: str) -> dict:
         """Open interactive SSH PTY with strict known-host checking and owner-approved host.
 
@@ -94,7 +104,12 @@ def register(mcp):
             "next": "terminal_read / terminal_send / terminal_close",
         }
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def ssh_diagnostic(host: str, command: str = "uptime") -> dict:
         """Run one fixed read-only SSH diagnostic on an owner-approved host.
 

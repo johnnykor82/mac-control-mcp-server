@@ -255,12 +255,22 @@ def _call(operation: str, **arguments) -> dict:
 
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": True})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': False,
+                              'idempotentHint': False,
+                              'openWorldHint': True,
+                          })
     def background_browser_create(persist_profile: bool = False, url: str = "about:blank") -> dict:
         """Create a ChatBridge-owned background browser session."""
         return _call("create", persist_profile=persist_profile, url=url, mode="background")
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": True})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': True,
+                          })
     def background_browser_action(session_token: str, action: str, tab_id: str = "",
                                   url: str = "", selector: str = "", text: str = "",
                                   dx: int = 0, dy: int = 0, mode: str = "background",
@@ -277,27 +287,52 @@ def register(mcp):
                      url=url, selector=selector, text=text, dx=dx, dy=dy, mode=mode,
                      client_request_id=client_request_id)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": True})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': True,
+                          })
     def background_browser_snapshot(session_token: str, tab_id: str = "", max_chars: int = 12000) -> dict:
         """Read ChatBridge DOM/Accessibility snapshot."""
         return _call("snapshot", session_token=session_token, tab_id=tab_id, max_chars=max_chars)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": True})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': True,
+                          })
     def background_browser_capture(session_token: str, tab_id: str = "", quality: int = 65) -> dict:
         """Fetch screenshot binary via authenticated ChatBridge file endpoint."""
         return _call("capture", session_token=session_token, tab_id=tab_id, quality=quality)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def background_browser_list(session_tokens: list[str]) -> dict:
         """List precisely the ChatBridge sessions for supplied capabilities."""
         return _call("list", session_tokens=session_tokens)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def background_browser_close(session_token: str) -> dict:
         """Close a ChatBridge-owned session."""
         return _call("close", session_token=session_token)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def background_browser_reopen(session_token: str) -> dict:
         """Reopen a persistent ChatBridge-owned session."""
         return _call("reopen", session_token=session_token)

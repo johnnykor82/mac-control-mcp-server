@@ -11,4 +11,4 @@ Evidence: process_snapshot runs a fixed ps command; ssh_auth_diagnostics uses ss
 
 Existing mac_control_smoke.py exercises scratch writes and browser actions, so it must not be mistaken for read-only trusted third-party execution. Safe macOS-only smoke could prove tool registration and fixed harmless calls. The external M8ven runtime may not support macOS, which cannot be solved by declaring a fake success.
 
-Status: baseline and evidence only; no annotations/handlers/GUI helper/release/M8ven account changes.
+Status: canonical metadata, static source declarations, and isolated native in-memory GUI capture implemented and targeted-GREEN in isolated branch only. No deployed Mac service/release or M8ven account changes; no external contact or dispute submissions.

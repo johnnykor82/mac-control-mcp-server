@@ -74,7 +74,12 @@ def details() -> dict:
 
 
 def register(mcp) -> None:
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def workspace_policy() -> dict:
         """Read the mandatory default agent workspace convention before creating files.
 

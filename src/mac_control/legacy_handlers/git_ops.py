@@ -43,14 +43,24 @@ def checked_path(project, path):
     return str(full.relative_to(root))
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def git_status(project: str, limit: int = 12000) -> dict:
         """Git porcelain status and current branch for one approved repository."""
         result = git(project, ["status", "--short", "--branch", "--untracked-files=normal"])
         result["stdout"] = result["stdout"][:max(500, min(limit, OUTPUT_LIMIT))]
         return result
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def git_diff(project: str, path: str | None = None,
                  staged: bool = False) -> dict:
         """Read bounded Git diff, optionally one allowed file."""
@@ -61,19 +71,34 @@ def register(mcp):
             args.extend(["--", checked_path(project, path)])
         return git(project, args)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def git_history(project: str, count: int = 12) -> dict:
         """Read recent local commits without accessing remotes."""
         n = max(1, min(int(count), 40))
         return git(project, ["log", f"-{n}", "--format=%h %ad %s",
                              "--date=iso-strict"])
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def git_branches(project: str) -> dict:
         """Read local branches and their current commit references."""
         return git(project, ["branch", "-vv", "--no-color"])
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_stage(project: str, paths: list[str]) -> dict:
         """Stage up to 20 explicit allowlisted paths; never use add -A or wildcard."""
         if not 1 <= len(paths) <= 20:
@@ -81,7 +106,12 @@ def register(mcp):
         checked = [checked_path(project, p) for p in paths]
         return git(project, ["add", "--", *checked])
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_commit(project: str, message: str) -> dict:
         """Commit already staged changes with hooks disabled and explicit approval."""
         if not 1 <= len(message) <= 300 or any(x in message for x in ("\x00", "\r")):
@@ -89,7 +119,12 @@ def register(mcp):
         return git(project, ["-c", "commit.gpgsign=false",
                              "commit", "--no-verify", "-m", message], timeout=30)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_create_branch(project: str, name: str) -> dict:
         """Create a new local branch; does not switch worktree or contact remote."""
         if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_./-]{0,79}", name):
@@ -101,12 +136,22 @@ def register(mcp):
             )
         return git(project, ["branch", name])
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_fetch(project: str) -> dict:
         """Fetch refs only from origin with Git hooks disabled; does not merge."""
         return git(project, ["fetch", "--no-tags", "origin"], timeout=45)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_pull_ff(project: str) -> dict:
         """Fast-forward current branch from origin; refuses merges and overwrites."""
         branch = git(project, ["branch", "--show-current"])
@@ -115,7 +160,12 @@ def register(mcp):
         name = branch["stdout"].strip()
         return git(project, ["pull", "--ff-only", "origin", name], timeout=45)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def git_push(project: str) -> dict:
         """Push current local branch to origin (explicit write authorization required)."""
         branch = git(project, ["branch", "--show-current"])

@@ -149,7 +149,12 @@ def atomic_write(path, data, original=None):
     return saved
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def project_roots() -> dict:
         """List directory roots approved by the Mac owner. New roots require local configuration."""
         return {"projects": {name: str(path) for name, path in roots().items()},
@@ -157,7 +162,12 @@ def register(mcp):
                 "agent_write_policy": "Default all agent-created work to workspace; external writes only by specific owner request or necessary system integration.",
                 "config": str(TRUSTED_CONFIG), "config_writable_via_mcp": False}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def fs_list(project: str = "workspace", path: str = ".", limit: int = 100) -> dict:
         """List directory entries, including dotfiles, in an approved project."""
         base, directory = target_for(project, path, read_only=True)
@@ -178,7 +188,12 @@ def register(mcp):
                           "bytes": entry.stat().st_size if entry.is_file() else None})
         return {"project": project, "path": path, "entries": items}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def fs_stat(project: str, path: str, include_media: bool = False) -> dict:
         """File metadata; include_media opt-in returns a scoped binary media reference.
 
@@ -202,7 +217,12 @@ def register(mcp):
                                     "name":file.name}
         return result
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def fs_read(project: str, path: str, start_line: int = 1, max_lines: int = 250) -> dict:
         """Read numbered lines from a small UTF-8 file in an approved project."""
         _, file = target_for(project, path, require_file=True, read_only=True)
@@ -216,7 +236,12 @@ def register(mcp):
         return {"path": path, "project": project, "sha256": hash_bytes(data),
                 "total_lines": len(lines), "lines": selected}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_write(project: str, path: str, content: str,
                  expected_sha256: str | None = None) -> dict:
         """Atomically write UTF-8 text; existing files REQUIRE current SHA256 and are backed up."""
@@ -237,7 +262,12 @@ def register(mcp):
         return {"written": path, "project": project,
                 "sha256": hash_bytes(data), "backup_id": saved}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_replace(project: str, path: str, old: str, new: str,
                    expected_sha256: str) -> dict:
         """Replace exactly one matching text span in a file with CAS SHA256 protection."""
@@ -273,7 +303,12 @@ def register(mcp):
         saved = atomic_write(file, result, original)
         return {"ok": True, "path": path, "sha256": hash_bytes(result), "backup_id": saved}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_mkdir(project: str, path: str) -> dict:
         """Create one directory within an explicitly approved project root."""
         base, folder = target_for(project, path)
@@ -282,7 +317,12 @@ def register(mcp):
         folder.mkdir(mode=0o700, parents=True, exist_ok=True)
         return {"created": path, "project": project}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_move(project: str, source: str, destination: str) -> dict:
         """Move a file or directory within an approved root, never overwrite."""
         base, old = target_for(project, source)
@@ -298,7 +338,12 @@ def register(mcp):
         old.rename(new)
         return {"moved": source, "to": destination, "directory": directory}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_trash(project: str, path: str, expected_sha256: str) -> dict:
         """Recoverably remove a file or directory, requiring its current SHA256."""
         base, file = target_for(project, path)
@@ -320,7 +365,12 @@ def register(mcp):
         return {"trashed": path, "backup_id": backup, "recovery_dir": str(RECOVERY),
                 "directory": False}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def fs_search(project: str, pattern: str, path: str = ".",
                   max_matches: int = 80) -> dict:
         """Search UTF-8 files by literal substring; bounded directory scan and output."""
@@ -356,7 +406,12 @@ def register(mcp):
                         break
         return {"matches": hits, "files_scanned": scanned, "truncated": bool(stack)}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def fs_restore(project: str, path: str, backup_id: str,
                    expected_sha256: str | None = None) -> dict:
         """Restore saved file or directory; never overwrite an existing directory."""

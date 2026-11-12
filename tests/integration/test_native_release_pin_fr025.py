@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from scripts import setup_gui_dependency as gui
 
-RELEASE = 'v0.1.0-beta.29'
-SHA256 = '7c1e99163d3c765492f3b035daf609b43092c28ea1380f4c4886b655fdf156ad'
+RELEASE = 'v0.1.0-beta.57'
+SHA256 = '35f8b056554f534f305ddb571ead2bdb916a6558086f12665a667eba1d599265'
 
 
 class NativeReleasePinFR025Tests(unittest.TestCase):

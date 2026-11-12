@@ -19,13 +19,18 @@ import os
 
 def make_server(*, include_mutations: bool = False, auth=None) -> FastMCP:
     mcp = FastMCP("Mac Control MCP Server", auth=auth, instructions=workspace_policy.instructions())
-    install_registration(mcp)  # Every externally registered tool requires the same audit schema.
+    install_registration(mcp, enforce_policy=True)  # Audit context + strict 143-tool effects.
     # Owner-scoped audit records bounded actual arguments locally; remote audit API stays metadata-only.
     # Uninstalled read-only DEV preview creates no public-install files.
     if os.environ.get("MAC_CONTROL_DATA_ROOT"):
         mcp.add_middleware(AuditMiddleware(DATA_ROOT / "logs"))
     mcp.tool(
-        annotations={"readOnlyHint": True, "openWorldHint": False}
+        annotations={
+                        'readOnlyHint': True,
+                        'destructiveHint': False,
+                        'idempotentHint': True,
+                        'openWorldHint': False,
+                    }
     )(system_info)
     if auth is not None:
         # Authenticated remote service only. Never claim an account identity

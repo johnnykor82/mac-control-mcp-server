@@ -23,10 +23,14 @@ def universal():
         for i, cpu in enumerate((0x01000007, 0x0100000c))) + b'xxxx' * 2
 
 
-def archive_bytes(extra=None):
+def archive_bytes(extra=None, *, capture_protocol="jpeg-base64-v1"):
+    metadata = {
+        'CFBundleIdentifier': gui.BUNDLE, 'CFBundleExecutable': gui.EXEC_NAME,
+    }
+    if capture_protocol is not None:
+        metadata['MacControlCaptureProtocol'] = capture_protocol
     files = {
-        gui.APP_NAME + '/Contents/Info.plist': plistlib.dumps({
-            'CFBundleIdentifier': gui.BUNDLE, 'CFBundleExecutable': gui.EXEC_NAME}),
+        gui.APP_NAME + '/Contents/Info.plist': plistlib.dumps(metadata),
         gui.APP_NAME + '/Contents/MacOS/' + gui.EXEC_NAME: universal(),
         'gui_clipboard_paste': universal(),
     }
@@ -98,6 +102,47 @@ class PrebuiltTests(unittest.TestCase):
         self.assertEqual(binary.read_bytes(), universal())
         backups = list((self.root / 'data/backups').glob('gui-previous-*.app'))
         self.assertEqual((backups[0] / 'Contents/MacOS' / gui.EXEC_NAME).read_bytes(), b'old app')
+
+    def test_legacy_owned_gui_auto_refreshes_for_memory_capture(self):
+        dependency.ensure(self.root, self.release)
+        app = self.root / 'apps' / gui.APP_NAME
+        metadata_file = app / 'Contents/Info.plist'
+        metadata = plistlib.loads(metadata_file.read_bytes())
+        metadata.pop('MacControlCaptureProtocol')
+        metadata_file.write_bytes(plistlib.dumps(metadata))
+        result = dependency.ensure(self.root, self.release)
+        self.assertEqual(result['native_gui'], 'installed')
+        updated = plistlib.loads(metadata_file.read_bytes())
+        self.assertEqual(updated['MacControlCaptureProtocol'], 'jpeg-base64-v1')
+        self.assertEqual(len(list((self.root / 'data/backups').glob('gui-previous-*.app'))), 1)
+
+    def test_matching_capture_protocol_reuses_current_owned_helper(self):
+        dependency.ensure(self.root, self.release)
+        result = dependency.ensure(self.root, self.release)
+        self.assertEqual(result['native_gui'], 'reused')
+        self.assertEqual(len(list((self.root / 'data/backups').glob('gui-previous-*.app'))), 0)
+
+    def test_rejects_signed_native_payload_missing_capture_protocol(self):
+        self.payload = archive_bytes(capture_protocol=None)
+        self.download.side_effect = lambda *a, **k: Response(self.payload)
+        dependency.RELEASE_SHA256 = hashlib.sha256(self.payload).hexdigest()
+        with self.assertRaisesRegex(RuntimeError, 'protocol|Protocol'):
+            dependency.ensure(self.root, self.release)
+        self.assertFalse((self.root / 'apps' / gui.APP_NAME).exists())
+
+    def test_explicit_no_gui_rejects_incompatible_owned_helper(self):
+        dependency.ensure(self.root, self.release)
+        app = self.root / 'apps' / gui.APP_NAME
+        metadata_file = app / 'Contents/Info.plist'
+        metadata = plistlib.loads(metadata_file.read_bytes())
+        metadata.pop('MacControlCaptureProtocol')
+        metadata_file.write_bytes(plistlib.dumps(metadata))
+        with self.assertRaisesRegex(RuntimeError, 'protocol|Protocol'):
+            dependency.ensure(self.root, self.release, allow_legacy_refresh=False)
+
+    def test_native_builder_declares_capture_protocol_marker(self):
+        source = Path(gui.__file__).read_text()
+        self.assertIn('"MacControlCaptureProtocol": "jpeg-base64-v1"', source)
 
     def test_running_owned_app_stops_exact_user_process_before_replacement(self):
         dependency.ensure(self.root, self.release)

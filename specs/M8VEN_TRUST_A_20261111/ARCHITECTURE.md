@@ -6,12 +6,30 @@ Observed in memory without starting a network service: 143 tools (142 without re
 
 Option A — lowest code impact: a single explicit frozen policy keyed by all 143 exact names; the existing central registration wrapper enforces and fills four booleans, fails closed on unknown names or missing policy, preserving full audit_context. Add test for runtime/list parity and behavior. Risk: M8ven may still flag missing literals at decorator sites.
 
-Option B — highest likelihood of static scanner acceptance: authoritative policy with checked/generated literal annotation blocks for each registered tool and CI parity to the policy. More code files changed, but metadata is statically visible and runtime contract is explicit. No handler-body changes. Recommend starting with a narrowly tested Option A plus M8ven developer confirmation of scanner behavior, switching to B only if evidence shows A invisible.
+Option B — highest likelihood of static scanner acceptance: authoritative policy with checked/generated literal annotation blocks for each registered tool and CI parity to the policy. More code files changed, but metadata is statically visible and runtime contract is explicit. No handler-body changes. Superseded by owner approval 2026-11-11: implement both canonical policy and explicit source declarations; do not contact M8ven.
 
-Screenshot architectural decision: current Swift native GUI capture writes bounded JPEG to private run/gui-captures; Python gui_screenshot reads then unlinks it. In-memory JPEG must modify Swift -> JSON IPC, image-data bounds and error handling; this is not merely changing one annotation. Alternatively retain private ephemeral capture and dispute the false claim of destructive user-data deletion. Separate owner decision required.
+Screenshot architectural decision: current Swift native GUI capture writes bounded JPEG to private run/gui-captures; Python gui_screenshot reads then unlinks it. In-memory JPEG must modify Swift -> JSON IPC, image-data bounds and error handling; this is not merely changing one annotation. The owner approved in-memory JPEG instead.
 
 Diagnostic false positives: fixed read-only ps, ssh-add -l and ssh -G do execute a subprocess but do not mutate user data. Preserve truthful semantics, provide exact arguments and mocked tests; never remove useful safe diagnostics to satisfy naive regex.
 
-Dynamic verification: scripts/mac_control_smoke.py exists but performs scratch write/trash and optionally browser actions; unsuitable as no-side-effect trust evidence. Create separate macOS-only read-only smoke using tools/list plus system_info, with audit_context and no real credentials. M8ven externally may not host macOS/Screen Recording; request their review of a macOS runner artifact rather than misrepresenting container support.
+Dynamic verification: scripts/mac_control_smoke.py exists but performs scratch write/trash and optionally browser actions; unsuitable as no-side-effect trust evidence. Create separate macOS-only read-only smoke using tools/list plus system_info, with audit_context and no real credentials. M8ven externally may not host macOS/Screen Recording; collect local macOS-only evidence without sending it to M8ven.
 
-Review gate A06: choose A or B for annotations, and approve/disapprove native in-memory screenshot protocol. No changes to existing code, release, service or remote repository until reviewed.
+A06 approved by owner 2026-11-11; code implementation proceeds only on isolated branch with tests; no M8ven outreach.
+
+## Architecture approved by owner — 2026-11-11
+
+Canonical 143-name annotation policy with four explicit booleans at source registration and CI parity; preserve authorization, names, schemas and handlers. Dynamic frozen legacy registrations obtain exact four booleans from immutable name policy. No outreach or disputes sent to M8ven.
+
+The Swift capture operation shall produce in-memory bounded JPEG base64 plus original screen dimensions, preview dimensions and display ID; Python validates base64 and image size under 2 MiB before returning unchanged MCP screenshot schema. Native IPC response remains bounded by 4 MiB; TCC Screen Recording unchanged. The independent capture_window behavior is out of scope.
+
+## A10b-native-protocol — compatible native helper replacement
+
+Signed native app Info.plist advertises MacControlCaptureProtocol
+jpeg-base64-v1 and CFBundleVersion 2. The reviewed beta57 portable GUI
+release is pinned by version/asset SHA256 in setup_gui_dependency. During
+maccontrol update, after verify_owned, ensure_gui compares exact
+owner-installed Info.plist marker: compatible -> reuse, legacy -> bounded
+stop+backup+replace using verified installer; foreign app -> abort.
+Explicit --without-gui for legacy protocols aborts before release activation.
+Native artifact must verify identifier, executable, protocol marker, both
+architecture slices, and codesign. No generic GUI takeover. Tests first.

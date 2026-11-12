@@ -118,7 +118,12 @@ def _command(name, remote_cmd=None, interactive=False):
     return argv
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def ssh_profile_inventory() -> dict:
         """List OpenSSH aliases and optional saved host shortcuts (not credentials)."""
         profiles = _read_config()
@@ -127,7 +132,12 @@ def register(mcp):
                              for name, cfg in sorted(profiles.items())],
                 "configuration": str(CONFIG)}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_profile_approve_alias(name: str) -> dict:
         """Approve one existing ~/.ssh/config Host alias for later SSH commands."""
         if name not in _inventory():
@@ -139,7 +149,12 @@ def register(mcp):
         _write_config(hosts)
         return {"approved": name, "kind": "alias", "ready_to_connect": True}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_profile_register(
         name: str, host: str, user: str, port: int = 22,
         identity_file: str = "",
@@ -162,7 +177,12 @@ def register(mcp):
         _write_config(hosts)
         return {"approved": name, "host": host, "user": user, "port": port}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_exec(host: str, command: str, timeout_seconds: int = 30) -> dict:
         """Execute one remote shell command on a registered SSH host and return stdout/stderr/status.
 
@@ -205,7 +225,12 @@ def register(mcp):
         except subprocess.TimeoutExpired:
             return {"host": host, "timed_out": True, "timeout_seconds": timeout}
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def ssh_pty_open(host: str) -> dict:
         """Open interactive SSH in a persistent tmux PTY using OpenSSH config."""
         from . import command_plugins

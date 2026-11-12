@@ -19,7 +19,8 @@ def managed_app(root, home):
     binary.parent.mkdir(parents=True)
     binary.write_text("existing binary")
     (app / "Contents/Info.plist").write_bytes(plistlib.dumps({
-        "CFBundleIdentifier": gui.BUNDLE, "CFBundleExecutable": gui.EXEC_NAME}))
+        "CFBundleIdentifier": gui.BUNDLE, "CFBundleExecutable": gui.EXEC_NAME,
+        "MacControlCaptureProtocol": "jpeg-base64-v1"}))
     (root / "data").mkdir(parents=True, exist_ok=True)
     (root / "data/gui-owned.json").write_text(json.dumps({
         "app": str(app), "bundle": gui.BUNDLE, "installed_by": str(root)}))
@@ -116,6 +117,20 @@ class GuiInstallTests(unittest.TestCase):
         self.assertIn("next-release", clipboard[0][1])
         self.assertFalse(any(c[0] == "prebuilt_gui_replace" for c in commands))
 
+    def test_opt_out_refuses_old_capture_protocol(self):
+        root, home, commands = self.provision
+        app = managed_app(root, home)
+        metadata_file = app / "Contents/Info.plist"
+        data = plistlib.loads(metadata_file.read_bytes())
+        data.pop("MacControlCaptureProtocol")
+        metadata_file.write_bytes(plistlib.dumps(data))
+        (root / "data/feature_flags.json").write_text('{"native_gui": true}')
+        with self.assertRaisesRegex(RuntimeError, "capture protocol"):
+            installer.install(root, with_chatbridge=False, with_watcher=False,
+                              with_gui=False)
+        self.assertTrue(app.is_dir())
+        self.assertFalse(any(item[0] == "prebuilt_gui_replace" for item in commands))
+
     def test_missing_clt_gives_manual_install_instruction(self):
         with patch.object(gui.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "xcrun")) as run:
             with self.assertRaisesRegex(RuntimeError, "xcode-select --install"):
@@ -141,8 +156,17 @@ def provision(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(argv, 0)
     monkeypatch.setattr(installer, "run", run)
     monkeypatch.setattr(gui.subprocess, "run", run)
-    def ensure_gui(root, release, *, replace=False):
+    def ensure_gui(root, release, *, replace=False, allow_legacy_refresh=True):
         exists = gui.verify_owned(root)
+        if exists:
+            app = root / "apps" / gui.APP_NAME
+            marker = plistlib.loads((app / "Contents/Info.plist").read_bytes()).get(
+                "MacControlCaptureProtocol"
+            )
+            if marker != "jpeg-base64-v1":
+                if not allow_legacy_refresh:
+                    raise RuntimeError("GUI capture protocol incompatible")
+                replace = True
         commands.append(["prebuilt_clipboard", str(release)])
         if replace or not exists:
             commands.append(["prebuilt_gui_replace", str(release)])

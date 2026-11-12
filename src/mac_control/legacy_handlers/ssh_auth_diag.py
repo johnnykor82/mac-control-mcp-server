@@ -4,7 +4,12 @@ import subprocess
 from pathlib import Path
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def ssh_auth_diagnostics() -> dict:
         """Inspect identities and SSH agent availability without exposing private keys."""
         folder = Path.home() / ".ssh"
@@ -39,7 +44,12 @@ def register(mcp):
         return out
 
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def ssh_identity_inspect(host: str = "") -> dict:
         """Inspect local key metadata; optionally resolve an owner-approved SSH profile."""
         import pwd

@@ -788,7 +788,8 @@ def _install_locked(root: Path, with_chatbridge: bool = True, with_gui: bool | N
             raise RuntimeError("Enabled GUI helper is missing; retry with --with-gui to restore it")
         # Reuse the app by default; pinned clipboard binaries belong to every
         # release, including updates preserving a previously enabled helper.
-        gui_status = ensure_gui(info["root"], dest, replace=with_gui is True)["native_gui"]
+        gui_status = ensure_gui(info["root"], dest, replace=with_gui is True,
+                                allow_legacy_refresh=with_gui is not False)["native_gui"]
         old_flags["native_gui"] = True
         temp = flags.with_suffix(".tmp")
         temp.write_text(json.dumps(old_flags, indent=2) + "\n")

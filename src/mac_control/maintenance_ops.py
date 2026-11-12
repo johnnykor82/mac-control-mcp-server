@@ -264,11 +264,20 @@ def register(mcp) -> None:
         return {name: found for name, found in registry.items() if operation_enabled(name)}
 
     def readonly(fn):
-        return mcp.tool(annotations={'readOnlyHint': True, 'openWorldHint': False})(fn)
+        return mcp.tool(annotations={
+                                        'readOnlyHint': True,
+                                        'destructiveHint': False,
+                                        'idempotentHint': fn.__name__ != 'chat_marker_issue',
+                                        'openWorldHint': False,
+                                    })(fn)
 
     def mutation(fn):
-        return mcp.tool(annotations={'readOnlyHint': False, 'destructiveHint': True,
-                                     'openWorldHint': False})(fn)
+        return mcp.tool(annotations={
+                                        'readOnlyHint': False,
+                                        'destructiveHint': True,
+                                        'idempotentHint': False,
+                                        'openWorldHint': False,
+                                    })(fn)
 
     @readonly
     def chat_marker_issue() -> dict:

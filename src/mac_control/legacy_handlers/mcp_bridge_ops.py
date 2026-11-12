@@ -202,19 +202,34 @@ async def _call(name, tool_name, arguments, read_only, media=None, specification
         return {**envelope, "result": _clip(payload["result"])}
 
 def register(mcp):
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def mcp_targets() -> dict:
         """Discover existing MCP connections without revealing their secrets."""
         return {"targets": _public_targets(),
                 "direct_connect": ["http", "https", "stdio"],
                 "configured_via_chat": True}
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     async def mcp_bridge_list(target: str = "", target_spec: dict | None = None) -> dict:
         """List tools for a configured name, direct HTTP URL or stdio target_spec."""
         return await _inspect(target, target_spec)
 
-    @mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     async def mcp_bridge_read(target: str, tool: str, arguments: dict | None = None,
                               media: dict | None = None,
                               target_spec: dict | None = None):
@@ -222,7 +237,12 @@ def register(mcp):
         return await _call(target, tool, arguments or {}, True,
                            media=media, specification=target_spec)
 
-    @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     async def mcp_bridge_call(target: str, tool: str, arguments: dict | None = None,
                               media: dict | None = None,
                               target_spec: dict | None = None):

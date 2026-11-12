@@ -22,7 +22,11 @@ def package(output: Path):
     output = output.expanduser().absolute()
     if output.exists():
         raise RuntimeError("Refusing to overwrite an existing release archive")
-    with tempfile.TemporaryDirectory(prefix="mcr-", dir="/tmp") as temporary:
+    # Keep the GUI Unix socket below 100 UTF-8 bytes while remaining in AgentWorkspace.
+    workspace = SOURCE.parents[1]
+    if workspace.name != "AgentWorkspace":
+        raise RuntimeError("Native packaging requires AgentWorkspace")
+    with tempfile.TemporaryDirectory(prefix="mcr-", dir=workspace) as temporary:
         work = Path(temporary)
         gui.ROOT = work
         app = gui.build(work / 'install')

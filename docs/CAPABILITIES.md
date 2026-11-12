@@ -13,6 +13,19 @@ For exact arguments, see the [tool reference](TOOLS.md). For installation and
 connection, start with the [README](../README.md). For a complete coordinator and
 executor example, use the [Watcher guide](WATCHER_GUIDE.md).
 
+## MCP tool trust metadata and screenshots
+
+The complete 143-tool authenticated remote catalog (142 tools for local stdio)
+publishes the four MCP behavior hints: read-only, destructive, idempotent and
+open-world. A versioned, strict 143-name policy verifies these hints at
+registration; authorization and the required per-call audit_context remain
+unchanged. Hints describe effects but never grant permission.
+
+The native gui_screenshot operation now encodes a bounded JPEG directly in
+memory rather than writing a temporary file. It preserves Screen Recording
+authorization and limits each JPEG to 2 MiB. No screenshot bytes are recorded
+in Mac Control audit logs. The separate window-capture workflow is unchanged.
+
 ## What a normal installation prepares
 
 | Module | Normal installation | Additional owner action or dependency |

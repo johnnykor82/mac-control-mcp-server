@@ -109,9 +109,15 @@ def _wrapped_handler(handler):
     return guard
 
 
-def install_registration(server) -> None:
-    """Decorate registration for ALL tools, including system/profile/extensions."""
+def install_registration(server, *, enforce_policy: bool = False) -> None:
+    """Preserve audit schemas; enforce audited effects on production registries.
+
+    Fixture FastMCP instances keep the old flexible registration behavior,
+    while make_server opts into the closed 143-name production registry.
+    """
     underlying = server.tool
+    if enforce_policy:
+        from .tool_annotation_policy import annotations_for
 
     def tool_with_context(name_or_fn=None, **options):
         if isinstance(options.get("description"), str):
@@ -120,12 +126,25 @@ def install_registration(server) -> None:
                 " describing the task, action/targets/outcome and user's dated consent."
                 " Metadata is not permission to bypass authorization."
             )
+
+        def safe_options(handler):
+            if not enforce_policy:
+                return options
+            name = options.get("name") or (
+                name_or_fn if isinstance(name_or_fn, str) else handler.__name__
+            )
+            updated = dict(options)
+            updated["annotations"] = annotations_for(name, options.get("annotations"))
+            return updated
+
         if callable(name_or_fn):
-            return underlying(_wrapped_handler(name_or_fn), **options)
-        decorator = underlying(name_or_fn, **options)
+            return underlying(_wrapped_handler(name_or_fn), **safe_options(name_or_fn))
 
         def register(handler):
-            return decorator(_wrapped_handler(handler))
+            return underlying(name_or_fn, **safe_options(handler))(
+                _wrapped_handler(handler)
+            )
+
         return register
 
     server.tool = tool_with_context

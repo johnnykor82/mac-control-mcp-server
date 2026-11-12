@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 282
+Included files: 297
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -65,6 +65,7 @@ scripts/gui_clipboard_paste.swift
 scripts/guided_setup.py
 scripts/install_mac_control.py
 scripts/install_manifest.txt
+scripts/m8ven_safe_smoke.py
 scripts/mac_control_smoke.py
 scripts/maccontrol_manager.py
 scripts/mclog.py
@@ -110,6 +111,16 @@ specs/CB33_WATCHER_GUARD_20261109/CONVERGE.md
 specs/CB33_WATCHER_GUARD_20261109/PLAN.md
 specs/CB33_WATCHER_GUARD_20261109/SPEC.md
 specs/CB33_WATCHER_GUARD_20261109/TASKS.md
+specs/M8VEN_TRUST_A_20261111/ANALYZE.md
+specs/M8VEN_TRUST_A_20261111/ARCHITECTURE.md
+specs/M8VEN_TRUST_A_20261111/BACKLOG.md
+specs/M8VEN_TRUST_A_20261111/BUG_ASSESS_NATIVE_PROTOCOL.md
+specs/M8VEN_TRUST_A_20261111/CONVERGE.md
+specs/M8VEN_TRUST_A_20261111/FINDINGS.md
+specs/M8VEN_TRUST_A_20261111/PLAN.md
+specs/M8VEN_TRUST_A_20261111/SPEC.md
+specs/M8VEN_TRUST_A_20261111/TASKS.md
+specs/M8VEN_TRUST_A_20261111/TOOL_MATRIX_BASELINE.csv
 src/mac_control/__init__.py
 src/mac_control/__main__.py
 src/mac_control/account_profile.py
@@ -148,6 +159,7 @@ src/mac_control/remote_mount.py
 src/mac_control/runtime_paths.py
 src/mac_control/self_update.py
 src/mac_control/tmux_runtime.py
+src/mac_control/tool_annotation_policy.py
 src/mac_control/trusted_registry.py
 src/mac_control/watcher_runtime/WATCHER_USAGE.md
 src/mac_control/watcher_runtime/__init__.py
@@ -224,6 +236,9 @@ tests/integration/test_installer_managed_python.py
 tests/integration/test_installer_required_tmux.py
 tests/integration/test_legacy_chrome_wake.py
 tests/integration/test_link_id_boundary_fr025.py
+tests/integration/test_m8ven_gui_screenshot_memory.py
+tests/integration/test_m8ven_safe_smoke.py
+tests/integration/test_m8ven_tool_annotations.py
 tests/integration/test_mac_control_lifecycle.py
 tests/integration/test_maintenance_ops.py
 tests/integration/test_managed_chatbridge_install.py

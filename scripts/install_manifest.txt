@@ -44,6 +44,7 @@ scripts/gui_clipboard_paste.swift
 scripts/guided_setup.py
 scripts/install_mac_control.py
 scripts/install_manifest.txt
+scripts/m8ven_safe_smoke.py
 scripts/mac_control_smoke.py
 scripts/maccontrol_manager.py
 scripts/mclog.py
@@ -102,6 +103,7 @@ src/mac_control/remote_mount.py
 src/mac_control/runtime_paths.py
 src/mac_control/self_update.py
 src/mac_control/tmux_runtime.py
+src/mac_control/tool_annotation_policy.py
 src/mac_control/trusted_registry.py
 src/mac_control/watcher_runtime/WATCHER_USAGE.md
 src/mac_control/watcher_runtime/__init__.py

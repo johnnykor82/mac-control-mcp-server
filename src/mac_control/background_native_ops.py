@@ -143,23 +143,48 @@ def execute(token,operation,**params):
         os.close(session_fd)
 
 def register(mcp):
-    @mcp.tool(annotations={'readOnlyHint':True,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def background_app_list()->dict:
         """List GUI-capable running macOS apps without activating them."""
         return helper('apps')
-    @mcp.tool(annotations={'readOnlyHint':False,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': False,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def background_app_create(bundle_id:str)->dict:
         """Bind a private capability to the running app PID and launch identity."""
         return begin(bundle_id)
-    @mcp.tool(annotations={'readOnlyHint':True,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def background_app_windows(session_token:str)->dict:
         """List AX windows with stale-detecting references for the owned app."""
         return execute(session_token,'windows')
-    @mcp.tool(annotations={'readOnlyHint':True,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': False,
+                          })
     def background_app_elements(session_token:str,window_ref:str,max_depth:int=4,max_nodes:int=120)->dict:
         """Read AX role/title/action tree, never passwords or AX field values."""
         return execute(session_token,'elements',window_ref=window_ref,max_depth=max_depth,max_nodes=max_nodes)
-    @mcp.tool(annotations={'readOnlyHint':False,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def background_app_action(session_token:str,window_ref:str,element_path:list[int],expected_role:str,
                               expected_title:str,action:str,text:str='',mode:str='background')->dict:
         """Set supported AX text values or perform direct AX actions; no global mouse/keyboard/focus."""
@@ -169,7 +194,12 @@ def register(mcp):
             return error('REQUIRES_FOREGROUND','Use explicit existing GUI tools for foreground actions')
         return execute(session_token,'action',window_ref=window_ref,element_path=element_path,
                        expected_role=expected_role,expected_title=expected_title,action=action,text=text)
-    @mcp.tool(annotations={'readOnlyHint':True,'openWorldHint':True})
+    @mcp.tool(annotations={
+                              'readOnlyHint': True,
+                              'destructiveHint': False,
+                              'idempotentHint': True,
+                              'openWorldHint': True,
+                          })
     def background_app_capture(session_token:str,window_ref:str)->ToolResult:
         """Capture an owned AX window as a native MCP image content block."""
         response=execute(session_token,'capture',window_ref=window_ref)
@@ -181,7 +211,12 @@ def register(mcp):
         return ToolResult(
             content=[ImageContent(data=data,mimeType='image/jpeg')],
             structured_content={'ok':True,'result':metadata})
-    @mcp.tool(annotations={'readOnlyHint':False,'openWorldHint':False})
+    @mcp.tool(annotations={
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
+                              'openWorldHint': False,
+                          })
     def background_app_close(session_token:str)->dict:
         """Revoke native app session capability, never terminate the owner's application."""
         return execute(session_token,'end')
