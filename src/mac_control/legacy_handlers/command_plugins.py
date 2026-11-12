@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from .fs_ops import roots, WORKSPACE
+from .fs_ops import roots, root_for_project, WORKSPACE
 
 BASE = DATA_ROOT
 RUNTIME = BASE / "run"
@@ -65,10 +65,7 @@ def _cwd(project):
         root = roots()["workspace"]
         for path in (root / "scratch/tmp", root / "scratch/cache"):
             path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    available = roots()
-    if project not in available:
-        raise PermissionError("Project root not approved")
-    return str(available[project].resolve())
+    return str(root_for_project(project))
 
 def _runtime():
     RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)

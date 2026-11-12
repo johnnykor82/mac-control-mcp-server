@@ -81,13 +81,17 @@ class SSHPortabilityTests(unittest.TestCase):
         self.assertEqual(self.tools["ssh_identity_inspect"]("unregistered")["effective_ssh_exit"], 0)
         self.assertEqual(self.run.call_args.args[0][-1], "unregistered")
         self.run.reset_mock()
-        for host in ("root@server.example.test", "-oProxyCommand=echo",
-                     "staging;echo unsafe", ""):
+        # Policy v2 supports direct user@host without pre-registered profile.
+        direct = self.tools["ssh_identity_inspect"]("root@server.example.test")
+        self.assertEqual(direct["effective_ssh_exit"], 0)
+        self.assertEqual(self.run.call_args.args[0][-1], "root@server.example.test")
+        self.run.reset_mock()
+        for host in ("-oProxyCommand=echo", "staging;echo unsafe", ""):
             with self.subTest(host=host):
                 if not host:
                     self.tools["ssh_identity_inspect"](host)
                 else:
-                    with self.assertRaisesRegex(ValueError, "Invalid host label"):
+                    with self.assertRaises(ValueError):
                         self.tools["ssh_identity_inspect"](host)
         self.run.assert_not_called()
 

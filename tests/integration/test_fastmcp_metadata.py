@@ -20,6 +20,7 @@ EXPECTED = {
 for _retired in ("approved_commands", "execute_approved", "terminal_access_configure"):
     EXPECTED.pop(_retired, None)
 
+EXPECTED["ssh_diagnostic"] = False  # owner-policy-v2: arbitrary remote command can mutate
 EXPECTED["watcher_followup_browser_task"] = False
 EXPECTED["watcher_dispatch_browser_task"] = False
 EXPECTED["watcher_register_browser_project"] = False

@@ -1,7 +1,7 @@
 """Homebrew package management.
 
 Installed formula names are restricted to simple Homebrew/core-style identifiers.
-No shell command strings, sudo, casks, taps, or arbitrary installer URLs.
+No arbitrary shell strings or installer URLs. Casks and taps are supported.
 """
 from ..runtime_paths import DATA_ROOT
 from ..tmux_runtime import locate as locate_tmux
@@ -19,6 +19,17 @@ from pathlib import Path
 ROOT = DATA_ROOT
 STATE = ROOT / "run" / "package-jobs"
 FORMULA = re.compile(r"[a-z][a-z0-9+._@-]{0,63}\Z")
+IDENTIFIER = re.compile(r"[A-Za-z][A-Za-z0-9+._@/-]{0,127}\Z")
+KINDS = ("formula", "cask", "tap")
+
+
+def _validate_name(name, kind):
+    if kind not in KINDS or not isinstance(name,str) or not IDENTIFIER.fullmatch(name):
+        raise ValueError("Invalid Homebrew package name or kind")
+    if any(part in ("", ".", "..") for part in name.split("/")):
+        raise ValueError("Invalid Homebrew package path segment")
+    return name,kind
+
 JOB_ID = re.compile(r"[a-f0-9]{16}\Z")
 
 def brew():
@@ -65,7 +76,8 @@ def _persist(folder, info):
     os.chmod(tmp, 0o600)
     os.replace(tmp, dest)
 
-def _worker(job_id, name):
+def _worker(job_id, name, kind="formula"):
+    _validate_name(name, kind)
     folder = STATE / job_id
     info = json.loads((folder / "status.json").read_text())
     info.update({"status": "running", "started_epoch": time.time(), "worker_pid": os.getpid()})
@@ -76,11 +88,12 @@ def _worker(job_id, name):
         _persist(folder, info)
         return 127
     with (folder / "output.log").open("ab") as log:
-        log.write(f"Installing Homebrew formula: {name}\n".encode())
+        log.write(f"Homebrew {kind}: {name}\n".encode())
         log.flush()
         try:
             result = subprocess.run(
-                [executable, "install", "--formula", name],
+                ([executable, "tap", name] if kind == "tap" else
+                 [executable, "install", "--" + kind, name]),
                 stdin=subprocess.DEVNULL, stdout=log,
                 stderr=subprocess.STDOUT, timeout=900,
                 env={
@@ -117,7 +130,9 @@ def register(mcp):
         binary = brew()
         result = {"brew_path": binary,
                   "tmux_path": locate_tmux(),
-                  "formula_installs_supported": binary is not None}
+                  "formula_installs_supported": binary is not None,
+                  "cask_installs_supported": binary is not None,
+                  "tap_installs_supported": binary is not None}
         if binary:
             test = _run([binary, "--version"])
             result["brew_version"] = test.stdout.strip()[:250]
@@ -129,16 +144,19 @@ def register(mcp):
                               'idempotentHint': True,
                               'openWorldHint': False,
                           })
-    def package_installed(formula: str) -> dict:
-        """Test whether a Homebrew formula is installed."""
-        if not isinstance(formula, str) or not FORMULA.fullmatch(formula):
-            raise ValueError("Invalid formula")
+    def package_installed(formula: str, kind: str = "formula") -> dict:
+        """Check installed formula/cask/tap from task-authorized Homebrew."""
+        _validate_name(formula, kind)
         executable = brew()
         if not executable:
             return {"formula": formula, "installed": False, "reason": "Homebrew unavailable"}
-        response = _run([executable, "list", "--versions", formula], timeout=20)
-        return {"formula": formula, "installed": response.returncode == 0,
-                "version": response.stdout.strip()[:250]}
+        args = ([executable, "tap"] if kind == "tap" else
+                [executable, "list", "--" + kind, "--versions", formula])
+        response = _run(args, timeout=20)
+        installed = (formula in response.stdout.splitlines() if kind == "tap"
+                     else response.returncode == 0)
+        return {"formula": formula, "kind": kind, "installed": installed,
+                "version": response.stdout.strip()[:250] if kind != "tap" else ""}
 
     @mcp.tool(annotations={
                               'readOnlyHint': False,
@@ -146,13 +164,13 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def package_install(formula: str) -> dict:
-        """Install one validated Homebrew formula asynchronously; poll package_job_status.
+    def package_install(formula: str, kind: str = "formula") -> dict:
+        """Install Homebrew formula/cask or tap asynchronously under owner consent.
 
-        This executes upstream package-install scripts as the Mac user.
+        This may execute upstream installer scripts. Explicit owner consent
+        for this specific task is required; no arbitrary shell URLs accepted.
         """
-        if not isinstance(formula, str) or not FORMULA.fullmatch(formula):
-            raise ValueError("Formula must be a simple Homebrew formula name")
+        _validate_name(formula, kind)
         if not brew():
             raise RuntimeError("Homebrew is not installed")
         STATE.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -163,21 +181,21 @@ def register(mcp):
         folder = STATE / job_id
         folder.mkdir(mode=0o700)
         status = {
-            "job_id": job_id, "formula": formula,
+            "job_id": job_id, "formula": formula, "kind": kind,
             "status": "queued", "created_epoch": time.time(),
         }
         _persist(folder, status)
         with (folder / "output.log").open("wb") as output:
             p = subprocess.Popen(
                 [sys.executable, str(Path(__file__).resolve()),
-                 "--install", job_id, formula],
+                 "--install", job_id, formula, kind],
                 stdin=subprocess.DEVNULL,
                 stdout=output, stderr=subprocess.STDOUT,
                 close_fds=True, start_new_session=True,
                 env={"HOME": str(Path.home()), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
                      "PYTHONNOUSERSITE": "1"},
             )
-        return {"job_id": job_id, "formula": formula,
+        return {"job_id": job_id, "formula": formula, "kind": kind,
                 "worker_pid": p.pid, "status": "queued",
                 "poll_operation": "package_job_status"}
 
@@ -193,9 +211,14 @@ def register(mcp):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--install":
+    if len(sys.argv) in (4, 5) and sys.argv[1] == "--install":
         job, formula = sys.argv[2], sys.argv[3]
-        if not JOB_ID.fullmatch(job) or not FORMULA.fullmatch(formula):
+        kind = sys.argv[4] if len(sys.argv) == 5 else "formula"
+        if not JOB_ID.fullmatch(job):
             sys.exit(2)
-        sys.exit(_worker(job, formula))
+        try:
+            _validate_name(formula, kind)
+        except ValueError:
+            sys.exit(2)
+        sys.exit(_worker(job, formula, kind))
     sys.exit(2)

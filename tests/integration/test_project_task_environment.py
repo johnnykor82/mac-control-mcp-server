@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from mac_control.legacy_handlers import system_ops
+from mac_control.legacy_handlers import system_ops, fs_ops
 
 
 class Registry:
@@ -26,7 +26,7 @@ class ProjectTaskEnvironmentTests(unittest.TestCase):
             python.touch(mode=0o700)
             registry = Registry()
             system_ops.register(registry)
-            with patch.object(system_ops, "roots", return_value={"demo": root}), \
+            with patch.object(fs_ops, "roots", return_value={"demo": root}), \
                  patch.object(system_ops, "execute", return_value={}) as execute:
                 registry.tools["project_task"]("demo", "pytest")
             self.assertEqual(execute.call_args.args[0][0], str(python))
@@ -35,6 +35,6 @@ class ProjectTaskEnvironmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             registry = Registry()
             system_ops.register(registry)
-            with patch.object(system_ops, "roots", return_value={"demo": Path(temporary)}):
+            with patch.object(fs_ops, "roots", return_value={"demo": Path(temporary)}):
                 with self.assertRaisesRegex(ValueError, "terminal_exec"):
                     registry.tools["project_task"]("demo", "pytest")

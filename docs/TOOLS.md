@@ -2,7 +2,7 @@
 
 [Русская версия](TOOLS.ru.md) · [Installation](../README.md) · [Agent workspace convention](../AGENT_WORKSPACE_POLICY.md)
 
-Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog explains the **126 tool names** in the full supported configuration: 106 compatibility handlers, 11 maintenance tools, system information, workspace guidance, and 7 background-browser tools.
+Mac Control connects an assistant to a Mac through MCP. Its tools cover files, repositories, commands, native apps, SSH, downstream MCP servers, ChatBridge browser sessions, and persistent Watcher tasks. This catalog covers **143 registered tools**, including optional native and browser tools.
 
 The catalog describes the available product surface, not a promise that every tool works immediately after installation. Installed feature flags, local configuration, dependency availability, macOS permissions, and the selected MCP connection determine which tools are advertised and usable. The experimental background-native module is excluded from this count.
 
@@ -12,7 +12,7 @@ The catalog describes the available product surface, not a promise that every to
 
 The input column gives representative named arguments, not a complete JSON schema. Omitted optional arguments use their defaults; the connected server supplies the authoritative schema. Names such as `returned_session_token`, `current_sha256`, `event_id`, and `submission_token` mean values returned by earlier calls. Never paste real credentials or task capabilities into documentation or logs.
 
-Agent-created projects, downloads, scratch work and exports belong under the designated workspace by default. The independent workspace defaults to `~/AgentWorkspace` and can be changed with `maccontrol workspace set`. Existing populated legacy workspaces remain until migrated. This convention is not an operating-system sandbox. Additional project roots require local owner configuration.
+AgentWorkspace is the MANDATORY default. Any read, write or command path outside it requires explicit owner consent for THAT specific task. Pass authorized external absolute directories directly without a persistent root allowlist. Audit metadata alone is not permission. macOS rights, SHA/CAS and symlink checks remain.
 
 A practical first pass is `workspace_policy` → `project_roots` → the relevant capability/status tool. Inspect the current file before replacing it, inspect a proposed Git diff before committing it, and read a Watcher report before acknowledging its notification.
 
@@ -34,11 +34,11 @@ These calls explain the environment before an assistant creates files or chooses
 
 ## Approved project files — 11 tools
 
-Use `project="workspace"` for ordinary agent work. Other aliases must appear in `allowed_projects.json` under the data root. Paths are relative to the selected root. Hidden files and directories are supported within a configured project; traversal and symlinks remain blocked by filesystem tools. Text reads/writes are limited to 512 KiB. Overwriting/replacing existing text and recoverable deletion require the current SHA256; replacement backups support recovery.
+Use project="workspace" by default. For specifically owner-approved external tasks, pass an existing absolute directory directly as project. No allowed_projects.json registration required; traversal, symlinks and integrity checks remain.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `project_roots` | R | List approved project aliases, their roots, and the workspace policy. | No arguments; select an advertised alias. |
+| `project_roots` | R | Default AgentWorkspace; authorized absolute project roots need no registration | No arguments; select an advertised alias. |
 | `fs_list` | R | List permitted files and directories under one project root. | `project="workspace", path="projects", limit=100` |
 | `fs_stat` | R | Inspect size, modification time, mode and available hash; optionally return an approved media-file reference. | `project="workspace", path="artifacts/report.txt"` |
 | `fs_read` | R | Read numbered UTF-8 lines and obtain the file's SHA256. | `project="workspace", path="artifacts/report.txt", start_line=1, max_lines=100` |
@@ -60,12 +60,12 @@ The selected project alias must point to the repository root itself. For example
 | `git_diff` | R | Read unstaged or staged changes, optionally for one permitted file. | `project="repo", path="README.md", staged=false` |
 | `git_history` | R | Read recent local commits without contacting a remote. | `project="repo", count=12` |
 | `git_branches` | R | List local branches and their commit references. | `project="repo"` |
-| `git_stage` | W | Stage 1–20 explicit permitted paths. | `project="repo", paths=["README.md"]` |
+| `git_stage` | W | Stage explicit files without a 20-path cap, bounded argv bytes | `project="repo", paths=["README.md"]` |
 | `git_commit` | W | Commit already staged changes; hooks and commit signing are disabled by this operation. | `project="repo", message="Document setup"` |
 | `git_create_branch` | W | Create a local branch without switching to it. | `project="repo", name="docs-update"` |
-| `git_fetch` | W | Fetch references from `origin` without merging them. | `project="repo"` |
-| `git_pull_ff` | W | Pull the current branch from `origin` only when a fast-forward is possible. | `project="repo"` |
-| `git_push` | W | Push the current branch to the corresponding branch on `origin`. | `project="repo"`; use only when the owner requested publication. |
+| `git_fetch` | W | Fetch from owner-authorized remote, origin by default | `project="repo"` |
+| `git_pull_ff` | W | Fast-forward from an authorized remote, never force | `project="repo"` |
+| `git_push` | W | Push to an owner-authorized remote, never force by default | `project="repo"`; use only when the owner requested publication. |
 
 ## Machine diagnostics and project jobs — 6 tools
 
@@ -75,10 +75,10 @@ Machine diagnostics need no ChatGPT browser login. `project_task` may execute re
 | --- | --- | --- | --- |
 | `machine_health` | R | Report disk capacity, uptime and memory pressure. | No arguments. |
 | `network_listeners` | R | List listening TCP processes and ports without making network requests. | `limit=50` |
-| `local_http_probe` | R | Probe an approved loopback HTTP port with GET/HEAD, without credentials or redirects. | `port=8000, path="/health", method="GET"` |
-| `project_task` | W | Run `python_compile`, `pytest`, `npm_test` or `npm_build`; pytest uses the project's `.venv/bin/python`. | `project="workspace", task="python_compile", path="projects/demo/main.py"` |
-| `launchd_status` | R | Inspect any current-user LaunchAgent label. | `label="net.chatbridge.gateway"` |
-| `launchd_restart` | W | Explicitly restart any current-user LaunchAgent by label. Use the dedicated maintenance restart for Mac Control. | `label="net.chatbridge.gateway"` |
+| `local_http_probe` | R | Probe any loopback TCP port 1-65535 with GET/HEAD, no redirects | `port=8000, path="/health", method="GET"` |
+| `project_task` | W | Any shell-free argv command in task-approved project or legacy test shortcut | `project="workspace", task="python_compile", path="projects/demo/main.py"` |
+| `launchd_status` | R | Inspect GUI, user or system launchd service within OS rights | `label="net.chatbridge.gateway"` |
+| `launchd_restart` | W | Restart task-approved GUI/user/system service within macOS rights | `label="net.chatbridge.gateway"` |
 
 ## Local shell and persistent terminals — 8 tools
 
@@ -97,31 +97,31 @@ Shell access is available through authenticated Mac Control without additional l
 
 ## Package support — 4 tools
 
-These tools use an existing Homebrew installation. Installing a formula can execute upstream installation scripts as the Mac user. Names are restricted to simple formula identifiers; casks, taps, arbitrary URLs and sudo are not offered by this interface. A package installation is asynchronous: save its job ID and inspect the job rather than resubmitting it.
+Homebrew formula/cask/tap supported. Installation requires permission for the concrete task and may run upstream scripts. Other package managers are accessible through an already-authorized terminal_exec. Installation jobs are asynchronous.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
 | `package_capabilities` | R | Check Homebrew and tmux availability. | No arguments. |
-| `package_installed` | R | Check whether a formula and its version are installed. | `formula="tmux"` |
-| `package_install` | W | Start installation of one validated Homebrew formula. | `formula="tmux"`; retain the returned job ID. |
+| `package_installed` | R | Query Homebrew formula, cask or tap | `formula="tmux"` |
+| `package_install` | W | Install Homebrew formula/cask/tap with owner's specific task authorization | `formula="tmux"`; retain the returned job ID. |
 | `package_job_status` | R | Read a package job's state, bounded log tail and available exit code. | `job_id=returned_job_id` |
 
 ## SSH hosts and remote work — 17 tools
 
-SSH requires an approved host/profile, existing key or agent authentication, and established `known_hosts` trust. No tool returns private-key contents. Fixed diagnostics are separate from arbitrary remote shell execution. Interactive SSH additionally requires local terminal opt-in and tmux; a local Mac workspace convention does not restrict the remote shell's filesystem.
+Any owner-approved SSH host and OS-readable client private key can be used without alias registration. Server authentication is independent: OpenSSH accept-new on first contact and rejection of changed known keys. No passwords or private keys are exposed.
 
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
-| `ssh_targets` | R | List owner-configured hosts and available fixed diagnostic command names. | No arguments. |
+| `ssh_targets` | R | List saved optional host shortcuts and diagnostic shortcuts; direct hosts and arbitrary owner-task SSH commands are supported. | No arguments. |
 | `ssh_profile_inventory` | R | Inspect SSH config aliases and approved profile metadata. | No arguments. |
 | `ssh_identity_inspect` | R | Read local SSH file/account/agent metadata without a subprocess by default; optionally inspect an approved host's effective settings without connecting. | No arguments for local metadata; optional `host="demo"` must name an approved diagnostic host. |
 | `ssh_auth_diagnostics` | R | Diagnose SSH identity/agent availability. | No arguments. |
 | `ssh_profile_approve_alias` | W | Approve an existing SSH config alias for later use. | `name="demo"` after the owner configures that alias. |
 | `ssh_profile_register` | W | Register a host profile; this does not establish host trust or create a working key. | `name="demo", host="server.example", user="operator", port=22` |
-| `ssh_diagnostic` | R | Run one fixed read-only diagnostic on an approved host. | `host="demo", command="uptime"` |
-| `ssh_exec` | W | Execute a bounded arbitrary remote shell command on a registered host. | `host="demo", command="pwd", timeout_seconds=30` |
-| `ssh_open` | W | Open an interactive SSH terminal using a host from the diagnostic allowlist. | `host="demo"`; then use the terminal tools. |
-| `ssh_pty_open` | W | Open persistent interactive SSH using an approved profile. | `host="demo"`; retain the returned terminal session ID. |
+| `ssh_diagnostic` | W | Any authorized SSH command; remote mutation is possible | `host="demo", command="uptime"` |
+| `ssh_exec` | W | Any task-approved remote host and OS-readable identity_file | `host="demo", command="pwd", timeout_seconds=30` |
+| `ssh_open` | W | Direct authorized SSH host; no alias registration required | `host="demo"`; then use the terminal tools. |
+| `ssh_pty_open` | W | Interactive SSH to any authorized host with optional identity_file | `host="demo"`; retain the returned terminal session ID. |
 
 | `ssh_upload` | W | Upload a Mac workspace file using SFTP, verify SHA-256 and publish without partial destination. | `host="demo", local_path="projects/app.py", remote_path="/home/user/app.py"` |
 | `ssh_download` | W | Download from remote host to approved Mac project/workspace, with SHA-256 verification. | `host="demo", remote_path="/home/user/result.csv", local_path="downloads/result.csv"` |
@@ -157,7 +157,7 @@ This module requires the installed GUI helper and the relevant macOS Screen Reco
 | `gui_focus` | W | Activate an already running app by exact bundle ID. | `bundle_id="com.apple.TextEdit"` |
 | `gui_mouse` | W | Move, click, double-click, right-click or drag in global screen coordinates. | `action="left_click", x=observed_x, y=observed_y` after inspecting the screen. |
 | `gui_press` | W | Press a supported key with optional keyboard modifiers. | `key="s", modifiers=["cmd"]` |
-| `gui_type` | W | Paste Unicode text into the focused control while preserving the user's clipboard. | `text="Draft notes"` after identifying the destination. |
+| `gui_type` | W | Unicode paste up to 32768 chars / 128 KiB with clipboard restore | `text="Draft notes"` after identifying the destination. |
 | `gui_scroll` | W | Scroll at the current pointer location. | `dx=0, dy=3` |
 
 ## Downstream MCP services — 4 tools
@@ -246,12 +246,12 @@ Approved source reads are `scripts/dev_mcp_server.py`, `scripts/setup_remote_ser
 | --- | --- | --- | --- |
 | `audit_tail` | R | Read the latest valid metadata-only tool audit events. | `limit=20` |
 | `audit_search` | R | Search retained audit metadata by tool, status and literal text, with bounded scanning. | `tool="fs_write", status="exception", limit=30` |
-| `list_workspace` | R | List non-sensitive workspace entries using workspace-relative paths. | `path="workspace/artifacts", limit=100` |
-| `process_snapshot` | R | Inspect selected service executable names and resource usage without command arguments. | `limit=40` |
-| `read_service_log` | R | Read a scrubbed tail of one allowlisted service log. | `name="stderr", lines=25`; allowed names: stdout, stderr, restart. |
-| `mcp_diagnostics` | R | Inspect the owned remote agent's state, current PID and allowlisted log sizes. | No arguments. |
-| `read_file` | R | Read small workspace text or an explicitly approved shipped source path, returning SHA256. | `path="workspace/artifacts/note.txt"` |
-| `write_file` | W | Atomically write workspace text; existing files require their current hash and receive a backup. | `path="workspace/artifacts/note.txt", content="Revised note", expected_sha256=current_sha256` |
+| `list_workspace` | R | List default workspace or authorized absolute directory | `path="workspace/artifacts", limit=100` |
+| `process_snapshot` | R | All process executable names and CPU/memory without command args | `limit=40` |
+| `read_service_log` | R | Scrubbed log tail by alias or owner-authorized absolute path | `name="stderr", lines=25`; allowed names: stdout, stderr, restart. |
+| `mcp_diagnostics` | R | Own MCP state and optionally task-approved log_paths | No arguments. |
+| `read_file` | R | Task-approved OS-readable text file; default AgentWorkspace | `path="workspace/artifacts/note.txt"` |
+| `write_file` | W | Authorized file write with CAS/SHA and backup; default workspace | `path="workspace/artifacts/note.txt", content="Revised note", expected_sha256=current_sha256` |
 | `self_update_start` | W | Schedule independent verified Mac Control self-update with rollback; ChatBridge is unchanged by default. | `with_chatbridge=false` |
 | `self_update_status` | R | Read persisted progress; `worker_missing` means the external watchdog vanished. | No arguments |
 | `restart_server` | W | Schedule a delayed restart of this installation's verified, loaded remote LaunchAgent. | No arguments; `restart_scheduled` does not prove the restart succeeded. |

@@ -197,9 +197,12 @@ def _safe_local(path, require_existing=False):
     if not candidate.is_absolute():
         candidate = roots()["workspace"] / candidate
     candidate = Path(os.path.abspath(candidate))
-    allowed = tuple(x.resolve() for x in roots().values())
-    if not any(candidate.is_relative_to(root) and candidate != root for root in allowed):
-        raise TransferError("local_path_not_approved")
+    # AgentWorkspace remains the default for relative paths. An ABSOLUTE path
+    # is permitted only when explicitly authorized by the owner for this task.
+    # No persistent project allowlist controls this capability. Keep OS rights,
+    # symlink, CAS, hash and overwrite checks unchanged.
+    if candidate == Path("/"):
+        raise TransferError("invalid_local_path")
     for part in [candidate, *candidate.parents]:
         if part.is_symlink():
             raise TransferError("unsafe_symlink")

@@ -1,4 +1,4 @@
-"""SSH diagnostics for explicitly owner-approved hosts; no arbitrary remote shell."""
+"""Owner-approved SSH commands, direct hosts and legacy diagnostic shortcuts."""
 from ..runtime_paths import DATA_ROOT
 import json
 import os
@@ -33,10 +33,10 @@ def _profiles():
 
 def _argv(name, command_id):
     """Resolve diagnostics through the same OpenSSH profile as SSH and SFTP."""
-    if command_id not in COMMANDS:
-        raise ValueError("Unknown diagnostic command")
+    if not isinstance(command_id,str) or not command_id or len(command_id.encode("utf-8"))>65536 or "\x00" in command_id:
+        raise ValueError("SSH command must be nonempty and at most 65536 bytes")
     from .ssh_manage_ops import _command
-    return _command(name, COMMANDS[command_id])
+    return _command(name, COMMANDS.get(command_id, command_id))
 
 
 def register(mcp):
@@ -64,7 +64,7 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def ssh_open(host: str) -> dict:
-        """Open interactive SSH PTY with strict known-host checking and owner-approved host.
+        """Open interactive owner-approved SSH PTY with accept-new first contact and changed-host rejection.
 
         Uses same tmux socket as terminal_read/terminal_send/terminal_close.
         Uses the owner's existing OpenSSH settings without host registration.
@@ -105,15 +105,17 @@ def register(mcp):
         }
 
     @mcp.tool(annotations={
-                              'readOnlyHint': True,
-                              'destructiveHint': False,
-                              'idempotentHint': True,
+                              'readOnlyHint': False,
+                              'destructiveHint': True,
+                              'idempotentHint': False,
                               'openWorldHint': False,
                           })
     def ssh_diagnostic(host: str, command: str = "uptime") -> dict:
-        """Run one fixed read-only SSH diagnostic on an owner-approved host.
+        """Run any task-authorized remote command (legacy shortcuts still supported).
 
-        Password prompting is disabled; strict known_hosts verification is required.
+        This may mutate the remote system: explicit owner authorization for the
+        particular task is required. New SSH host keys are accepted on first
+        contact; changed known_hosts identities are rejected by OpenSSH.
         """
         argv = _argv(host, command)
         p = subprocess.run(
