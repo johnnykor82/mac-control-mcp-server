@@ -15,7 +15,7 @@ class GenericServiceLogTests(unittest.TestCase):
  def setUp(self):
   registry=Registry();m.register(registry);self.tools=registry.tools
   temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
-  self.root=Path(temporary.name)
+  self.root=Path(temporary.name).resolve()
   self.log=self.root/"other-service.log"
   self.log.write_text('healthy\npassword="DO_NOT_EXPOSE"\nqueue: 0\n')
 

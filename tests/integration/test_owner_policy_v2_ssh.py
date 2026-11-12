@@ -29,7 +29,7 @@ class SSHOwnerPolicyTests(unittest.TestCase):
    key.write_text("fake test identity metadata")
    key.chmod(0o600)
    argv=ssh._command("ops@new.example.net","uptime",identity_file=str(key))
-   self.assertEqual(argv[argv.index("-i")+1],str(key))
+   self.assertEqual(Path(argv[argv.index("-i")+1]).resolve(),key.resolve())
 
  def test_register_key_not_confined_to_dot_ssh(self):
   with tempfile.TemporaryDirectory() as root:

@@ -13,3 +13,6 @@
 - [x] S07 negative parent symlink path tests RED2→GREEN36, preserve canonical root checks.
 - [ ] S07 full macOS CI, especially long history audit fixture; local batches cannot mark it passed.
 - [ ] S08 fresh jkmac rollback and two-host install/postflight; no release until CI green.
+
+- [x] S07 CI portability: remove hardcoded Mac Server tempfile directory and canonicalize macOS /private/var paths, patch terminal root mock, regenerate FR025; 27 tests passed locally.
+- [ ] S07 verify all GitHub macOS CI checks green on updated commit.

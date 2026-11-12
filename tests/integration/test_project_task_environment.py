@@ -29,7 +29,7 @@ class ProjectTaskEnvironmentTests(unittest.TestCase):
             with patch.object(fs_ops, "roots", return_value={"demo": root}), \
                  patch.object(system_ops, "execute", return_value={}) as execute:
                 registry.tools["project_task"]("demo", "pytest")
-            self.assertEqual(execute.call_args.args[0][0], str(python))
+            self.assertEqual(Path(execute.call_args.args[0][0]).resolve(), python.resolve())
 
     def test_missing_project_virtualenv_gives_actionable_error(self):
         with tempfile.TemporaryDirectory() as temporary:

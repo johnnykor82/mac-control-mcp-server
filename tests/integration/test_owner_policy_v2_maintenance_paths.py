@@ -11,9 +11,9 @@ class Registry:
   return f
 class MaintenancePathTests(unittest.TestCase):
  def setUp(self):
-  t=tempfile.TemporaryDirectory(dir="/Users/openclaw/AgentWorkspace")
+  t=tempfile.TemporaryDirectory()
   self.addCleanup(t.cleanup)
-  self.base=Path(t.name)
+  self.base=Path(t.name).resolve()
   self.ws=self.base/"AgentWorkspace";self.ws.mkdir()
   self.ext=self.base/"TaskApprovedExternal";self.ext.mkdir()
   self.patches=[

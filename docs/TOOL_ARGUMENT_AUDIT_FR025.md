@@ -5,7 +5,7 @@
 
 - Всего: **142** инструментов (112 frozen, 30 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
-- Статические исключения из 20 модулей: PermissionError=34, RuntimeError=35, TypeError=2, ValueError=156.
+- Статические исключения из 20 модулей: PermissionError=33, RuntimeError=35, TypeError=2, ValueError=156.
 - Не классифицированных статических сообщений: **41**.
 - Статические raise-сайты не являются доказательством ошибки параметра;
   ошибки среды, зависимости и после побочного эффекта проверяются отдельно.
@@ -204,7 +204,7 @@
 | ssh_manage_ops.py | 17 | 2 | 2 | 0 |
 | system_ops.py | 16 | 0 | 0 | 0 |
 | watcher_ops.py | 2 | 3 | 8 | 0 |
-| maintenance_ops.py | 20 | 8 | 6 | 2 |
+| maintenance_ops.py | 20 | 7 | 6 | 2 |
 | background_browser_ops.py | 9 | 0 | 0 | 0 |
 | background_native_ops.py | 0 | 1 | 0 | 0 |
 

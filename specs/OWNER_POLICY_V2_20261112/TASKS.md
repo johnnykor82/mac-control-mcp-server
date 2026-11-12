@@ -7,4 +7,6 @@
 - [x] S05 Direct host/IP & any key, SFTP external file and SSH generic diagnostics, changed-key reject, metadata synced and GREEN37.
 - [x] S06 Homebrew cask/tap, launchd user/gui/system, GUI paste, browser/native/bridge reviews, 143/143 tool matrix, bilingual docs; source tests GREEN.
 - [ ] S07 Full regressions/CI Converge+Git commit and official verified prerelease.
+- [x] S07a Assess/Fix/Test CI portability: 13 CI problems classified, 21 targeted + 6 FR025 tests passed locally (2026-11-12).
+- [ ] S07b Repeat complete macOS CI on new commit; merge/publish only if green.
 - [ ] S08 Pre-deploy jkmac backup, stage both host updates and live acceptance, post-Converge documentation commit.
