@@ -161,7 +161,18 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def terminal_exec(command: str, project: str = "workspace", timeout_seconds: int = 25) -> dict:
-        """Run arbitrary noninteractive zsh command with bounded time and captured output."""
+        """Run arbitrary noninteractive zsh command; maximum 8000 characters.
+
+        If a command exceeds 8000 characters, this is input-size validation,
+        not a permission or policy denial: use fs_write for the same authorized
+        task, with project="workspace", path="projects/<script>.py", and the
+        full content; then use a short terminal_exec command to run/check it.
+        No additional permission is needed merely to switch to the already
+        available fs_write for the same authorized task and unchanged scope.
+        Do not use this fallback for a permission/policy denial, a new scope,
+        or an operation that may already have executed. Respect fs_write's
+        project root, file-size, and existing-file SHA256 requirements.
+        """
         _require()
         if not isinstance(command, str) or not command or "\x00" in command:
             raise ValueError(
@@ -174,9 +185,16 @@ def register(mcp):
             raise ValueError(
                 f"TERMINAL_COMMAND_TOO_LONG: command contains {len(command)} "
                 "characters; maximum for terminal_exec is 8000 characters. "
-                "For large generated scripts use fs_write(project, path, content) "
-                "under an approved project, then a short terminal_exec command "
-                "to execute or check that file. No shell command was executed."
+                "This is input-size validation, not a permission or policy denial. "
+                "For the same authorized task and unchanged scope, use fs_write"
+                "(project='workspace', path='projects/<script>.py', "
+                "content=<full_script>) to save the script, then use a short "
+                "terminal_exec command to execute or check that file. "
+                "No additional permission is needed merely to switch to the "
+                "already available fs_write for the same authorized task. "
+                "For a real policy denial, unsafe operation, or new scope, "
+                "STOP and obtain the required authorization; do not bypass it. "
+                "No shell command was executed."
             )
         cwd = _cwd(project)
         timeout = max(1, min(int(timeout_seconds), 120))

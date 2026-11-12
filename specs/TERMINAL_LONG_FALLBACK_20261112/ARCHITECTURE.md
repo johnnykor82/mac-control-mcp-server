@@ -1,0 +1,2 @@
+# Architecture
+Use the existing authoritative terminal_exec decorator docstring and the existing ValueError diagnostic; do not change schemas, handler logic, dispatch, exception types, terminal length or fs_write implementation. Explicitly distinguish validation from authorization. Error prose must not encourage bypass of policy denial. In-memory FastMCP tool listing checks user-visible description without invoking shell. Deployment only via supported release tooling with previous source/LaunchAgent backup.

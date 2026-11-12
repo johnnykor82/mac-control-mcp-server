@@ -1,0 +1,7 @@
+- [x] GitHub current Spec Kit read directly online 2026-11-12.
+- [x] Assess: existing source/diagnostic and tests inspected.
+- [x] S01 backup/worktree integrity verified.
+- [x] S02 RED: 3 tests/7 failing assertions against prior description/exception.
+- [x] S03 GREEN targeted tests and docs, exact MCP tool description and error verified.
+- [ ] S04 regression/Converge/Git commit.
+- [ ] S05 verified installed MCP tool description; no historic state change.

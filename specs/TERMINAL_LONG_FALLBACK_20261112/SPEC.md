@@ -1,0 +1,6 @@
+# Terminal long-command fallback, v1.0, approved 2026-11-12
+R1. terminal_exec's MCP-visible docstring MUST directly instruct agents: command over 8000 characters is a non-executing input-size validation failure, NOT a permission/security denial; for the same previously owner-authorized intent/scope, use existing fs_write(project="workspace",path="projects/<script>.py",content=...) in AgentWorkspace, then terminal_exec with a short verification/execution command WITHOUT new authorization request.
+R2. Error TERMINAL_COMMAND_TOO_LONG MUST convey identical instructions with actual length/limit and explicitly state no shell ran. Preserve 8000 limit, 8001 preflight rejection, current schema and project security.
+R3. On a real permission/policy/security denial, new target/scope, absent user consent, or ambiguous already-executed command, do not substitute another tool to bypass denial; stop and seek exact owner decision as required.
+R4. Test public MCP description, error path (direct + custom-command) and 8000 boundary, no process invocation for 8001. Update English/Russian documentation and backlog, Converge and Git commit before deployment.
+R5. Preserve all 143 tool names, user auth/audit, watcher/ChatBridge/BF33 states; production changes may occur only through verified release update/rollback.

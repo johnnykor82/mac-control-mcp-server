@@ -46,7 +46,7 @@ validator modules. Source raise-site counts are not all caller errors.
 
 | Tool | Actionable response |
 | --- | --- |
-| terminal_exec | TERMINAL_COMMAND_INVALID for empty/NUL/non-string; TERMINAL_COMMAND_TOO_LONG with actual characters and 8000-character limit. For generated source use fs_write(project, path, content), then short terminal_exec. |
+| terminal_exec | TERMINAL_COMMAND_INVALID for empty/NUL/non-string; TERMINAL_COMMAND_TOO_LONG with actual characters and 8000-character limit. For a longer script within the same owner-authorized task and scope, USE the existing fs_write(project=workspace, path=projects/<script>.py, content=<script>) and then a short terminal_exec; do NOT ask for additional permission merely to use this already-available tool. This is a preflight input-size validation failure, NOT a security/authorization denial. Stop on real policy denials or expanded scope. |
 | terminal_send | TERMINAL_TEXT_TOO_LONG: 4000-character limit; TERMINAL_TEXT_INVALID, TERMINAL_KEY_INVALID (supported key names), TERMINAL_SEND_EMPTY. Session IDs via terminal_list. |
 | terminal_read/send/close | TERMINAL_SESSION_INVALID requires mc- plus 16 lowercase hex; TERMINAL_SESSION_NOT_FOUND means expired/absent, inspect terminal_list. |
 | watcher_* | WATCHER_ID_INVALID: 2–56 lowercase letters/digits/underscore/hyphen, starting lowercase letter/digit. Inspect watcher_status and watcher_guide. |

@@ -87,7 +87,7 @@ Shell access is available through authenticated Mac Control without additional l
 | Tool | Mode | Purpose | Typical inputs / next step |
 | --- | --- | --- | --- |
 | `terminal_capabilities` | R | Inspect shell availability and interactive-session prerequisites. | No arguments. |
-| `terminal_exec` | W | Run a bounded noninteractive zsh command in an approved project. | `command="pwd", project="workspace", timeout_seconds=25` |
+| `terminal_exec` | W | Run a noninteractive zsh command, max 8000 characters. For a longer command within the same already authorized task, use the existing fs_write tool to save a script under project=workspace and path=projects/<script>.py, then run a short terminal_exec. No additional permission is required for the same task/scope. Input-length validation is not a policy denial; never use this fallback to bypass an actual authorization/security refusal. | `command="pwd", project="workspace", timeout_seconds=25` |
 | `terminal_open` | W | Create a persistent tmux terminal and return its session ID. | `project="workspace", width=120, height=36` |
 | `terminal_list` | R | List active managed terminal sessions. | No arguments. |
 | `terminal_read` | R | Read a managed terminal's screen and recent scrollback. | `session=returned_session_id, lines=100` |
