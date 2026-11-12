@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 298
+Included files: 306
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -122,6 +122,13 @@ specs/M8VEN_TRUST_A_20261111/PLAN.md
 specs/M8VEN_TRUST_A_20261111/SPEC.md
 specs/M8VEN_TRUST_A_20261111/TASKS.md
 specs/M8VEN_TRUST_A_20261111/TOOL_MATRIX_BASELINE.csv
+specs/TERMINAL_LONG_FALLBACK_20261112/ANALYZE.md
+specs/TERMINAL_LONG_FALLBACK_20261112/ARCHITECTURE.md
+specs/TERMINAL_LONG_FALLBACK_20261112/BACKLOG.md
+specs/TERMINAL_LONG_FALLBACK_20261112/CONVERGE.md
+specs/TERMINAL_LONG_FALLBACK_20261112/PLAN.md
+specs/TERMINAL_LONG_FALLBACK_20261112/SPEC.md
+specs/TERMINAL_LONG_FALLBACK_20261112/TASKS.md
 src/mac_control/__init__.py
 src/mac_control/__main__.py
 src/mac_control/account_profile.py
@@ -279,6 +286,7 @@ tests/integration/test_ssh_sftp_transfer.py
 tests/integration/test_stdio_boundary.py
 tests/integration/test_terminal_argument_diagnostics_fr025.py
 tests/integration/test_terminal_full_access.py
+tests/integration/test_terminal_long_fallback_20261112.py
 tests/integration/test_terminal_send_arguments_fr025.py
 tests/integration/test_terminal_session_errors_fr025.py
 tests/integration/test_tool_argument_contract_inventory.py
