@@ -25,7 +25,7 @@ class NativeConfigTests(unittest.TestCase):
         self.assertEqual(command[0], ssh.SSH)
         self.assertEqual(command[-2:], ["production", "uptime"])
         self.assertNotIn("-F", command)
-        self.assertIn("StrictHostKeyChecking=yes", command)
+        self.assertIn("StrictHostKeyChecking=accept-new", command)
 
     def test_diagnostics_and_sftp_share_one_openssh_configuration(self):
         with patch.object(ssh, "_read_config", return_value={}):

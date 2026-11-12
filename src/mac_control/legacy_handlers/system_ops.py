@@ -2,12 +2,14 @@
 from ..runtime_paths import DATA_ROOT
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import urllib.error
 import urllib.request
+import urllib.parse
 from pathlib import Path
-from .fs_ops import roots, target_for
+from .fs_ops import roots, target_for, root_for_project
 
 MAX_OUTPUT = 24000
 BASE_ENV = {
@@ -41,6 +43,23 @@ def _managed_service():
     return _service_helper()
 
 
+
+
+
+def _launchd_target(label: str, domain: str = "gui", uid: int | None = None) -> str:
+    if not isinstance(label,str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}",label):
+        raise ValueError("Invalid launchd label")
+    if domain not in ("gui","user","system"):
+        raise ValueError("Invalid launchd domain: gui, user or system")
+    if domain == "system":
+        if uid is not None:
+            raise ValueError("UID cannot be passed for system domain")
+        return f"system/{label}"
+    if uid is None:
+        uid = os.getuid()
+    if type(uid) is not int or not 0 <= uid <= 2**31-1:
+        raise ValueError("Invalid launchd UID")
+    return f"{domain}/{uid}/{label}"
 
 def register(mcp):
     @mcp.tool(annotations={
@@ -86,16 +105,22 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def local_http_probe(port: int | None = None, path: str = "/", method: str = "GET") -> dict:
-        """Probe approved localhost HTTP ports without credentials or redirects."""
+        """Probe ANY TCP port on loopback (1..65535), GET/HEAD, no redirects or credentials."""
         active_mcp_port = _managed_service().PORT
         if port is None:
             port = active_mcp_port
-        if type(port) is not int or port not in (3000, 4000, 8000, 8080, 11434, 9333, active_mcp_port):
-            raise PermissionError("Local port not on approved list")
-        if (method not in ("GET", "HEAD")
-                or not re.fullmatch(r"/[a-zA-Z0-9_./?=&%-]{0,180}", path)
-                or any(segment == ".." for segment in path.split("?")[0].split("/"))):
-            raise ValueError("Unsupported method or path")
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError("Local TCP port must be an integer 1..65535")
+        if (method not in ("GET", "HEAD") or not isinstance(path, str)
+                or not path.startswith("/") or len(path) > 2048 or "#" in path
+                or any(ord(char) <= 32 or ord(char) == 127 for char in path)
+                or urllib.parse.urlsplit(path).netloc):
+            raise ValueError("Unsupported method or unsafe HTTP path")
+        decoded = path.split("?", 1)[0]
+        for _ in range(3):
+            if any(part == ".." for part in decoded.split("/")):
+                raise ValueError("Unsafe path traversal")
+            decoded = urllib.parse.unquote(decoded)
         url = f"http://127.0.0.1:{port}{path}"
         request = urllib.request.Request(url, method=method)
         class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -121,13 +146,17 @@ def register(mcp):
                               'idempotentHint': True,
                               'openWorldHint': False,
                           })
-    def launchd_status(label: str = "") -> dict:
-        """Inspect any LaunchAgent belonging to the current macOS GUI user."""
+    def launchd_status(label: str = "", domain: str = "gui", uid: int | None = None) -> dict:
+        """Inspect owner-authorized launchd gui/user/system service by OS rights.
+
+        Default gui/current UID. Other domains or users require explicit
+        owner permission for the particular task; no sudo or policy bypass.
+        """
         if not label:
             label = _managed_service().LABEL
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", label):
             raise ValueError("Invalid launchd label")
-        query = f"gui/{os.getuid()}/{label}"
+        query = _launchd_target(label, domain, uid)
         result = execute(["/bin/launchctl", "print", query],
                          str(Path.home()), 8)
         original = result["stdout"]
@@ -148,14 +177,19 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def launchd_restart(label: str) -> dict:
-        """Restart a current-user LaunchAgent explicitly; own MCP uses restart_server."""
+    def launchd_restart(label: str, domain: str = "gui", uid: int | None = None) -> dict:
+        """Restart task-authorized launchd service in GUI/user/system namespace.
+
+        Default current GUI user; nondefault domains need specific owner
+        authorization and macOS permissions. Use restart_server for own MCP.
+        """
         if label == _managed_service().LABEL:
             raise ValueError("Use restart_server for the MCP agent")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", label):
             raise ValueError("Invalid label")
+        target = _launchd_target(label, domain, uid)
         return execute(["/bin/launchctl", "kickstart", "-k",
-                        f"gui/{os.getuid()}/{label}"], str(Path.home()), 20)
+                        target], str(Path.home()), 20)
 
     @mcp.tool(annotations={
                               'readOnlyHint': False,
@@ -164,11 +198,14 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def project_task(project: str, task: str, path: str = "") -> dict:
-        """Run one approved project test or build; test/build scripts can execute project code."""
-        allowed = roots()
-        if project not in allowed:
-            raise PermissionError("Project not allowed")
-        cwd = str(allowed[project])
+        """Run a named test shortcut OR an arbitrary shell-free argv command in an approved project.
+
+        AgentWorkspace is the default working directory. Operations elsewhere
+        require explicit owner permission for the specific task; do not claim
+        that an audit field alone grants permission. Use terminal_exec for pipes.
+        """
+        project_root = root_for_project(project)
+        cwd = str(project_root)
         if task == "python_compile":
             _, target = target_for(project, path, require_file=True)
             if target.suffix != ".py":
@@ -179,7 +216,7 @@ def register(mcp):
             compile(data, str(target), "exec")
             return {"task": task, "path": path, "result": "syntax_ok"}
         if task == "pytest":
-            python = allowed[project] / ".venv/bin/python"
+            python = project_root / ".venv/bin/python"
             if not python.is_file() or not os.access(python, os.X_OK):
                 raise ValueError("pytest requires the project's .venv/bin/python; "
                                  "use the terminal_exec tool for another environment")
@@ -189,5 +226,12 @@ def register(mcp):
         elif task == "npm_build":
             command = [shutil.which("npm") or "/opt/homebrew/bin/npm", "run", "build"]
         else:
-            raise ValueError("Tasks: python_compile, pytest, npm_test, npm_build")
+            if not isinstance(task, str) or not task or "\x00" in task or len(task) > 8192:
+                raise ValueError("Task command must be a nonempty argv string <=8192 characters")
+            try:
+                command = shlex.split(task)
+            except ValueError as exc:
+                raise ValueError("Invalid project command quoting") from exc
+            if not command or any(not part or "\x00" in part for part in command):
+                raise ValueError("Invalid project command arguments")
         return execute(command, cwd, 60)

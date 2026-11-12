@@ -5,8 +5,8 @@
 
 - Всего: **142** инструментов (112 frozen, 30 дополнительных).
 - Опциональные background-инструменты зарегистрированы только в памяти.
-- Статические исключения из 20 модулей: PermissionError=37, RuntimeError=35, TypeError=2, ValueError=139.
-- Не классифицированных статических сообщений: **30**.
+- Статические исключения из 20 модулей: PermissionError=33, RuntimeError=35, TypeError=2, ValueError=156.
+- Не классифицированных статических сообщений: **41**.
 - Статические raise-сайты не являются доказательством ошибки параметра;
   ошибки среды, зависимости и после побочного эффекта проверяются отдельно.
 
@@ -91,10 +91,10 @@
 | git_commit | audit_context, message, project | 3 | frozen |
 | git_create_branch | audit_context, name, project | 3 | frozen |
 | git_diff | audit_context, project | 4 | frozen |
-| git_fetch | audit_context, project | 2 | frozen |
+| git_fetch | audit_context, project | 3 | frozen |
 | git_history | audit_context, project | 3 | frozen |
-| git_pull_ff | audit_context, project | 2 | frozen |
-| git_push | audit_context, project | 2 | frozen |
+| git_pull_ff | audit_context, project | 3 | frozen |
+| git_push | audit_context, project | 3 | frozen |
 | git_stage | audit_context, paths, project | 3 | frozen |
 | git_status | audit_context, project | 3 | frozen |
 | gui_displays | audit_context | 1 | frozen |
@@ -110,20 +110,20 @@
 | gui_type | audit_context, text | 2 | frozen |
 | gui_wait_title | audit_context, title | 4 | frozen |
 | gui_windows | audit_context | 1 | frozen |
-| launchd_restart | audit_context, label | 2 | frozen |
-| launchd_status | audit_context | 2 | frozen |
+| launchd_restart | audit_context, label | 4 | frozen |
+| launchd_status | audit_context | 4 | frozen |
 | list_workspace | audit_context | 3 | additional |
 | local_http_probe | audit_context | 4 | frozen |
 | machine_health | audit_context | 1 | frozen |
 | mcp_bridge_call | audit_context, target, tool | 6 | frozen |
 | mcp_bridge_list | audit_context | 3 | frozen |
 | mcp_bridge_read | audit_context, target, tool | 6 | frozen |
-| mcp_diagnostics | audit_context | 1 | additional |
+| mcp_diagnostics | audit_context | 2 | additional |
 | mcp_targets | audit_context | 1 | frozen |
 | network_listeners | audit_context | 2 | frozen |
 | package_capabilities | audit_context | 1 | frozen |
-| package_install | audit_context, formula | 2 | frozen |
-| package_installed | audit_context, formula | 2 | frozen |
+| package_install | audit_context, formula | 3 | frozen |
+| package_installed | audit_context, formula | 3 | frozen |
 | package_job_status | audit_context, job_id | 2 | frozen |
 | process_snapshot | audit_context | 2 | additional |
 | project_roots | audit_context | 1 | frozen |
@@ -136,13 +136,13 @@
 | ssh_auth_diagnostics | audit_context | 1 | frozen |
 | ssh_diagnostic | audit_context, host | 3 | frozen |
 | ssh_download | audit_context, host, local_path, remote_path | 6 | frozen |
-| ssh_exec | audit_context, command, host | 4 | frozen |
+| ssh_exec | audit_context, command, host | 5 | frozen |
 | ssh_identity_inspect | audit_context | 2 | frozen |
 | ssh_open | audit_context, host | 2 | frozen |
 | ssh_profile_approve_alias | audit_context, name | 2 | frozen |
 | ssh_profile_inventory | audit_context | 1 | frozen |
 | ssh_profile_register | audit_context, host, name, user | 6 | frozen |
-| ssh_pty_open | audit_context, host | 2 | frozen |
+| ssh_pty_open | audit_context, host | 3 | frozen |
 | ssh_targets | audit_context | 1 | frozen |
 | ssh_transfer_begin | audit_context, direction, host, remote_path | 11 | frozen |
 | ssh_transfer_cancel | audit_context, transfer_id | 2 | frozen |
@@ -194,17 +194,17 @@
 | --- | ---: | ---: | ---: | ---: |
 | bridge_media.py | 11 | 11 | 0 | 0 |
 | chrome_orchestrator_ops.py | 7 | 0 | 4 | 0 |
-| command_plugins.py | 9 | 1 | 7 | 0 |
-| fs_ops.py | 23 | 4 | 0 | 0 |
-| git_ops.py | 8 | 1 | 0 | 0 |
+| command_plugins.py | 9 | 0 | 7 | 0 |
+| fs_ops.py | 24 | 5 | 0 | 0 |
+| git_ops.py | 10 | 1 | 0 | 0 |
 | gui_ops.py | 11 | 0 | 4 | 0 |
 | mcp_bridge_ops.py | 14 | 2 | 0 | 0 |
 | package_ops.py | 4 | 0 | 2 | 0 |
 | ssh_bridge_ops.py | 2 | 1 | 2 | 0 |
-| ssh_manage_ops.py | 15 | 2 | 2 | 0 |
-| system_ops.py | 8 | 2 | 0 | 0 |
+| ssh_manage_ops.py | 17 | 2 | 2 | 0 |
+| system_ops.py | 16 | 0 | 0 | 0 |
 | watcher_ops.py | 2 | 3 | 8 | 0 |
-| maintenance_ops.py | 16 | 9 | 6 | 2 |
+| maintenance_ops.py | 20 | 7 | 6 | 2 |
 | background_browser_ops.py | 9 | 0 | 0 | 0 |
 | background_native_ops.py | 0 | 1 | 0 | 0 |
 
@@ -226,22 +226,33 @@
 | chrome_orchestrator_ops.py | Invalid result filename |
 | fs_ops.py | Invalid backup ID |
 | fs_ops.py | Invalid trusted projects config |
+| fs_ops.py | Unknown project alias; use an explicit authorized absolute path |
+| git_ops.py | Invalid Git remote token |
 | gui_ops.py | Invalid application name |
 | gui_ops.py | Invalid or oversized screenshot JPEG |
 | gui_ops.py | Invalid screenshot JPEG base64 |
+| maintenance_ops.py | Invalid filesystem path |
+| maintenance_ops.py | Invalid log name/path |
 | maintenance_ops.py | Invalid path |
 | mcp_bridge_ops.py | Invalid saved MCP targets |
 | mcp_bridge_ops.py | Invalid stdio arguments |
 | mcp_bridge_ops.py | Invalid stdio environment |
 | mcp_bridge_ops.py | Invalid stdio working directory |
+| package_ops.py | Invalid Homebrew package name or kind |
+| package_ops.py | Invalid Homebrew package path segment |
 | ssh_bridge_ops.py | Invalid ssh_targets.json |
-| ssh_bridge_ops.py | Unknown diagnostic command |
 | ssh_manage_ops.py | Invalid SSH configuration |
+| ssh_manage_ops.py | Invalid direct SSH host |
 | ssh_manage_ops.py | Invalid saved SSH alias |
 | ssh_manage_ops.py | Invalid saved SSH host settings |
 | ssh_manage_ops.py | Invalid saved SSH profile |
 | ssh_manage_ops.py | Invalid saved SSH profile kind |
+| ssh_manage_ops.py | Invalid user@SSH-host destination |
 | ssh_manage_ops.py | Unknown profile type |
 | system_ops.py | Invalid label |
+| system_ops.py | Invalid launchd UID |
+| system_ops.py | Invalid launchd domain: gui, user or system |
 | system_ops.py | Invalid launchd label |
-| system_ops.py | Unsupported method or path |
+| system_ops.py | Invalid project command arguments |
+| system_ops.py | Invalid project command quoting |
+| system_ops.py | Unsupported method or unsafe HTTP path |

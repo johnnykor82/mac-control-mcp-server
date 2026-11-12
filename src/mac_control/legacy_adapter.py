@@ -57,6 +57,6 @@ def inspect_existing_handlers() -> Mapping[str, FrozenHandler]:
         module.register(collector)
     if set(collector.entries) != _EXPECTED:
         raise RuntimeError("Frozen source registry differs from pinned 112 operations")
-    if sum(x.read_only for x in collector.entries.values()) != 44:
+    if sum(x.read_only for x in collector.entries.values()) != 43:
         raise RuntimeError("Read-only metadata drift")
     return MappingProxyType(collector.entries)

@@ -126,8 +126,9 @@ class InstalledDiagnosticsTests(unittest.TestCase):
             self.assertEqual(opener.open.call_args.args[0].full_url,
                 "http://127.0.0.1:3201/.well-known/oauth-authorization-server")
             self.assertEqual(self.tools["local_http_probe"](port=3201)["status"],200)
-            with self.assertRaises(PermissionError):
-                self.tools["local_http_probe"](port=65001)
+            self.assertEqual(self.tools["local_http_probe"](port=65001)["status"], 200)
+            self.assertEqual(opener.open.call_args.args[0].full_url,
+                             "http://127.0.0.1:65001/")
             with self.assertRaises(ValueError):
                 self.tools["local_http_probe"](path="/../../secret")
     def test_tmux_missing_returns_structured_error_without_calling_tmux(self):

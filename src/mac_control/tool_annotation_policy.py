@@ -102,7 +102,7 @@ _ROWS = {
     "self_update_start": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
     "self_update_status": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
     "ssh_auth_diagnostics": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-    "ssh_diagnostic": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    "ssh_diagnostic": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
     "ssh_download": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
     "ssh_exec": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
     "ssh_identity_inspect": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},

@@ -40,11 +40,32 @@ def roots():
                 result[name] = root.resolve()
     return result
 
+
+def root_for_project(project: str) -> Path:
+    """Resolve an owner-approved task's working directory, without an allowlist.
+
+    The stable default is AgentWorkspace. For a concrete task for which the
+    owner explicitly authorized work elsewhere, pass the absolute directory
+    as project. An audit_context claim alone does not authorize external work.
+    Preserve root checks, OS permissions and symlink confinement.
+    """
+    if not isinstance(project, str) or not project or "\x00" in project:
+        raise ValueError("Project must be a name or absolute directory")
+    configured = roots()
+    if project in configured:
+        return configured[project].resolve()
+    candidate = Path(project).expanduser()
+    if not candidate.is_absolute():
+        raise ValueError("Unknown project alias; use an explicit authorized absolute path")
+    if any(part.is_symlink() for part in (candidate, *candidate.parents)):
+        raise PermissionError("Symlinked external project roots or parents are not accepted")
+    if not candidate.is_dir():
+        raise FileNotFoundError("External project directory does not exist")
+    return candidate.resolve(strict=True)
+
+
 def target_for(project: str, path: str, require_file=False, *, read_only=False):
-    allowed = roots()
-    if project not in allowed:
-        raise ValueError("Project is not enabled; available: " + ", ".join(sorted(allowed)))
-    base = allowed[project].resolve()
+    base = root_for_project(project)
     p = Path(path)
     if p.is_absolute() or ".." in p.parts or not path or "\x00" in path:
         raise ValueError("Relative non-traversing path required")
@@ -156,10 +177,11 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def project_roots() -> dict:
-        """List directory roots approved by the Mac owner. New roots require local configuration."""
+        """AgentWorkspace is the DEFAULT project. For a specifically owner-authorized external task, supply its existing ABSOLUTE directory as project; no global allowlist registration. Audit metadata alone is not authorization."""
         return {"projects": {name: str(path) for name, path in roots().items()},
                 "default_write_project": "workspace", "workspace": str(roots()["workspace"]),
                 "agent_write_policy": "Default all agent-created work to workspace; external writes only by specific owner request or necessary system integration.",
+                "external_absolute_project": "Use only with explicit owner permission for this specific task",
                 "config": str(TRUSTED_CONFIG), "config_writable_via_mcp": False}
 
     @mcp.tool(annotations={

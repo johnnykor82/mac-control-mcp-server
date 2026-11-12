@@ -103,3 +103,7 @@ and uninstall. It must never be removed by `uninstall --all`.
 Changing `workspace_root` does not move existing files. Previously populated
 `data/workspace` is kept for compatibility until explicitly migrated.
 See [workspace migration](docs/WORKSPACE_MIGRATION.md).
+
+## Owner Policy v2 (2026-11-12)
+
+AgentWorkspace is mandatory default. ANY external read, write or working-directory selection requires owner approval for the exact task/target. No permanent project allowlist. Audit metadata alone is not authorization. Owner-approved external work retains OS permissions, TCC and file integrity checks. SSH client private keys may reside anywhere readable; host authenticity is independently checked by OpenSSH accept-new, which rejects changed known hosts.

@@ -259,8 +259,10 @@ def register(mcp):
         """
         if not isinstance(text, str):
             raise ValueError("Text must be a string")
-        if len(text) > 1500:
-            raise ValueError("Text length limit 1500")
+        # Larger paste runs once through the signed native clipboard helper.
+        # Keep a bounded payload and one clipboard snapshot/restore transaction.
+        if len(text) > 32768 or len(text.encode("utf-8")) > 128 * 1024:
+            raise ValueError("GUI text exceeds 32768 chars / 128 KiB")
         if not text:
             return {"characters": 0, "sent": True}
         helper = GUI_CLIPBOARD_HELPER

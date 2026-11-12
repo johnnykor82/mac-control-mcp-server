@@ -105,18 +105,12 @@ class MaintenanceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             registry.tools['fs_write']('workspace', alias, '# stale', first['sha256'])
 
-    def test_fr025_unknown_relative_path_has_actionable_preflight_error(self):
+    def test_unknown_relative_path_defaults_to_agentworkspace(self):
         for path in ('reports/INITIAL_AUDIT.md', 'unrecognized/a.txt'):
-            with self.subTest(path=path), self.assertRaisesRegex(
-                ValueError, 'WORKSPACE_PATH_FORMAT_INVALID'
-            ) as raised:
-                self.tools['write_file'](path, '# no write')
-            message = str(raised.exception)
-            self.assertIn('write_file', message)
-            self.assertIn('fs_write', message)
-            self.assertIn('project=', message)
-            self.assertNotIn(path, message)
-        self.assertFalse((self.workspace / 'reports/INITIAL_AUDIT.md').exists())
+            with self.subTest(path=path):
+                result=self.tools['write_file'](path, '# owner workspace')
+                self.assertTrue((self.workspace/path).is_file())
+                self.assertEqual(self.tools['read_file'](path)['sha256'],result['sha256'])
 
     def test_fr025_all_known_workspace_alias_prefixes_are_equivalent(self):
         writer, reader = self.tools['write_file'], self.tools['read_file']
@@ -137,7 +131,6 @@ class MaintenanceTests(unittest.TestCase):
         for path in (
             'projects/../outside.txt',
             'projects/a/../../outside.txt',
-            '/tmp/workspace/projects/report.md',
         ):
             with self.subTest(path=path), self.assertRaises(PermissionError):
                 writer(path, '# forbidden')
@@ -153,11 +146,14 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(outside.read_text(), 'leave intact')
 
     def test_sensitive_paths_symlinks_and_release_writes_are_denied(self):
-        for name in ('workspace/../remote_auth.json',
-                     'extensions.py', '/etc/passwd'):
-            self.assertFalse(self.tools['read_file'](name)['ok'])
-            with self.assertRaises((ValueError, PermissionError)):
-                self.tools['write_file'](name, 'bad')
+        name='workspace/../remote_auth.json'
+        self.assertFalse(self.tools['read_file'](name)['ok'])
+        with self.assertRaises((ValueError, PermissionError)):
+            self.tools['write_file'](name,'bad')
+        # A normal filename now defaults to AgentWorkspace; arbitrary absolute
+        # OS files require separate task-specific owner consent.
+        result=self.tools['write_file']('extensions.txt','workspace default')
+        self.assertTrue(result['sha256'])
         for name in ('workspace/.env', 'workspace/.ssh/id_rsa'):
             result = self.tools['write_file'](name, 'hidden fixture')
             self.assertEqual(len(result['sha256']), 64)
@@ -186,9 +182,10 @@ class MaintenanceTests(unittest.TestCase):
         (self.workspace / 'link').symlink_to(self.root)
         # FR-025.4: name-based read restrictions are removed; symlinks still denied.
         self.assertEqual([x['name'] for x in self.tools['list_workspace']()['entries']], ['.env', 'artifacts', 'downloads', 'id_rsa', 'normal.txt', 'projects', 'scratch', 'shared'])
-        for path in ('workspace/../logs', 'other', '/tmp'):
-            with self.assertRaises((ValueError, PermissionError)):
-                self.tools['list_workspace'](path)
+        with self.assertRaises((ValueError, PermissionError)):
+            self.tools['list_workspace']('workspace/../logs')
+        with self.assertRaises(NotADirectoryError):
+            self.tools['list_workspace']('other')
 
     def test_audit_is_metadata_only_and_tolerates_corrupt_records(self):
         (self.logs / 'audit.jsonl').write_text('\n'.join([
@@ -220,7 +217,7 @@ class MaintenanceTests(unittest.TestCase):
             result = self.tools['process_snapshot']()
         self.assertEqual(result['processes'][0]['executable'], 'python3')
         self.assertNotIn('args', ' '.join(run.call_args.args[0]))
-        self.assertEqual(result['total_matched'], 1)
+        self.assertEqual(result['total_matched'], 2)
 
     def test_custom_registry_rejects_unknown_dynamic_and_write_through_query(self):
         query = self.tools['custom_query']

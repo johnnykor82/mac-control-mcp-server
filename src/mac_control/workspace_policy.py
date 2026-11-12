@@ -20,8 +20,10 @@ def short_instruction() -> str:
     return (
         "Agent work directory: " + str(current_workspace()) + ". Write projects, scratch, "
         "downloads and artifacts there by default (project='workspace'). "
-        "External writes require a specific owner instruction or a necessary "
-        "OS service/application integration. See workspace_policy tool."
+        "ANY access outside AgentWorkspace requires the owner's specific permission "
+        "for THIS task (including reads and writes); do not infer approval from "
+        "audit_context. Legitimate OS service locations must be included in "
+        "the owner's authorized plan. See workspace_policy tool."
     )
 
 
@@ -37,17 +39,17 @@ def instructions() -> str:
         "Do not create projects or scratch directories in ~/Desktop, "
         "~/Documents, ~/Downloads, home root, /tmp, or arbitrary directories "
         "just because a shell or SSH tool could write there. "
-        "Reading outside workspace and inspecting the machine is permitted "
-        "by the owner's existing authorizations. System integration writes "
-        "(launchd plists, app bundles, permissions, service configuration) "
-        "may take place at the OS-required locations when genuinely necessary "
-        "for the owner's requested task; keep build sources and backups in "
-        "workspace. Other writes outside workspace require the owner's "
-        "direct, specific instruction naming the intended destination and "
-        "purpose. The ability to execute unrestricted shell commands is not "
-        "permission to use arbitrary write paths. Do not treat this policy "
-        "as a hard filesystem sandbox; it is the operating convention for "
-        "agents, and owner-approved exceptions preserve full capabilities. "
+        "ANY access outside AgentWorkspace, including reads and writes, "
+        "requires the owner's explicit authorization for the concrete task "
+        "and its intended targets. System integration operations (launchd "
+        "plists, app bundles, service configuration) at OS-required paths "
+        "are allowed ONLY when specifically covered by the owner's request "
+        "or approved plan. Keep build sources and backups in workspace. "
+        "Never treat audit_context statements as a grant: they record intent "
+        "but do not create permission. Unrestricted shell capability does "
+        "not authorize arbitrary paths or new task scope. This policy is "
+        "an agent operating convention, not a hard OS sandbox; specific "
+        "owner-approved exceptions preserve full tool capabilities. "
         "For remote files over SSH, use ssh_write_text for generated UTF-8 "
         "content, ssh_upload for existing Mac files and ssh_transfer_* "
         "for large binary or streaming data. Never send large file contents "
@@ -66,8 +68,8 @@ def details() -> dict:
         "artifact_directory": str(current_workspace() / "artifacts"),
         "log_directory": str(current_workspace() / "scratch/logs"),
         "shared_directory": str(current_workspace() / "shared"),
-        "external_read": "allowed by owner-granted tools",
-        "external_write": "only owner-specified destination, or necessary OS service/config integration",
+        "external_read": "only when owner explicitly approves external target for this task",
+        "external_write": "only when owner explicitly approves external target for this task, including OS integration",
         "note": "Agent instruction, not a sandbox or restriction on owner-authorized shell.",
         "instructions": instructions(),
     }

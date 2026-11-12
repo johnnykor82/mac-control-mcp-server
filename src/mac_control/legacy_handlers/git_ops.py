@@ -2,15 +2,12 @@
 import re
 import subprocess
 from pathlib import Path
-from .fs_ops import roots, target_for
+from .fs_ops import roots, target_for, root_for_project
 
 OUTPUT_LIMIT = 24000
 
 def repo(project):
-    available = roots()
-    if project not in available:
-        raise ValueError("Project is not approved")
-    base = available[project]
+    base = root_for_project(project)
     test = subprocess.run(
         ["git", "-C", str(base), "rev-parse", "--show-toplevel"],
         capture_output=True, text=True, timeout=8,
@@ -41,6 +38,16 @@ def checked_path(project, path):
     if full == root:
         raise ValueError("Specify a concrete path")
     return str(full.relative_to(root))
+
+
+def _remote(remote: str) -> str:
+    """Keep remote argument a single safe positional token, not an injected Git option."""
+    if not isinstance(remote,str) or not remote or len(remote)>1024:
+        raise ValueError("Specify a nonempty Git remote alias or URL")
+    if remote.startswith("-") or any(ord(char)<=32 or ord(char)==127 for char in remote):
+        raise ValueError("Invalid Git remote token")
+    return remote
+
 
 def register(mcp):
     @mcp.tool(annotations={
@@ -100,9 +107,14 @@ def register(mcp):
                               'openWorldHint': False,
                           })
     def git_stage(project: str, paths: list[str]) -> dict:
-        """Stage up to 20 explicit allowlisted paths; never use add -A or wildcard."""
-        if not 1 <= len(paths) <= 20:
-            raise ValueError("Supply 1–20 explicit paths")
+        """Stage ANY explicitly selected file paths; no artificial count cap.
+
+        Resource safety limits combined argument bytes; no wildcard or add -A.
+        """
+        if not paths or not isinstance(paths, list):
+            raise ValueError("Supply one or more explicit paths")
+        if sum(len(p.encode("utf-8")) for p in paths if isinstance(p,str)) > 100000:
+            raise ValueError("Git argument bytes exceed 100000; stage in batches")
         checked = [checked_path(project, p) for p in paths]
         return git(project, ["add", "--", *checked])
 
@@ -142,9 +154,9 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def git_fetch(project: str) -> dict:
-        """Fetch refs only from origin with Git hooks disabled; does not merge."""
-        return git(project, ["fetch", "--no-tags", "origin"], timeout=45)
+    def git_fetch(project: str, remote: str = "origin") -> dict:
+        """Fetch from ANY task-authorized Git remote, alias or URL; origin is default."""
+        return git(project, ["fetch", "--no-tags", _remote(remote)], timeout=45)
 
     @mcp.tool(annotations={
                               'readOnlyHint': False,
@@ -152,13 +164,13 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def git_pull_ff(project: str) -> dict:
-        """Fast-forward current branch from origin; refuses merges and overwrites."""
+    def git_pull_ff(project: str, remote: str = "origin") -> dict:
+        """Fast-forward current branch from ANY task-authorized remote; no merge or overwrite."""
         branch = git(project, ["branch", "--show-current"])
         if branch["exit_code"] or not branch["stdout"].strip():
             raise ValueError("No active branch")
         name = branch["stdout"].strip()
-        return git(project, ["pull", "--ff-only", "origin", name], timeout=45)
+        return git(project, ["pull", "--ff-only", _remote(remote), name], timeout=45)
 
     @mcp.tool(annotations={
                               'readOnlyHint': False,
@@ -166,10 +178,10 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def git_push(project: str) -> dict:
-        """Push current local branch to origin (explicit write authorization required)."""
+    def git_push(project: str, remote: str = "origin") -> dict:
+        """Push current branch to ANY explicitly task-authorized remote (never force)."""
         branch = git(project, ["branch", "--show-current"])
         if branch["exit_code"] or not branch["stdout"].strip():
             raise ValueError("No active branch")
         name = branch["stdout"].strip()
-        return git(project, ["push", "origin", f"HEAD:refs/heads/{name}"], timeout=45)
+        return git(project, ["push", _remote(remote), f"HEAD:refs/heads/{name}"], timeout=45)

@@ -1,6 +1,6 @@
 BETA SOURCE INVENTORY — independent clean-Mac acceptance remains pending.
 Source project: mac-control-mcp-server
-Included files: 306
+Included files: 326
 
 .github/workflows/source-tests.yml
 .gitignore
@@ -122,6 +122,16 @@ specs/M8VEN_TRUST_A_20261111/PLAN.md
 specs/M8VEN_TRUST_A_20261111/SPEC.md
 specs/M8VEN_TRUST_A_20261111/TASKS.md
 specs/M8VEN_TRUST_A_20261111/TOOL_MATRIX_BASELINE.csv
+specs/OWNER_POLICY_V2_20261112/ANALYZE.md
+specs/OWNER_POLICY_V2_20261112/ARCHITECTURE.md
+specs/OWNER_POLICY_V2_20261112/BACKLOG.md
+specs/OWNER_POLICY_V2_20261112/CONVERGE.md
+specs/OWNER_POLICY_V2_20261112/PLAN.md
+specs/OWNER_POLICY_V2_20261112/SPEC.md
+specs/OWNER_POLICY_V2_20261112/TASKS.md
+specs/OWNER_POLICY_V2_20261112/TOOL_COVERAGE.md
+specs/OWNER_POLICY_V2_20261112/TOOL_MATRIX.csv
+specs/OWNER_POLICY_V2_20261112/checklists/requirements.md
 specs/TERMINAL_LONG_FALLBACK_20261112/ANALYZE.md
 specs/TERMINAL_LONG_FALLBACK_20261112/ARCHITECTURE.md
 specs/TERMINAL_LONG_FALLBACK_20261112/BACKLOG.md
@@ -261,6 +271,16 @@ tests/integration/test_native_release_pin_fr025.py
 tests/integration/test_network_language.py
 tests/integration/test_network_wizard.py
 tests/integration/test_oauth_interactive_timeout.py
+tests/integration/test_owner_policy_v2_core.py
+tests/integration/test_owner_policy_v2_external_roots.py
+tests/integration/test_owner_policy_v2_git.py
+tests/integration/test_owner_policy_v2_gui.py
+tests/integration/test_owner_policy_v2_launchd.py
+tests/integration/test_owner_policy_v2_logs.py
+tests/integration/test_owner_policy_v2_maintenance_paths.py
+tests/integration/test_owner_policy_v2_packages.py
+tests/integration/test_owner_policy_v2_ssh.py
+tests/integration/test_owner_policy_v2_ssh_transfer.py
 tests/integration/test_path_contracts_fr025.py
 tests/integration/test_preview_exposure.py
 tests/integration/test_project_task_environment.py

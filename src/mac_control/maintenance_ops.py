@@ -75,14 +75,14 @@ def _no_symlinks(path: Path) -> None:
         raise PermissionError('Symlinks are not supported')
 
 
-def _read(path: Path, maximum: int) -> bytes:
+def _read(path: Path, maximum: int, *, require_owner: bool = True) -> bytes:
     _no_symlinks(path)
     fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
     with os.fdopen(fd, 'rb') as source:
         info = os.fstat(source.fileno())
         if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                or info.st_uid != os.getuid()):
-            raise PermissionError('Only owned, unlinked regular files are permitted')
+                or (require_owner and info.st_uid != os.getuid())):
+            raise PermissionError('Only permitted unlinked regular files are supported')
         if info.st_size > maximum:
             raise ValueError('File exceeds size limit')
         content = source.read(maximum + 1)
@@ -92,65 +92,41 @@ def _read(path: Path, maximum: int) -> bytes:
 
 
 def _workspace_path(name: str, *, write: bool = False) -> Path:
-    if not isinstance(name, str) or not name or len(name) > 2048 or '\x00' in name:
-        raise ValueError('Nonempty relative workspace path required (max 2048 characters)')
-    relative = Path(name)
-    if relative.is_absolute():
-        if write:
-            raise PermissionError('Writes require a workspace-relative path')
-        try:
-            relative = Path("workspace") / relative.relative_to(fs_ops.roots()["workspace"])
-        except ValueError:
-            raise PermissionError('Path is outside the user workspace') from None
-    # Normalize only the already-approved workspace-relative convention.
-    # Both maintenance.write_file(path='workspace/projects/x') and the
-    # legacy fs_write(project='workspace', path='projects/x') now address
-    # precisely the same file. Do not accept paths under separately
-    # configured approved project roots here.
-    if '..' in relative.parts:
-        raise PermissionError('Workspace path traversal is denied')
-    if relative.parts and relative.parts[0] != 'workspace':
-        if (relative.parts[0] in WORKSPACE_RELATIVE_PREFIXES
-                and len(relative.parts) >= 2):
-            relative = Path('workspace') / relative
-        elif len(relative.parts) == 1 and relative.parts[0].startswith('.'):
-            # Hidden files at workspace root are owner-authorized destinations.
-            relative = Path('workspace') / relative
-        elif relative.as_posix() in READ_ONLY_FILES:
-            raise PermissionError('Shipped-source writes are denied')
-        else:
-            raise ValueError(
-                'WORKSPACE_PATH_FORMAT_INVALID: write_file(path=...) accepts '
-                'workspace/projects/<file> or projects/<file> (also scratch/, '
-                'artifacts/, downloads/, shared/); fs_write requires '
-                "project='workspace', path='projects/<file>'. "
-                'Check the actual tool signature before retrying. '
-                'Policy or safety denials must not be bypassed.')
-    if not relative.parts or relative.parts[0] != 'workspace' or len(relative.parts) < 2:
-        raise PermissionError('Only workspace/<file> or an approved workspace-relative subpath is writable')
-    _no_symlinks(fs_ops.roots()['workspace'])
-    # Hidden names are allowed for read and write in the approved workspace.
-    # Aliases still cannot reach outside the configured workspace.
-    _, target = fs_ops.target_for('workspace', Path(*relative.parts[1:]).as_posix(),
-                                  read_only=not write)
-    if target == fs_ops.roots()['workspace'] or target.is_dir():
-        raise ValueError('Expected a workspace file')
-    if target.exists() and target.stat().st_nlink != 1:
+    """Default AgentWorkspace; external absolute path needs specific owner approval.
+
+    Audit metadata is a record of user intent, not an authorization grant.
+    """
+    if not isinstance(name,str) or not name or len(name)>2048 or "\x00" in name:
+        raise ValueError('Invalid filesystem path')
+    path=Path(name).expanduser()
+    if ".." in path.parts:
+        raise PermissionError('Path traversal is denied')
+    if path.is_absolute():
+        _no_symlinks(path)
+        target=path.resolve(strict=False)
+    else:
+        root=fs_ops.roots()['workspace']
+        parts=path.parts[1:] if path.parts and path.parts[0]=='workspace' else path.parts
+        if not parts:
+            raise ValueError('Specify a concrete file within AgentWorkspace')
+        _,target=fs_ops.target_for('workspace',Path(*parts).as_posix(),read_only=not write)
+        if target==root:
+            raise ValueError('Specify a concrete workspace file')
+    _no_symlinks(target)
+    if target.is_dir():
+        raise ValueError('Expected a file, not a directory')
+    if target.exists() and target.stat().st_nlink!=1:
         raise PermissionError('Hardlinked files are not supported')
     return target
 
 
 def _read_target(name: str) -> Path:
-    if not isinstance(name, str) or not name or len(name) > 2048 or '\x00' in name:
+    """Read owner-approved file; preserve historic shipped-source aliases."""
+    if not isinstance(name,str) or not name or len(name)>2048 or "\x00" in name:
         raise ValueError('Invalid path')
-    relative = Path(name)
-    if relative.is_absolute():
-        try:
-            relative = relative.relative_to(RELEASE_ROOT)
-        except ValueError:
-            return _workspace_path(name)
-    if relative.as_posix() in READ_ONLY_FILES:
-        return RELEASE_ROOT / relative
+    path=Path(name)
+    if not path.is_absolute() and path.as_posix() in READ_ONLY_FILES:
+        return RELEASE_ROOT/path
     return _workspace_path(name)
 
 
@@ -178,6 +154,34 @@ def _log_content(path: Path) -> str | None:
         return _read(path, MAX_LOG_BYTES).decode('utf-8', errors='replace')
     except (FileNotFoundError, PermissionError):
         return None
+
+
+def _generic_log_content(path: Path) -> str | None:
+    """Read task-authorized absolute log from OS-readable regular file only.
+
+    This bypasses neither OS permissions nor symlink/size safeguards.
+    Owner approval for this specific external task must precede use.
+    """
+    try:
+        _no_symlinks(path)
+        canonical = path.resolve(strict=True)
+        _no_symlinks(canonical)
+        fd = os.open(canonical, os.O_RDONLY |
+                     getattr(os, 'O_NOFOLLOW', 0) |
+                     getattr(os, 'O_NONBLOCK', 0))
+        with os.fdopen(fd, 'rb') as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise PermissionError('Only regular log files')
+            if info.st_size > MAX_LOG_BYTES:
+                raise ValueError('Log exceeds maximum bytes')
+            data = source.read(MAX_LOG_BYTES + 1)
+            if len(data) > MAX_LOG_BYTES:
+                raise ValueError('Log exceeds maximum bytes')
+        return data.decode('utf-8', errors='replace')
+    except (FileNotFoundError, PermissionError, IsADirectoryError):
+        return None
+
 
 
 def _service_helper():
@@ -340,34 +344,36 @@ def register(mcp) -> None:
 
     @readonly
     def list_workspace(path: str = 'workspace', limit: int = 100) -> dict:
-        """List entries including hidden files under workspace; no symlinks."""
-        relative = Path(path)
-        if relative.is_absolute() or not relative.parts or relative.parts[0] != 'workspace' or '..' in relative.parts:
-            raise ValueError('Only workspace-relative paths are allowed')
-        _no_symlinks(fs_ops.roots()['workspace'])
-        nested = Path(*relative.parts[1:]).as_posix()
-        base, directory = fs_ops.target_for('workspace', nested, read_only=True)
-        if not directory.is_dir():
-            raise NotADirectoryError(path)
-        limit = max(1, min(int(limit), 200))
-        entries = []
-        for entry in sorted(directory.iterdir(), key=lambda item: item.name):
-            try:
-                fs_ops.target_for('workspace', entry.relative_to(base).as_posix(), read_only=True)
-            except (ValueError, PermissionError):
-                continue
-            if entry.is_symlink():
-                continue
-            entries.append({'name': entry.name, 'type': 'directory' if entry.is_dir() else 'file',
-                            'bytes': entry.stat().st_size if entry.is_file() else None})
-            if len(entries) >= limit:
-                break
-        return {'path': path, 'entries': entries, 'limit': limit}
+        """List AgentWorkspace default or task-authorized absolute directory."""
+        source=Path(path).expanduser()
+        if ".." in source.parts:
+            raise PermissionError('Directory traversal is denied')
+        if source.is_absolute():
+            _no_symlinks(source)
+            directory=source.resolve(strict=True)
+            _no_symlinks(directory)
+            if not directory.is_dir():
+                raise NotADirectoryError(path)
+        else:
+            parts=source.parts[1:] if source.parts and source.parts[0]=='workspace' else source.parts
+            nested=Path(*parts).as_posix() if parts else '.'
+            _,directory=fs_ops.target_for('workspace',nested,read_only=True)
+            _no_symlinks(directory)
+            if not directory.is_dir():
+                raise NotADirectoryError(path)
+        limit=max(1,min(int(limit),200))
+        entries=[]
+        for entry in sorted(directory.iterdir(),key=lambda item:item.name):
+            if len(entries)>=limit:break
+            if entry.is_symlink():continue
+            entries.append({'name':entry.name,'type':'directory' if entry.is_dir() else 'file',
+                            'bytes':entry.stat().st_size if entry.is_file() else None})
+        return {'path':path,'entries':entries,'limit':limit}
 
     @readonly
     def process_snapshot(limit: int = 40) -> dict:
         """List service executable names and resource use; never command arguments."""
-        limit = max(1, min(int(limit), 100))
+        limit = max(1, min(int(limit), 2000))
         proc = subprocess.run(['/bin/ps', '-axo', 'pid=,ppid=,%cpu=,%mem=,rss=,comm='],
                               capture_output=True, text=True, timeout=5, check=True)
         matched = []
@@ -377,27 +383,41 @@ def register(mcp) -> None:
                 continue
             pid, ppid, cpu, mem, rss, command = fields
             executable = Path(command).name.lower()
-            if any(name in executable for name in ('python', 'litellm', 'openclaw', 'node', 'hermes', 'tailscale')):
-                matched.append({'pid': pid, 'ppid': ppid, 'cpu_pct': cpu, 'mem_pct': mem,
-                                'rss_kb': rss, 'executable': executable})
+            matched.append({'pid': pid, 'ppid': ppid, 'cpu_pct': cpu, 'mem_pct': mem,
+                            'rss_kb': rss, 'executable': executable})
         return {'processes': matched[:limit], 'total_matched': len(matched)}
 
     @readonly
     def read_service_log(name: str, lines: int = 25) -> dict:
-        """Read a scrubbed tail of stdout, stderr or restart from the data logs."""
-        if name not in LOG_NAMES:
-            raise ValueError('Allowed names: stdout, stderr, restart')
+        """Read scrubbed lines from ANY specifically owner-authorized log path.
+
+        'stdout', 'stderr', 'restart' are convenient owned MCP aliases.
+        Absolute external log paths require explicit owner consent for this
+        particular task; AgentWorkspace remains the default work directory.
+        """
+        if not isinstance(name,str) or not name or len(name)>2048 or "\x00" in name:
+            raise ValueError('Invalid log name/path')
         lines = max(1, min(int(lines), 100))
-        path = DATA_ROOT / 'logs' / LOG_NAMES[name]
-        content = _log_content(path)
+        if name in LOG_NAMES:
+            path = DATA_ROOT / 'logs' / LOG_NAMES[name]
+            content = _log_content(path)
+        else:
+            path = Path(name).expanduser()
+            if not path.is_absolute():
+                raise ValueError('Use built-in log alias or explicitly authorized absolute log path')
+            content = _generic_log_content(path)
         if content is None:
             return {'name': name, 'lines': [], 'missing': True}
         return {'name': name, 'lines': _scrub_log(content)[-lines:],
                 'bytes': path.stat().st_size}
 
     @readonly
-    def mcp_diagnostics() -> dict:
-        """Show only owned launchd state, PID and allowlisted log sizes."""
+    def mcp_diagnostics(log_paths: list[str] | None = None) -> dict:
+        """Show owned MCP state plus log sizes for any task-authorized absolute paths.
+
+        AgentWorkspace is default; log_paths outside it require specific
+        owner approval. Never interpret audit metadata as permission.
+        """
         try:
             _, state = _owned_service()
         except FileNotFoundError:
@@ -413,13 +433,25 @@ def register(mcp) -> None:
                 files[name] = info.st_size if stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.getuid() else None
             except (OSError, PermissionError):
                 files[name] = None
+        for source in log_paths or []:
+            if not isinstance(source,str) or not Path(source).expanduser().is_absolute():
+                raise ValueError('Explicit log_paths must be absolute')
+            path = Path(source).expanduser()
+            try:
+                _no_symlinks(path)
+                resolved = path.resolve(strict=True)
+                _no_symlinks(resolved)
+                info = resolved.stat()
+                files[source] = info.st_size if stat.S_ISREG(info.st_mode) and info.st_size <= MAX_LOG_BYTES else None
+            except (OSError, PermissionError):
+                files[source] = None
         return {'launchd': state, 'log_bytes': files, 'active_pid': os.getpid()}
 
     @readonly
     def read_file(path: str) -> dict:
-        """Read workspace text using workspace/projects/... or projects/...; shipped source is allowlisted."""
+        """Read OS-accessible task-authorized text. AgentWorkspace default; outside only with explicit owner permission for this task."""
         try:
-            data = _read(_read_target(path), MAX_FILE)
+            data = _read(_read_target(path), MAX_FILE, require_owner=False)
             content = data.decode('utf-8')
         except (OSError, ValueError, UnicodeError) as exc:
             return {'ok': False, 'path': str(path)[:2048],
@@ -432,7 +464,7 @@ def register(mcp) -> None:
 
     @mutation
     def write_file(path: str, content: str, expected_sha256: str | None = None) -> dict:
-        """Write workspace text: workspace/projects/... or projects/...; existing files need SHA256 and backup."""
+        """Write task-authorized text, AgentWorkspace DEFAULT; external paths require specific owner permission. SHA256/CAS/backup remain mandatory."""
         data = content.encode('utf-8')
         if len(data) > MAX_FILE:
             raise ValueError('Content exceeds 256 KiB')

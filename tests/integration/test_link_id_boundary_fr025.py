@@ -20,7 +20,7 @@ class LinkIdBoundaryTests(unittest.TestCase):
 
     def test_link_id_not_server_side_argument(self):
         expected = {
-            "ssh_exec": {"host", "command", "timeout_seconds"},
+            "ssh_exec": {"host", "command", "timeout_seconds", "identity_file"},
             "terminal_exec": {"command", "project", "timeout_seconds"},
             "custom_command": {"operation", "arguments"},
         }

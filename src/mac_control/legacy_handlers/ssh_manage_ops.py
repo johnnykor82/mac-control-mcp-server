@@ -63,8 +63,17 @@ def _inventory():
     return sorted(result)
 
 def _spec(name):
-    if not isinstance(name, str) or not NAME.fullmatch(name):
-        raise ValueError("Invalid host label")
+    if not isinstance(name,str) or not name:
+        raise ValueError("Specify an SSH host or existing alias")
+    if not NAME.fullmatch(name):
+        # Direct address requires NO managed-host entry or ~/.ssh/config alias.
+        if "@" in name:
+            username, sep, hostname = name.partition("@")
+            if not USER.fullmatch(username) or not HOST.fullmatch(hostname):
+                raise ValueError("Invalid user@SSH-host destination")
+        elif not HOST.fullmatch(name):
+            raise ValueError("Invalid direct SSH host")
+        return {"kind": "raw", "dest": name}
     cfg = _read_config().get(name)
     if cfg is None:
         # OpenSSH itself resolves the alias via ~/.ssh/config, Include,
@@ -84,11 +93,11 @@ def _spec(name):
         raise ValueError("Invalid saved SSH profile kind")
     return cfg
 
-def _command(name, remote_cmd=None, interactive=False):
+def _command(name, remote_cmd=None, interactive=False, identity_file: str = ""):
     cfg = _spec(name)
     argv = [
         SSH, "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=yes",
+        "-o", "StrictHostKeyChecking=accept-new",
         "-o", "ConnectTimeout=8",
         "-o", "ConnectionAttempts=1",
         "-o", "ForwardAgent=no",
@@ -99,19 +108,23 @@ def _command(name, remote_cmd=None, interactive=False):
         "-o", "LogLevel=ERROR",
     ]
     if cfg["kind"] == "alias":
-        # Owner's ~/.ssh/config can supply ProxyJump and identity configuration.
+        # OpenSSH config may supply ProxyJump, host keys and agent identities.
         dest = cfg["alias"]
+    elif cfg["kind"] == "raw":
+        dest = cfg["dest"]
     elif cfg["kind"] == "direct":
         argv += ["-p", str(cfg["port"])]
-        identity = cfg.get("identity_file")
-        if identity:
-            key = Path(identity).expanduser()
-            if not key.is_file() or key.is_symlink():
-                raise FileNotFoundError("SSH identity key is not a regular file")
-            argv += ["-i", str(key), "-o", "IdentitiesOnly=yes"]
         dest = cfg["user"] + "@" + cfg["host"]
     else:
         raise ValueError("Unknown profile type")
+    # Client private identity may be any OS-readable owner-approved key path.
+    # This does NOT replace server host-key authenticity checking.
+    identity = identity_file or cfg.get("identity_file","")
+    if identity:
+        key = Path(identity).expanduser()
+        if not key.is_absolute() or not key.is_file() or key.is_symlink() or not os.access(key, os.R_OK):
+            raise FileNotFoundError("SSH identity key is not a readable regular file")
+        argv += ["-i", str(key.resolve()), "-o", "IdentitiesOnly=yes"]
     argv += ["-tt" if interactive else "-T", "--", dest]
     if remote_cmd is not None:
         argv.append(remote_cmd)
@@ -159,15 +172,19 @@ def register(mcp):
         name: str, host: str, user: str, port: int = 22,
         identity_file: str = "",
     ) -> dict:
-        """Register one SSH host. Existing known_hosts trust and SSH key are still required."""
+        """Optionally save an SSH shortcut; registration is NOT needed to connect.
+
+        Any existing OS-readable owner-approved private identity is supported.
+        Unknown server keys use OpenSSH accept-new first contact; changed keys fail.
+        """
         if (not NAME.fullmatch(name) or not HOST.fullmatch(host)
             or not USER.fullmatch(user) or not 1 <= port <= 65535):
             raise ValueError("Invalid SSH host parameters")
         if identity_file:
             key = Path(identity_file).expanduser()
             if (not key.is_absolute() or not key.is_file() or key.is_symlink()
-                or not key.is_relative_to(Path.home() / ".ssh")):
-                raise ValueError("Identity file must exist under ~/.ssh")
+                or not os.access(key, os.R_OK)):
+                raise ValueError("Identity file must be a readable regular file")
         cfg = {"kind": "direct", "host": host, "user": user,
                "port": port, "identity_file": identity_file}
         hosts = _read_config()
@@ -183,7 +200,8 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def ssh_exec(host: str, command: str, timeout_seconds: int = 30) -> dict:
+    def ssh_exec(host: str, command: str, timeout_seconds: int = 30,
+                 identity_file: str = "") -> dict:
         """Execute one remote shell command on a registered SSH host and return stdout/stderr/status.
 
         Commands run with the remote login user's permissions. Do not send passwords.
@@ -205,7 +223,7 @@ def register(mcp):
                 "separate short ssh_exec for verification. "
                 "No remote command was executed."
             )
-        argv = _command(host, command)
+        argv = _command(host, command, identity_file=identity_file)
         timeout = max(2, min(int(timeout_seconds), 120))
         try:
             r = subprocess.run(
@@ -231,12 +249,12 @@ def register(mcp):
                               'idempotentHint': False,
                               'openWorldHint': False,
                           })
-    def ssh_pty_open(host: str) -> dict:
+    def ssh_pty_open(host: str, identity_file: str = "") -> dict:
         """Open interactive SSH in a persistent tmux PTY using OpenSSH config."""
         from . import command_plugins
         if command_plugins._tmux_available() is None:
             raise RuntimeError("tmux required for interactive SSH")
-        argv = _command(host, interactive=True)
+        argv = _command(host, interactive=True, identity_file=identity_file)
         name = "mc-" + secrets.token_hex(8)
         command_plugins._runtime()
         r = command_plugins._tmux([

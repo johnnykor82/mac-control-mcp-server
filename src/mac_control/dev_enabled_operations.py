@@ -122,6 +122,7 @@ LOCAL_MUTATION_OPERATIONS = frozenset({
     'watcher_resume_task',
     'watcher_schedule_wakeup',
     'watcher_submit_report',
+    'ssh_diagnostic',
 })
 
 LOCAL_COMPAT_READ_OPERATIONS = frozenset({
@@ -133,7 +134,6 @@ LOCAL_COMPAT_READ_OPERATIONS = frozenset({
     'local_http_probe',
     'package_job_status',
     'ssh_auth_diagnostics',
-    'ssh_diagnostic',
     'ssh_identity_inspect',
     'ssh_profile_inventory',
     'watcher_error_status',

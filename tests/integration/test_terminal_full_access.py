@@ -27,6 +27,7 @@ class TerminalFullAccessTests(unittest.TestCase):
             directory = Path(tmp)
             self.assertFalse(hasattr(command_plugins, "POLICY"))
             with patch.object(command_plugins, "roots", return_value={"workspace": directory}), \
+                 patch.object(command_plugins, "root_for_project", return_value=directory), \
                  patch.object(command_plugins, "RUNTIME", directory / "run"):
                 status = registry.tools["terminal_capabilities"]()
                 self.assertTrue(status["enabled"])
