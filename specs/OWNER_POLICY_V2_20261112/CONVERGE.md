@@ -1,6 +1,6 @@
-# Converge preflight — owner capability policy v2, 2026-11-12
+# Converge FINAL — owner capability policy v2, 2026-11-12
 
-This is a PRE-RELEASE Converge review, **not final acceptance**. All implementation changes live only in the isolated AgentWorkspace worktree. Source history BF33/UNKNOWN remains untouched. No production upgrade has occurred.
+This is the FINAL deployment Converge. Implementation from tested Git source 97a12d4 was merged via PR #7 (merge 6ac07a4) and published as beta.59. Mac Server and JKMac-2 were each upgraded by the official installer only after independent verified rollback snapshots. Historical BF33/UNKNOWN Watcher records were not replayed or mutated by this task.
 
 | Requirement | Source/test evidence | Status |
 |---|---|---|
@@ -16,10 +16,10 @@ This is a PRE-RELEASE Converge review, **not final acceptance**. All implementat
 | R10 Browser/GUI/bridge/launchd more flexible where technical backend allows; TCC/session safety retained | launchd21, GUI2, code review of browser/native/bridge boundaries | PASS |
 | R11 Watcher ACK, Supervisor independent review, UNKNOWN no blind resend, old historical tasks untouched | watcher_ops unchanged; BF20 pytest29, targeted pass | PASS local |
 | R12 143/143 tools reviewed with exact source and safety classification | TOOL_MATRIX.csv, MCP in-memory metadata136 standard/143 native | PASS |
-| R13 Full tests+CI+commit+release+dual Mac postflight | 811 ordinary unittest cases (1 skipped), BF20 29; full-history audit too slow for terminal; CI/deployment pending | PENDING |
+| R13 Full tests+CI+commit+release+dual Mac postflight | macOS CI runs 43274929140 and 43274943203 SUCCESS (812 tests, 2 skipped); complete source/history/license/GUI/payload audits; PR #7 merged; beta.59 published and re-downloaded SHA-verified; two independent live host backups, 126/126 installed-file SHA on each, current/previous release, Watcher and ChatBridge data quick_check/counts, GUI/ChatBridge unchanged, live MCP tool smoke on both | PASS for approved release scope |
 
 Local evidence (untracked logs retained ONLY in AgentWorkspace): S07-BATCH-01-PINNED.log, S07-BATCH-02A-GREEN.log, S07-BATCH-02B1-FAST.log, S07-BATCH-02B2.log, S07-BATCH-03.log, S07-BATCH-04-GREEN.log, S07-BATCH-05-GREEN.log, S07-BF20-PYTEST.log, S07-STATIC-AUDIT.log, S07-SOURCE-PAYLOAD.json.
 
 Risk: An authenticated arbitrary shell operating as macOS user cannot have its external accesses cryptographically constrained by tool docstrings. Task-specific owner authorization is an agent instruction and review rule, NOT enforced by audit_context alone. User asked to remove mandatory filesystem root binding while keeping this explicit behavioral rule. Do not advertise an invented grant mechanism.
 
-Gate: source CI macOS green, Git commit+merge/release, independent SHA verification, jkmac and Mac Server fresh backups and deployment smoke, final Converge update and Git commit before declaring DONE.
+Final deployment gate PASS for owner policy v2 beta.59. Open item unrelated to release changes: both hosts still report interactive GitHub OAuth login test pending; OAuth was intentionally not reset/reconfigured. This source/documentation checkpoint is submitted as a separate docs-only change and requires a passing documentation PR CI before merge. Neither installed GUI nor ChatBridge state was overwritten.

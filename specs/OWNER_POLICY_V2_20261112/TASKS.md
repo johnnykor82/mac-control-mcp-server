@@ -6,7 +6,13 @@
 - [x] S04 Task-approved absolute roots; Git RED4/GREEN4, maintenance paths RED4/GREEN23, CAS/backup preserved.
 - [x] S05 Direct host/IP & any key, SFTP external file and SSH generic diagnostics, changed-key reject, metadata synced and GREEN37.
 - [x] S06 Homebrew cask/tap, launchd user/gui/system, GUI paste, browser/native/bridge reviews, 143/143 tool matrix, bilingual docs; source tests GREEN.
-- [ ] S07 Full regressions/CI Converge+Git commit and official verified prerelease.
+- [x] S07 Full regressions/CI Converge+Git commit and official verified prerelease.
 - [x] S07a Assess/Fix/Test CI portability: 13 CI problems classified, 21 targeted + 6 FR025 tests passed locally (2026-11-12).
-- [ ] S07b Repeat complete macOS CI on new commit; merge/publish only if green.
-- [ ] S08 Pre-deploy jkmac backup, stage both host updates and live acceptance, post-Converge documentation commit.
+- [x] S07b Repeat complete macOS CI on new commit; merge/publish only if green.
+- [x] S08 Pre-deploy jkmac backup, stage both host updates and live acceptance, post-Converge documentation commit.
+- [x] S08a Mac Server fresh online backup and SHA/plist/SQLite checks (2026-11-12T18:08Z).
+- [x] S08b Mac Server beta.59 update with --without-chatbridge --without-gui and live validation.
+- [x] S08c jkmac independent backup and same-tag installation/postflight.
+- [x] S08c-a JKMac-2 independent online rollback backup SHA/plist/SQLite verified 2026-11-12T18:15Z.
+- [x] S08d Final two-host source 126/126 SHA, SQLite/Watcher history, Watcher/MCP tools, GUI/ChatBridge and rollback verification PASS; existing OAuth interactive checks excluded from release changes.
+- [x] S08e Final docs/Converge and Git checkpoint prepared after all verified deployment steps.
